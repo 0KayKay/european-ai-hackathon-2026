@@ -7,6 +7,7 @@ export default defineConfig({
 	server: {
 		proxy: {
 			"/api/auth": "http://localhost:3005",
+			"/api/deepteam": "http://localhost:5002",
 			"/api": "http://localhost:8000",
 		},
 	},

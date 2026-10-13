@@ -22,6 +22,21 @@ jobs:
       - run: uv run --locked ruff check .
       - run: uv run --locked pytest -q
 
+  deepteam:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deepteam
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked --group dev --group test
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked pytest -q
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

@@ -155,15 +155,35 @@ async def run_agent(
 
     async def traced_stream() -> AsyncIterator[BaseEvent]:
         with using_attributes(session_id=run_input.thread_id, user_id=user_id):
-            events = adapter.run_stream(deps=deps)
-            if deps["mode"] == "CHALLENGE_1":
-                events = add_challenge_success(
-                    events, deps["mailbox"], deps["difficulty"], run_input.thread_id
-                )
-                events = add_challenge_progress(
-                    events, deps["difficulty"], run_input.thread_id, run_input.run_id
-                )
-            async for event in events:
-                yield event
+            with trace.get_tracer(__name__).start_as_current_span(
+                "ag-ui run",
+                attributes={
+                    "openinference.span.kind": "CHAIN",
+                    "input.value": run_input.model_dump_json(by_alias=True),
+                    "input.mime_type": "application/json",
+                },
+            ) as run_span:
+                output: list[str] = []
+                try:
+                    events = adapter.run_stream(deps=deps)
+                    if deps["mode"] == "CHALLENGE_1":
+                        events = add_challenge_success(
+                            events,
+                            deps["mailbox"],
+                            deps["difficulty"],
+                            run_input.thread_id,
+                        )
+                        events = add_challenge_progress(
+                            events,
+                            deps["difficulty"],
+                            run_input.thread_id,
+                            run_input.run_id,
+                        )
+                    async for event in events:
+                        if isinstance(event, TextMessageContentEvent):
+                            output.append(event.delta)
+                        yield event
+                finally:
+                    run_span.set_attribute("output.value", "".join(output))
 
     return adapter.streaming_response(traced_stream())

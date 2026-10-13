@@ -25,5 +25,5 @@ def configure_tracing(app: FastAPI, endpoint: str) -> None:
             BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)),
         ],
     )
-    logfire.instrument_pydantic_ai()
-    logfire.instrument_fastapi(app, excluded_urls=".*/api/health")
+    logfire.instrument_pydantic_ai(include_content=True, include_binary_content=False)
+    logfire.instrument_fastapi(app, excluded_urls=".*/api/health,.*/guardrails/request")

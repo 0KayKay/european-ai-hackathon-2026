@@ -1,5 +1,21 @@
-fail_fast: true
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks: []
+  - repo: local
+    hooks:
+      - id: backend-lint
+        name: Backend Ruff
+        entry: bash -c 'cd backend && uv run --locked --group dev ruff check .'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: deepteam-lint
+        name: DeepTeam Ruff
+        entry: bash -c 'cd deepteam && uv run --locked --group dev ruff check . && uv run --locked --group dev ruff format --check .'
+        language: system
+        files: ^deepteam/.*\.py$
+        pass_filenames: false
+      - id: frontend-lint
+        name: Frontend Biome
+        entry: bash -c 'cd frontend && ./node_modules/.bin/biome check .'
+        language: system
+        files: ^frontend/.*\.(js|mjs|ts|tsx|css|json)$
+        pass_filenames: false

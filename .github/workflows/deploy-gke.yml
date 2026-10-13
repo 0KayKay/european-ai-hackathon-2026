@@ -37,6 +37,7 @@ jobs:
         run: |
           repo=europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026
           docker buildx build --platform linux/amd64 -t "$repo/backend:$GITHUB_SHA" --push backend
+          docker buildx build --platform linux/amd64 -t "$repo/deepteam:$GITHUB_SHA" --push deepteam
           docker buildx build --platform linux/amd64 -t "$repo/auth:$GITHUB_SHA" --push -f frontend/Dockerfile.auth frontend
           docker buildx build --platform linux/amd64 -t "$repo/frontend:$GITHUB_SHA" --push frontend
 
@@ -60,6 +61,6 @@ jobs:
         run: |
           sed -i -E "s/^(    newTag: ).*/\1$GITHUB_SHA/" infrastructure/gke/kustomization.yaml
           kubectl apply -k infrastructure/gke
-          for deployment in auth backend frontend agentgateway phoenix postgres; do
+          for deployment in auth backend deepteam frontend agentgateway phoenix postgres; do
             kubectl rollout status --timeout=5m "deployment/$deployment"
           done

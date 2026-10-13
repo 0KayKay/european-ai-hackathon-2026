@@ -10,6 +10,9 @@ images:
   - name: local/backend
     newName: europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026/backend
     newTag: v1
+  - name: local/deepteam
+    newName: europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026/deepteam
+    newTag: v1
   - name: local/frontend
     newName: europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026/frontend
     newTag: v1
@@ -17,6 +20,8 @@ patches:
   - path: remove-local-db.yaml
   - path: auth.yaml
   - path: backend.yaml
+  - path: deepteam.yaml
   - path: agentgateway.yaml
   - path: postgres.yaml
+  - path: phoenix.yaml
   - path: frontend-service.yaml

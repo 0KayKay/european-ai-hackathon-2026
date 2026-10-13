@@ -19,7 +19,9 @@ async def require_user(request: Request) -> str:
             raise HTTPException(status_code=401, detail="Sign in required")
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=503, detail="Authentication unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail="Authentication unavailable"
+        ) from exc
 
     user_id = response.headers.get("x-auth-user")
     if not user_id:

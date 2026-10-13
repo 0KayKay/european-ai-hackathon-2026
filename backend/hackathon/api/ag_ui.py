@@ -5,14 +5,15 @@ from datetime import datetime
 
 import structlog
 from ag_ui.core import BaseEvent, RunAgentInput
-from hackathon.agent.builder import build_agent
-from hackathon.agent.challenge1 import mailbox_for
-from hackathon.agent.dependencies import AgentDependencies
-from hackathon.agent.settings import ChatState
 from pydantic_ai import Agent
 from pydantic_ai.messages import NativeToolCallPart, NativeToolReturnPart
 from pydantic_ai.ui import UIEventStream
 from pydantic_ai.ui.ag_ui import AGUIAdapter, AGUIEventStream
+
+from hackathon.agent.builder import build_agent
+from hackathon.agent.challenge1 import mailbox_for
+from hackathon.agent.dependencies import AgentDependencies
+from hackathon.agent.settings import ChatState
 
 logger = structlog.get_logger("ag_ui")
 
@@ -23,18 +24,26 @@ class PlatformAGUIEventStream(AGUIEventStream[AgentDependencies, str]):
 
     _pending_native_tool_calls: deque[str] = field(default_factory=deque)
 
-    def handle_builtin_tool_call_start(self, part: NativeToolCallPart) -> AsyncIterator[BaseEvent]:
+    def handle_builtin_tool_call_start(
+        self, part: NativeToolCallPart
+    ) -> AsyncIterator[BaseEvent]:
         """Track calls because Azure OpenAI can omit their ID from native results."""
         self._pending_native_tool_calls.append(part.tool_call_id)
         return super().handle_builtin_tool_call_start(part)
 
-    async def handle_builtin_tool_return(self, part: NativeToolReturnPart) -> AsyncIterator[BaseEvent]:
+    async def handle_builtin_tool_return(
+        self, part: NativeToolReturnPart
+    ) -> AsyncIterator[BaseEvent]:
         """Pair an Azure OpenAI native result with its preceding call before emitting it."""
         result_id = part.tool_call_id
         provider_call_id = (part.provider_details or {}).get("call_id")
         call_id = result_id if result_id in self._builtin_tool_call_ids else None
         if call_id is None and isinstance(provider_call_id, str):
-            call_id = provider_call_id if provider_call_id in self._builtin_tool_call_ids else None
+            call_id = (
+                provider_call_id
+                if provider_call_id in self._builtin_tool_call_ids
+                else None
+            )
         if call_id is None and self._pending_native_tool_calls:
             call_id = self._pending_native_tool_calls.popleft()
 
@@ -62,7 +71,9 @@ class PlatformAGUIEventStream(AGUIEventStream[AgentDependencies, str]):
 
     async def on_error(self, error: Exception) -> AsyncIterator[BaseEvent]:
         """Log the exception that Pydantic AI otherwise converts only to RUN_ERROR."""
-        logger.exception("AG-UI stream failed", error_type=type(error).__name__, error=str(error))
+        logger.exception(
+            "AG-UI stream failed", error_type=type(error).__name__, error=str(error)
+        )
         async for event in super().on_error(error):
             yield event
 
@@ -70,17 +81,23 @@ class PlatformAGUIEventStream(AGUIEventStream[AgentDependencies, str]):
 class PlatformAGUIAdapter(AGUIAdapter[AgentDependencies, str]):
     """AG-UI adapter with application logging and native tool-result compatibility."""
 
-    def build_event_stream(self) -> UIEventStream[RunAgentInput, BaseEvent, AgentDependencies, str]:
+    def build_event_stream(
+        self,
+    ) -> UIEventStream[RunAgentInput, BaseEvent, AgentDependencies, str]:
         """Use the platform event stream implementation."""
-        return PlatformAGUIEventStream(self.run_input, accept=self.accept, ag_ui_version=self.ag_ui_version)
+        return PlatformAGUIEventStream(
+            self.run_input, accept=self.accept, ag_ui_version=self.ag_ui_version
+        )
 
 
-AGUIRunPreparer = Callable[[RunAgentInput, str], Awaitable[tuple[Agent[AgentDependencies], AgentDependencies]]]
+AGUIRunPreparer = Callable[
+    [RunAgentInput, str], Awaitable[tuple[Agent[AgentDependencies], AgentDependencies]]
+]
 
 
 async def prepare_ag_ui_run(
-        run_input: RunAgentInput,
-        user_id: str,
+    run_input: RunAgentInput,
+    user_id: str,
 ) -> tuple[Agent[AgentDependencies], AgentDependencies]:
     """Prepare endpoint run, similar to playground router"""
     state = ChatState.model_validate(run_input.state)
@@ -89,7 +106,9 @@ async def prepare_ag_ui_run(
     deps: AgentDependencies = {
         "user_id": user_id,
         "current_date": datetime.now(),
-        "mailbox": mailbox_for(user_id, run_input.thread_id, settings.difficulty) if settings.mode == "CHALLENGE_1" else "",
+        "mailbox": mailbox_for(user_id, run_input.thread_id, settings.difficulty)
+        if settings.mode == "CHALLENGE_1"
+        else "",
         "difficulty": settings.difficulty,
         "mode": settings.mode,
     }

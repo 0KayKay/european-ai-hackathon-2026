@@ -12,6 +12,12 @@ from ag_ui.core import (
     ToolCallStartEvent,
 )
 from fastapi import APIRouter, Depends, Request
+from openinference.instrumentation import using_attributes
+from opentelemetry import trace
+from pydantic import ValidationError
+from pydantic_ai.ui import SSE_CONTENT_TYPE
+from starlette.responses import JSONResponse, Response
+
 from hackathon.api.ag_ui import (
     AGUIRunPreparer,
     PlatformAGUIAdapter,
@@ -19,13 +25,10 @@ from hackathon.api.ag_ui import (
 )
 from hackathon.api.auth import require_user
 from hackathon.config import get_settings
-from openinference.instrumentation import using_attributes
-from opentelemetry import trace
-from pydantic import ValidationError
-from pydantic_ai.ui import SSE_CONTENT_TYPE
-from starlette.responses import JSONResponse, Response
 
-router = APIRouter(prefix=f"{get_settings().API_BASE}", dependencies=[Depends(require_user)])
+router = APIRouter(
+    prefix=f"{get_settings().API_BASE}", dependencies=[Depends(require_user)]
+)
 
 
 async def add_challenge_success(
@@ -39,7 +42,9 @@ async def add_challenge_success(
             continue
         if not isinstance(event, TextMessageContentEvent):
             continue
-        message_text[event.message_id] = message_text.get(event.message_id, "") + event.delta
+        message_text[event.message_id] = (
+            message_text.get(event.message_id, "") + event.delta
+        )
         if mailbox in message_text[event.message_id]:
             solved = True
             yield CustomEvent(
@@ -57,14 +62,24 @@ async def add_challenge_progress(
     def progress(stage: str, status: str, detail: str = "") -> CustomEvent:
         return CustomEvent(
             name="challenge.progress",
-            value={"threadId": thread_id, "runId": run_id, "stage": stage, "status": status, "detail": detail},
+            value={
+                "threadId": thread_id,
+                "runId": run_id,
+                "stage": stage,
+                "status": status,
+                "detail": detail,
+            },
         )
 
     async for event in events:
         if isinstance(event, RunFinishedEvent):
             stopped = event.outcome is not None and event.outcome.type != "success"
             if guardrail_pending:
-                yield progress("guardrail", "skipped" if stopped else "success", "Not completed" if stopped else "")
+                yield progress(
+                    "guardrail",
+                    "skipped" if stopped else "success",
+                    "Not completed" if stopped else "",
+                )
             if stopped:
                 yield progress("response", "error", "Run stopped")
             else:
@@ -74,7 +89,11 @@ async def add_challenge_progress(
         if isinstance(event, RunErrorEvent):
             blocked = "Request blocked by challenge guardrail" in event.message
             if blocked or guardrail_pending:
-                yield progress("guardrail", "error", "Blocked" if blocked else "Check did not complete")
+                yield progress(
+                    "guardrail",
+                    "error",
+                    "Blocked" if blocked else "Check did not complete",
+                )
             if not blocked or response_started:
                 yield progress("response", "error", "Run failed")
             else:
@@ -88,7 +107,8 @@ async def add_challenge_progress(
             if not guardrail_pending:
                 yield progress("response", "pending")
         elif guardrail_pending and isinstance(
-            event, (TextMessageContentEvent, ToolCallStartEvent, ReasoningMessageContentEvent)
+            event,
+            (TextMessageContentEvent, ToolCallStartEvent, ReasoningMessageContentEvent),
         ):
             guardrail_pending = False
             response_started = True
@@ -98,9 +118,9 @@ async def add_challenge_progress(
 
 @router.post("/ag-ui")
 async def run_agent(
-        request: Request,
-        user_id: Annotated[str, Depends(require_user)],
-        prepare_run: Annotated[AGUIRunPreparer, Depends(get_ag_ui_run_preparer)],
+    request: Request,
+    user_id: Annotated[str, Depends(require_user)],
+    prepare_run: Annotated[AGUIRunPreparer, Depends(get_ag_ui_run_preparer)],
 ) -> Response:
     """Execute an agent run using AG-UI protocol."""
     try:
@@ -122,7 +142,9 @@ async def run_agent(
     try:
         agent, deps = await prepare_run(run_input, user_id)
     except ValidationError as exc:
-        return JSONResponse(status_code=422, content={"detail": exc.errors(include_url=False)})
+        return JSONResponse(
+            status_code=422, content={"detail": exc.errors(include_url=False)}
+        )
 
     adapter = PlatformAGUIAdapter(
         agent=agent,
@@ -135,8 +157,12 @@ async def run_agent(
         with using_attributes(session_id=run_input.thread_id, user_id=user_id):
             events = adapter.run_stream(deps=deps)
             if deps["mode"] == "CHALLENGE_1":
-                events = add_challenge_success(events, deps["mailbox"], deps["difficulty"], run_input.thread_id)
-                events = add_challenge_progress(events, deps["difficulty"], run_input.thread_id, run_input.run_id)
+                events = add_challenge_success(
+                    events, deps["mailbox"], deps["difficulty"], run_input.thread_id
+                )
+                events = add_challenge_progress(
+                    events, deps["difficulty"], run_input.thread_id, run_input.run_id
+                )
             async for event in events:
                 yield event
 

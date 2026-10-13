@@ -5,8 +5,8 @@ import structlog
 import uvicorn
 from fastapi import FastAPI
 
-from hackathon.api.router import router as ag_ui_router
 from hackathon.api.guardrails import router as guardrails_router
+from hackathon.api.router import router as ag_ui_router
 from hackathon.config import get_settings
 from hackathon.extensions import (
     LogCorrelationIdMiddleware,

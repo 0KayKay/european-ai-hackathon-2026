@@ -1,8 +1,9 @@
 import structlog
 from fastapi import APIRouter, Header
-from hackathon.config import get_settings
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+
+from hackathon.config import get_settings
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
@@ -36,12 +37,21 @@ async def check_challenge_request(
     if x_challenge_difficulty != "HARD":
         return {"action": {"reason": "No HARD challenge guardrail"}}
 
-    message = next((item.content for item in reversed(request.body.messages) if item.role == "user"), "")
+    message = next(
+        (
+            item.content
+            for item in reversed(request.body.messages)
+            if item.role == "user"
+        ),
+        "",
+    )
     if not message:
         return {"action": {"reason": "No user message to check"}}
 
     settings = get_settings()
-    async with AsyncOpenAI(base_url=settings.AGENTGATEWAY_URL, api_key=settings.AGENTGATEWAY_API_KEY) as client:
+    async with AsyncOpenAI(
+        base_url=settings.AGENTGATEWAY_URL, api_key=settings.AGENTGATEWAY_API_KEY
+    ) as client:
         result = await client.chat.completions.create(
             model="gemini-3.8-flash",
             temperature=0,
@@ -52,6 +62,14 @@ async def check_challenge_request(
         )
     decision = (result.choices[0].message.content or "").strip().upper()
     if decision != "SAFE":
-        logger.info("Challenge guardrail rejected request", difficulty="HARD", decision=decision)
-        return {"action": {"status_code": 403, "body": "Request blocked by challenge guardrail.", "reason": "hard_input"}}
+        logger.info(
+            "Challenge guardrail rejected request", difficulty="HARD", decision=decision
+        )
+        return {
+            "action": {
+                "status_code": 403,
+                "body": "Request blocked by challenge guardrail.",
+                "reason": "hard_input",
+            }
+        }
     return {"action": {"reason": "hard_input_passed"}}

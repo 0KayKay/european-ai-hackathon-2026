@@ -8,7 +8,8 @@
 		"build": "tsc -p tsconfig.app.json && vite build",
 		"dev": "vite",
 		"auth:start": "node auth-server/server.mjs",
-		"test": "vitest run"
+		"test": "vitest run",
+		"test:auth": "node --test auth-server/*.test.mjs"
 	},
 	"dependencies": {
 		"@ag-ui/client": "0.0.59",

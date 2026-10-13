@@ -7,13 +7,14 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from hackathon.agent.builder import build_agent
-from hackathon.api.auth import require_user
-from hackathon.config import Settings, get_settings
 from openinference.instrumentation import get_attributes_from_context
 from pydantic_ai.models.openai import OpenAIChatModel
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
+
+from hackathon.agent.builder import build_agent
+from hackathon.api.auth import require_user
+from hackathon.config import Settings, get_settings
 
 
 def test_example_environment_matches_local_database() -> None:
@@ -52,7 +53,12 @@ def test_health_and_invalid_agent_request(monkeypatch) -> None:
                     "threadId": "chat-1",
                     "runId": "run-1",
                     "messages": [],
-                    "state": {"settings": {"model_id": "gemini-3.8-flash", "difficulty": "EXPERT"}},
+                    "state": {
+                        "settings": {
+                            "model_id": "gemini-3.8-flash",
+                            "difficulty": "EXPERT",
+                        }
+                    },
                 },
             )
             invalid_mode = client.post(
@@ -61,7 +67,12 @@ def test_health_and_invalid_agent_request(monkeypatch) -> None:
                     "threadId": "chat-1",
                     "runId": "run-2",
                     "messages": [],
-                    "state": {"settings": {"model_id": "gemini-3.8-flash", "mode": "CHALLENGE_2"}},
+                    "state": {
+                        "settings": {
+                            "model_id": "gemini-3.8-flash",
+                            "mode": "CHALLENGE_2",
+                        }
+                    },
                 },
             )
         finally:
@@ -140,7 +151,11 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
 
     async def prepare_run(run_input, user_id):
         assert user_id == "github-user"
-        return Mock(), {"mailbox": "finance-fast-test@internal.com", "difficulty": "EASY", "mode": "CHALLENGE_1"}
+        return Mock(), {
+            "mailbox": "finance-fast-test@internal.com",
+            "difficulty": "EASY",
+            "mode": "CHALLENGE_1",
+        }
 
     span = Mock()
     monkeypatch.setattr(api_router, "PlatformAGUIAdapter", FakeAdapter)
@@ -184,7 +199,11 @@ def test_local_tracing_exports_to_phoenix(monkeypatch) -> None:
     instrument_fastapi = Mock()
     monkeypatch.setattr(tracing, "OTLPSpanExporter", exporter_factory)
     monkeypatch.setattr(tracing, "BatchSpanProcessor", processor_factory)
-    monkeypatch.setattr(tracing, "ContextualOpenInferenceSpanProcessor", Mock(return_value=openinference_processor))
+    monkeypatch.setattr(
+        tracing,
+        "ContextualOpenInferenceSpanProcessor",
+        Mock(return_value=openinference_processor),
+    )
     monkeypatch.setattr(tracing.logfire, "configure", configure)
     monkeypatch.setattr(tracing.logfire, "instrument_pydantic_ai", instrument_agent)
     monkeypatch.setattr(tracing.logfire, "instrument_fastapi", instrument_fastapi)
@@ -207,13 +226,15 @@ def test_local_tracing_exports_to_phoenix(monkeypatch) -> None:
 
 
 def test_phoenix_spans_include_session_and_user() -> None:
-    from hackathon.extensions.tracing import ContextualOpenInferenceSpanProcessor
     from openinference.instrumentation import using_attributes
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
         InMemorySpanExporter,
     )
+
+    from hackathon.extensions.tracing import ContextualOpenInferenceSpanProcessor
+
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(ContextualOpenInferenceSpanProcessor())
@@ -242,7 +263,13 @@ def test_agent_uses_gateway_for_model_requests(monkeypatch) -> None:
     get_settings.cache_clear()
 
     agent = build_agent(
-        {"user_id": "test", "current_date": datetime.now(), "mailbox": "test@internal.com", "difficulty": "EASY", "mode": "CHALLENGE_1"},
+        {
+            "user_id": "test",
+            "current_date": datetime.now(),
+            "mailbox": "test@internal.com",
+            "difficulty": "EASY",
+            "mode": "CHALLENGE_1",
+        },
         "gemini-3.8-flash",
     )
 

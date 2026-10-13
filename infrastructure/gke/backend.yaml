@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend
+          env:
+            - name: ENV
+              value: prod
+            - name: PRETTY_DOMAIN
+              value: european-ai-hackathon-2026.codify.ch

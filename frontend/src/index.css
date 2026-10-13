@@ -226,3 +226,7 @@
 @custom-variant data-closed (
 	&:where([data-state="closed"], [data-closed]:not([data-closed="false"]))
 );
+
+button {
+	cursor: pointer;
+}

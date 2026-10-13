@@ -104,7 +104,9 @@ async def test_auth_checks_better_auth_session(monkeypatch) -> None:
         lambda **kwargs: client_type(transport=httpx.MockTransport(handle)),
     )
     monkeypatch.setattr(
-        auth_api, "get_settings", lambda: Mock(AUTH_SERVICE_URL="http://localhost:3005")
+        auth_api,
+        "get_settings",
+        lambda: Mock(is_local=False, AUTH_SERVICE_URL="http://localhost:3005"),
     )
     request = Request(
         {"type": "http", "headers": [(b"cookie", b"better-auth.session_token=signed")]}
@@ -121,10 +123,26 @@ async def test_auth_checks_better_auth_session(monkeypatch) -> None:
     assert exc.value.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_local_requests_do_not_require_a_session(monkeypatch) -> None:
+    import hackathon.api.auth as auth_api
+
+    monkeypatch.setattr(auth_api, "get_settings", lambda: Mock(is_local=True))
+    assert await require_user(Request({"type": "http", "headers": []})) == "local-user"
+
+
 def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
-    from ag_ui.core import RunAgentInput
+    from ag_ui.core import RunAgentInput, TextMessageContentEvent
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    from hackathon.extensions.tracing import ContextualOpenInferenceSpanProcessor
 
     monkeypatch.setenv("AGENTGATEWAY_URL", "http://localhost:4000/v1")
+    monkeypatch.setenv("AGENTGATEWAY_API_KEY", "test-gateway-key")
     monkeypatch.setenv("GOOGLE_STORAGE_BUCKET", "")
     monkeypatch.setenv("PRETTY_DOMAIN", "localhost:5000")
     monkeypatch.setenv("DB_USER", "app")
@@ -144,10 +162,16 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
 
         async def run_stream(self, **kwargs):
             attributes.update(get_attributes_from_context())
-            yield b"ok"
+            yield TextMessageContentEvent(message_id="answer", delta="hel")
+            yield TextMessageContentEvent(message_id="answer", delta="lo")
 
         def streaming_response(self, stream):
-            return StreamingResponse(stream)
+            async def encode():
+                async for event in stream:
+                    if isinstance(event, TextMessageContentEvent):
+                        yield event.delta
+
+            return StreamingResponse(encode())
 
     async def prepare_run(run_input, user_id):
         assert user_id == "github-user"
@@ -158,8 +182,14 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
         }
 
     span = Mock()
+    span.get_span_context.return_value = api_router.trace.INVALID_SPAN_CONTEXT
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(ContextualOpenInferenceSpanProcessor())
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
     monkeypatch.setattr(api_router, "PlatformAGUIAdapter", FakeAdapter)
-    monkeypatch.setattr(api_router.trace, "get_current_span", lambda: span)
+    monkeypatch.setattr(api_router.trace, "get_current_span", lambda context=None: span)
+    monkeypatch.setattr(api_router.trace, "get_tracer", provider.get_tracer)
     app = FastAPI()
     app.include_router(api_router.router)
     app.dependency_overrides[require_user] = lambda: "github-user"
@@ -168,7 +198,11 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/ag-ui",
-            json={"threadId": "chat-123", "runId": "run-1", "messages": []},
+            json={
+                "threadId": "chat-123",
+                "runId": "run-1",
+                "messages": [{"id": "user-1", "role": "user", "content": "Hi"}],
+            },
         )
         missing_session = client.post(
             "/api/v1/ag-ui",
@@ -176,6 +210,7 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
         )
 
     assert response.status_code == 200
+    assert response.text == "hello"
     assert missing_session.status_code == 422
     assert attributes["session.id"] == "chat-123"
     assert attributes["user.id"] == "github-user"
@@ -183,6 +218,13 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
         call("session.id", "chat-123"),
         call("user.id", "github-user"),
     ]
+    [run_span] = exporter.get_finished_spans()
+    assert run_span.name == "ag-ui run"
+    assert run_span.attributes["openinference.span.kind"] == "CHAIN"
+    assert '"content":"Hi"' in run_span.attributes["input.value"]
+    assert run_span.attributes["output.value"] == "hello"
+    assert run_span.attributes["session.id"] == "chat-123"
+    assert run_span.attributes["user.id"] == "github-user"
     get_settings.cache_clear()
 
 
@@ -221,8 +263,12 @@ def test_local_tracing_exports_to_phoenix(monkeypatch) -> None:
         openinference_processor,
         processor,
     ]
-    instrument_agent.assert_called_once_with()
-    instrument_fastapi.assert_called_once_with(app, excluded_urls=".*/api/health")
+    instrument_agent.assert_called_once_with(
+        include_content=True, include_binary_content=False
+    )
+    instrument_fastapi.assert_called_once_with(
+        app, excluded_urls=".*/api/health,.*/guardrails/request"
+    )
 
 
 def test_phoenix_spans_include_session_and_user() -> None:

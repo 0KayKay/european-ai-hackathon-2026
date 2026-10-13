@@ -37,6 +37,9 @@ it("keeps chat, testing, and guardrail areas in one open workspace", () => {
 		within(sidebar).getByRole("button", { name: /Challenge 3/ }),
 	).toBeDisabled();
 	expect(container.querySelector('[data-slot="card"]')).toBeNull();
+	expect(
+		screen.queryByRole("button", { name: "Red team" }),
+	).not.toBeInTheDocument();
 });
 
 it("shows the mission and signs out from the sidebar footer", () => {

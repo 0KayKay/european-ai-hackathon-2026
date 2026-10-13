@@ -3,6 +3,10 @@
         reverse_proxy auth:3000
     }
 
+    handle /api/deepteam/* {
+        reverse_proxy deepteam:8080
+    }
+
     handle /api/* {
         reverse_proxy agentgateway:3000
     }

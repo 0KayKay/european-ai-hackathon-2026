@@ -5,6 +5,9 @@ from hackathon.config import get_settings
 
 
 async def require_user(request: Request) -> str:
+    if get_settings().is_local:
+        return "local-user"
+
     cookie = request.headers.get("cookie")
     if not cookie:
         raise HTTPException(status_code=401, detail="Sign in required")

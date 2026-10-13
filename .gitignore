@@ -1,5 +1,9 @@
 .idea/
 backend/.venv/
+deepteam/.venv/
+deepteam/.deepeval/
+deepteam/.pytest_cache/
+deepteam/.ruff_cache/
 backend/__pycache__/
 __pycache__/
 frontend/node_modules/

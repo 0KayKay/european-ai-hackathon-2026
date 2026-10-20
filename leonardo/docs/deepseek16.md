@@ -88,6 +88,16 @@ Stop the model allocation when finished:
 ./leonardo/cli.py down deepseek41-16gpu
 ```
 
+`down` requests immediate Slurm cancellation; it does not provide request draining.
+The pinned backport defaults to a zero-second engine shutdown wait and can log
+`EngineDeadError` plus TCPStore/DistNetworkError warnings during that stop. The
+[shutdown investigation](../validation/runs/2026-10-20-deepseek41-16gpu-cli/shutdown-root-cause.json)
+and [CPU reproduction](../validation/runs/2026-10-20-deepseek41-16gpu-cli/cpu-abort-diagnosis.json)
+trace this to forced engine teardown and output-handler cancellation order. In
+the measured run the warnings followed the operator cancellation and all Slurm
+steps, endpoints and the tunnel were removed. Errors during serving still need
+investigation. Graceful draining and persistent IPC-leak checks remain unvalidated.
+
 The generated optional agentgateway route includes the new API model name. This
 does not enable the cluster link or change the app's default model.
 

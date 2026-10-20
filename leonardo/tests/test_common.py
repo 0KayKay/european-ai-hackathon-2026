@@ -7,6 +7,7 @@ import json
 import os
 import re
 from pathlib import Path
+import shlex
 import shutil
 import signal
 import socket
@@ -139,7 +140,7 @@ class Framework(unittest.TestCase):
         run = self.prepare('deepseek41')
         args = [sys.executable, str(run / 'inference.py'), 'submit']
         dry = subprocess.check_output(args + ['--dry-run'], cwd=str(run), env=self.env, stderr=subprocess.PIPE).decode()
-        command = json.loads(dry)
+        command = shlex.split(dry)
         for flag in ('--nodes=2', '--gres=gpu:4', '--mem=480GB', '--time=02:00:00', '--signal=B:TERM@90'):
             self.assertIn(flag, command)
         self.assertFalse((run / '.runtime/job_id').exists())
@@ -333,6 +334,35 @@ class Framework(unittest.TestCase):
         busy = subprocess.run(cli, env=dict(self.env, FORWARD_RC='255'), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
         self.assertNotEqual(busy.returncode, 0)
         self.assertIn(b'Could not listen on 127.0.0.1:18123', busy.stderr)
+
+    def test_jobs_run_with_plain_sbatch_from_the_repository_root(self):
+        # As Slurm would run them: no LEONARDO_RELEASE, the submit directory is the repository root.
+        env = dict(self.env, BASE=str(self.base), SLURM_JOB_ID='1', SLURM_SUBMIT_DIR=str(REPO.parent))
+        env.pop('LEONARDO_RELEASE', None)
+        result = subprocess.run(['bash', str(REPO / 'install/runtime.sbatch'), 'vllm-0.31.0'], env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'already installed', result.stdout)
+        result = subprocess.run(['bash', str(REPO / 'install/runtime.sbatch'), 'vllm-0.31.0'],
+                                env=dict(env, SLURM_SUBMIT_DIR=str(self.root)), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'repository root', result.stderr)
+        # Each script names its job, queue and log, so `sbatch -A <account> <script>` is enough.
+        for script in list((REPO / 'install').glob('*.sbatch')) + list((REPO / 'diagnostics').glob('*.sbatch')):
+            header = script.read_text()
+            for option in ('--job-name=', '--partition=', '--output='):
+                self.assertIn('#SBATCH ' + option, header, script.name)
+
+    def test_router_prepare_prints_the_sbatch_command(self):
+        self.command('squeue', '#!/bin/bash\nexit 0\n')
+        output = subprocess.check_output([sys.executable, str(RELEASE / 'router.py'), 'prepare', '--base', str(self.base),
+                                          '--hours', '2'], env=self.env, stderr=subprocess.PIPE).decode()
+        directory = self.base / 'users' / getpass.getuser() / 'router'
+        self.assertTrue((directory / 'ROUTER.json').is_file() and (directory / 'router.sbatch').is_file())
+        line = output.splitlines()[-1]
+        self.assertTrue(line.startswith('cd {} && sbatch '.format(directory)), line)
+        self.assertIn('--job-name=leonardo-router', shlex.split(line))
+        self.assertFalse((self.home / 'sbatch-calls').exists())
 
     def test_failed_launcher_never_publishes_endpoint(self):
         self.command('srun', '#!/bin/bash\nexit 9\n')

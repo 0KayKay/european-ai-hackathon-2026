@@ -207,8 +207,9 @@ The CLI only orchestrates Slurm jobs; each is an ordinary batch script in this r
 | `leonardo-router` | `serve/router.sbatch` | CPU queue, 2 CPUs, 4 h, queues its own successor | `router up` | `serve/router.py` (and the chisel client when the cluster link is on) |
 | `probe`, `reach`, `nccl-check` | `diagnostics/*.sbatch` | GPU debug QoS, CPU queue, 2 GPU nodes on debug QoS | `diagnose` | shell checks; `diagnostics/nccl_check.py` on 8 GPUs |
 
-`serve/team.py` (on Leonardo) builds the `sbatch` commands; a model server and the router also need a
-private folder prepared before their job is submitted.
+`serve/team.py` (on Leonardo) builds the `sbatch` commands. [docs/slurm-jobs.md](docs/slurm-jobs.md)
+describes each job in detail (inputs, resources, what it executes, what it writes) and how to submit it
+with plain `sbatch`, without the CLI.
 
 ### Troubleshooting
 
@@ -246,6 +247,7 @@ leonardo/
 infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 ```
 
+- [docs/slurm-jobs.md](docs/slurm-jobs.md): every Slurm job, and how to run it without the CLI.
 - [docs/how-it-works.md](docs/how-it-works.md): a server run step by step, the router, the registry,
   ports, profile rules and the release manifest. Read it before changing `serve/`.
 - [docs/history.md](docs/history.md): how the models were brought up, which compatibility problems were

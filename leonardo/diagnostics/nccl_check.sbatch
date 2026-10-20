@@ -1,7 +1,11 @@
 #!/bin/bash
 # Before a new multi-node layout, prove that GPUs on two nodes talk over InfiniBand from inside the
 # container. Prints bandwidth numbers and the transport NCCL picked.
-# Submitted by `cli.py diagnose nccl [--runtime vllm-0.31.0]` (GPU partition, debug QoS).
+# Submitted by `cli.py diagnose nccl [--runtime vllm-0.31.0]`. By hand, from the repository root:
+#   BASE=$WORK/<team folder> RUNTIME=vllm-0.31.0 sbatch -A <account> leonardo/diagnostics/nccl_check.sbatch
+#SBATCH --job-name=nccl-check
+#SBATCH --partition=boost_usr_prod
+#SBATCH --output=%x-%j.out
 #SBATCH --qos=boost_qos_dbg
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=4
@@ -17,7 +21,12 @@ SIF=$(python3 -c 'import json, sys, os
 site = json.load(open(os.path.join(sys.argv[1], "inference-site.json")))
 path = os.path.join(sys.argv[1], site.get("runtime_paths", {}).get(sys.argv[2], "runtimes/" + sys.argv[2]))
 print(os.path.join(path, json.load(open(os.path.join(path, "runtime.json")))["sif"]))' "$BASE" "$RUNTIME")
-export SIF SCRIPT_DIR="${LEONARDO_RELEASE:?}/diagnostics"
+# The leonardo/ folder with serve/: set by cli.py, or found from where you ran sbatch.
+for RELEASE in "${LEONARDO_RELEASE:-}" "${SLURM_SUBMIT_DIR:-.}/leonardo" "${SLURM_SUBMIT_DIR:-.}"; do
+    [[ -n "$RELEASE" && -f "$RELEASE/serve/catalog.json" ]] && break
+done
+[[ -f "$RELEASE/serve/catalog.json" ]] || { echo 'Run sbatch from the repository root, or set LEONARDO_RELEASE to its leonardo/ folder' >&2; exit 1; }
+export SIF SCRIPT_DIR="$RELEASE/diagnostics"
 
 HEAD_HOST=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -1)
 MASTER_ADDR=$(getent hosts "$HEAD_HOST" | awk '{print $1; exit}')

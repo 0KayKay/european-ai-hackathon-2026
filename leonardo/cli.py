@@ -18,6 +18,7 @@ Typical first run, from the repository root:
   ./leonardo/cli.py router up && ./leonardo/cli.py forward
 
 Run ./leonardo/cli.py <command> --help for each command's options and the files it runs.
+leonardo/docs/slurm-jobs.md describes the Slurm jobs and how to submit them without this CLI.
 """
 import argparse
 import hashlib

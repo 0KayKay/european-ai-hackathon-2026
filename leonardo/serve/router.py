@@ -8,9 +8,10 @@ Optionally (site setting cluster_link.enabled, off by default) it also opens the
 chisel client that dials out to the chisel server in Kubernetes and offers this router there, so
 agentgateway reaches it without anyone logging in to Leonardo from the cluster.
 
+    python3 router.py prepare --base $WORK/<team> [--hours 12]   # then run the sbatch line it prints
     python3 router.py serve   # run by router.sbatch inside the job
     python3 router.py next    # run by router.sbatch: queue the successor job
-Starting, stopping and the token are team.py commands: team.py router up|down|token.
+team.py router up does prepare and submit in one step; team.py router down|token stop it and print its token.
 """
 import argparse
 import datetime
@@ -23,6 +24,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shlex
 import shutil
 import signal
 from socketserver import ThreadingMixIn
@@ -130,7 +132,8 @@ def seconds(limit):
     return int(days or 0) * 86400 + h * 3600 + m * 60 + s
 
 
-def up(base, site, hours, restart, jobs):
+def prepare(base, site, hours, restart, jobs):
+    """Create users/<login>/router/ with a code copy, ROUTER.json and the token; return its config."""
     manifest = inference.verify_release()
     router, link = settings(site)
     where = paths(base)
@@ -166,8 +169,15 @@ def up(base, site, hours, restart, jobs):
     if where['directory'].exists():
         shutil.rmtree(str(where['directory']))
     os.rename(str(staging), str(where['directory']))
+    return cfg
+
+
+def up(base, site, hours, restart, jobs):
+    cfg = prepare(base, site, hours, restart, jobs)
+    link = cfg['cluster_link']
+    directory = Path(cfg['directory'])
     # SLURM_SUBMIT_DIR must be the router directory: router.sbatch starts with cd into it.
-    job = inference.sbatch(job_command(cfg), where['directory'] / '.runtime/submitting', cwd=str(where['directory']))
+    job = inference.sbatch(job_command(cfg), directory / '.runtime/submitting', cwd=str(directory))
     print('Submitted router job {}; it resubmits itself until {}.'.format(
         job, datetime.datetime.fromtimestamp(cfg['until']).isoformat(timespec='minutes')))
     print('Cluster link: ' + ('ON to ' + link['server'] if link['enabled'] else 'off (site setting cluster_link.enabled)'))
@@ -425,10 +435,27 @@ def serve():
             path.unlink()
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['serve', 'next'])
+    parser.add_argument('command', choices=['prepare', 'serve', 'next'])
+    parser.add_argument('--base', help='prepare: the team folder')
+    parser.add_argument('--hours', type=float, default=12, help='prepare: keep resubmitting for this long')
+    parser.add_argument('--restart', action='store_true', help='prepare: cancel a running router first')
+    args = parser.parse_args()
+    if args.command == 'serve':
+        serve()
+    elif args.command == 'next':
+        next_job()
+    else:
+        os.umask(0o077)
+        base = inference.site_base(args.base)
+        cfg = prepare(base, inference.load_site(base), args.hours, args.restart, active_jobs())
+        print('Router prepared in {}. Submit it from there:'.format(cfg['directory']))
+        print('cd {} && {}'.format(shlex.quote(cfg['directory']), ' '.join(shlex.quote(w) for w in job_command(cfg))))
+
+
+if __name__ == '__main__':
     try:
-        serve() if parser.parse_args().command == 'serve' else next_job()
+        main()
     except (ValueError, RuntimeError, OSError, KeyError) as error:
         raise SystemExit(str(error))

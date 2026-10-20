@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import shutil
 import stat
 import subprocess
@@ -305,7 +306,8 @@ def submit(args):
     preflight(cfg)
     command = submit_command(cfg, args.reservation, args.qos, args.time)
     if args.dry_run:
-        print(json.dumps(command))
+        # The exact command, ready to run from this directory by hand.
+        print(' '.join(shlex.quote(word) for word in command))
         return
     if (ROOT / '.runtime/job_id').exists():
         raise ValueError('This run has already been submitted; prepare a new run')

@@ -3,14 +3,23 @@
 # $BASE/checkpoints/<checkpoint>, using huggingface_hub inside the profile's own runtime image.
 # Submitted by `cli.py install <profile>` on the CPU queue (internet, no GPU budget), after the
 # runtime job. A profile without a pinned revision gets the current one, printed as PIN_REVISION.
-# Sizes: qwen235b ~239 GB, glm53 ~328 GB, deepseek41 48 shards, qwen06b ~1.5 GB.
+# Sizes: qwen235b ~239 GB, glm53 ~328 GB, deepseek41 48 shards, qwen06b ~1.5 GB. By hand, from the
+# repository root, after the runtime is installed:
+#   BASE=$WORK/<team folder> sbatch -A <account> leonardo/install/checkpoint.sbatch <profile>
+#SBATCH --job-name=install-checkpoint
+#SBATCH --partition=lrd_all_serial
+#SBATCH --output=%x-%j.out
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=30000M
 #SBATCH --time=04:00:00
 set -euo pipefail
 NAME="${1:?usage: checkpoint.sbatch <profile name>}"
 BASE="${BASE:?}"
-RELEASE="${LEONARDO_RELEASE:?submit with cli.py install, or set LEONARDO_RELEASE to the leonardo/ folder}"
+# The leonardo/ folder with serve/: set by cli.py, or found from where you ran sbatch.
+for RELEASE in "${LEONARDO_RELEASE:-}" "${SLURM_SUBMIT_DIR:-.}/leonardo" "${SLURM_SUBMIT_DIR:-.}"; do
+    [[ -n "$RELEASE" && -f "$RELEASE/serve/catalog.json" ]] && break
+done
+[[ -f "$RELEASE/serve/catalog.json" ]] || { echo 'Run sbatch from the repository root, or set LEONARDO_RELEASE to its leonardo/ folder' >&2; exit 1; }
 read -r MODEL_ID PROFILE_REVISION CHECKPOINT RUNTIME < <(python3 -c 'import json, sys
 p = json.load(open(sys.argv[1]))
 print(p["model_id"], p.get("revision") or "-", p["checkpoint"], p["runtime"])' "$RELEASE/serve/profiles/$NAME.json")

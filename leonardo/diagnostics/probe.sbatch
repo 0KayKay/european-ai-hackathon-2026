@@ -1,7 +1,10 @@
 #!/bin/bash
 # Find out what a GPU node looks like from the inside, then serve a static page for ~15 minutes so
 # you can test whether other nodes reach a port on a GPU node, without vLLM in the way.
-# Submitted by `cli.py diagnose probe` (GPU partition, debug QoS).
+# Submitted by `cli.py diagnose probe`. By hand:  sbatch -A <account> leonardo/diagnostics/probe.sbatch
+#SBATCH --job-name=probe
+#SBATCH --partition=boost_usr_prod
+#SBATCH --output=%x-%j.out
 #SBATCH --qos=boost_qos_dbg
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

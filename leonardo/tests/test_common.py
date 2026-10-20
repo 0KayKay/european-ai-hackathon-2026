@@ -1,5 +1,6 @@
 """Model-independent preparation, submission and HTTP lifecycle regressions."""
 import copy
+import getpass
 import hashlib
 import importlib.util
 import json
@@ -58,10 +59,10 @@ class Framework(unittest.TestCase):
         self.command('scontrol', '#!/bin/bash\nprintf "127.0.0.1\\n"\n')
         self.command('getent', '#!/bin/bash\nprintf "127.0.0.1 localhost\\n"\n')
         self.command('squeue', '#!/bin/bash\nprintf "2030-01-01T00:00:00\\n"\n')
-        site = inference.load(RELEASE / 'site.example.json')
-        site['account'] = 'TEST_PROJECT'
-        for runtime_id, relative in site['runtime_paths'].items():
-            runtime = self.base / relative
+        # The team folder as `cli.py init` creates it, then fake installs at the fixed paths.
+        self.team('init', '--account', 'TEST_PROJECT')
+        for runtime_id in inference.catalog()['runtimes']:
+            runtime = self.base / 'runtimes' / runtime_id
             (runtime / 'python-overlay').mkdir(parents=True)
             for name in inference.catalog()['runtimes'][runtime_id]['overlay_required']:
                 (runtime / 'python-overlay' / name).parent.mkdir(parents=True, exist_ok=True)
@@ -69,7 +70,7 @@ class Framework(unittest.TestCase):
             (runtime / 'image.sif').write_bytes(b'fake-sif')
             inference.save(runtime / 'runtime.json', {'id': runtime_id, 'sif': 'image.sif', 'sif_size': 8, 'overlay': 'python-overlay'})
         for model in MODELS:
-            path = self.base / site['checkpoints'][model]
+            path = self.base / 'checkpoints' / inference.load(RELEASE / 'profiles' / (model + '.json'))['checkpoint']
             path.mkdir(parents=True)
             for name in ('config.json', 'tokenizer_config.json'):
                 (path / name).write_text('{}')
@@ -81,10 +82,17 @@ class Framework(unittest.TestCase):
             for name in shards:
                 (path / name).write_bytes(b'x')
             inference.save(path / 'model.safetensors.index.json', {'weight_map': {str(i): s for i, s in enumerate(shards)}})
-        inference.save(self.base / 'inference-site.json', site)
+        self.runs = self.base / 'users' / getpass.getuser() / 'runs'
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def team(self, *args, check=True):
+        result = subprocess.run([sys.executable, str(RELEASE / 'team.py')] + list(args) + ['--base', str(self.base)],
+                                env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if check and result.returncode:
+            raise AssertionError(result.stderr.decode())
+        return result
 
     def command(self, name, source):
         path = self.bin / name
@@ -125,7 +133,7 @@ class Framework(unittest.TestCase):
         (self.base / 'checkpoints/glm53/shard-0.safetensors').unlink()
         result = subprocess.run([sys.executable, str(RELEASE / 'inference.py'), 'prepare', 'glm53', '--base', str(self.base)], env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(list(self.home.iterdir()), [])
+        self.assertFalse(self.runs.exists() and list(self.runs.iterdir()))
 
     def test_submission_is_explicit_and_cannot_repeat(self):
         run = self.prepare('deepseek41')
@@ -164,7 +172,7 @@ class Framework(unittest.TestCase):
             self.assertNotIn(flag, command)
         self.assertEqual(command[-4:], ['--host', '0.0.0.0', '--port', '31001'])
         # The backport runtime still insists on its TileLang overlay.
-        (self.base / 'runtimes/vllm-backport-sm80/0.13.1/python-overlay/tilelang/__init__.py').unlink()
+        (self.base / 'runtimes/vllm-backport-sm80-0.13.1/python-overlay/tilelang/__init__.py').unlink()
         with self.assertRaises(subprocess.CalledProcessError):
             self.prepare('glm53')
 
@@ -179,8 +187,7 @@ class Framework(unittest.TestCase):
         self.assertNotIn('forced_function_call', inference.CHECK_SUITES['chat'])
 
     def test_registry_claims_one_server_per_name(self):
-        root = self.base / 'endpoints'
-        root.mkdir()
+        root = self.base / 'endpoints'  # created by init
         old_path = os.environ['PATH']
         os.environ['PATH'] = self.env['PATH']
         try:
@@ -206,20 +213,75 @@ class Framework(unittest.TestCase):
         finally:
             os.environ['PATH'] = old_path
 
-    def test_up_status_down(self):
+    def test_up_status_logs_down(self):
         self.command('scancel', '#!/bin/bash\necho "$@" > "$HOME/scancel-args"\n')
         self.command('squeue', '#!/bin/bash\nprintf "12345|qwen06b-common|RUNNING|1:00|1:00:00|lrdn0001\\n"\n')
-        output = subprocess.check_output([sys.executable, str(RELEASE / 'inference.py'), 'up', 'qwen06b', '--base', str(self.base),
-                                          '--qos', 'boost_qos_dbg', '--time', '00:30:00'], env=self.env, stderr=subprocess.PIPE).decode()
+        output = self.team('up', 'qwen06b', '--qos', 'boost_qos_dbg', '--time', '00:30:00').stdout.decode()
         self.assertIn('Submitted job 12345', output)
-        report = json.loads(subprocess.check_output([sys.executable, str(RELEASE / 'inference.py'), 'status', '--json',
-                                                     '--base', str(self.base)], env=self.env).decode())
+        run = Path(output.split('Run directory: ')[1].split()[0])
+        self.assertEqual(run.parent, self.runs)  # runs live in $BASE/users/<login>/runs, mode 700
+        self.assertEqual(run.parent.parent.stat().st_mode & 0o077, 0)
+        report = json.loads(self.team('status', '--json').stdout.decode())
         self.assertEqual([(s['profile'], s['job_id'], s['ready']) for s in report['servers']], [('qwen06b', '12345', False)])
         self.assertEqual(report['registry'], [])
-        subprocess.check_call([sys.executable, str(RELEASE / 'inference.py'), 'down', 'qwen3-0.6b-leonardo'], env=self.env, stdout=subprocess.DEVNULL)
+        self.assertEqual(report['installed']['runtimes'], sorted(inference.catalog()['runtimes']))
+        (run / 'qwen06b-common-12345.out').write_text('line 1\nINFERENCE_READY\n')
+        for target in ('12345', 'qwen06b', 'qwen3-0.6b-leonardo'):
+            self.assertIn('INFERENCE_READY', self.team('logs', target).stdout.decode())
+        self.team('down', 'qwen3-0.6b-leonardo')
         self.assertEqual((self.home / 'scancel-args').read_text().split(), ['12345'])
-        bad = subprocess.run([sys.executable, str(RELEASE / 'inference.py'), 'down', 'glm53'], env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.assertNotEqual(bad.returncode, 0)
+        self.assertNotEqual(self.team('down', 'glm53', check=False).returncode, 0)
+
+    def test_init_status_and_share(self):
+        fresh = self.root / 'fresh'
+        status = subprocess.run([sys.executable, str(RELEASE / 'team.py'), 'status', '--base', str(fresh)],
+                                env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(status.returncode, 0)
+        self.assertIn(b'cli.py init', status.stdout)
+        self.assertIn(b'--force', self.team('init', '--account', 'OTHER', check=False).stderr)
+        self.assertEqual(inference.load(self.base / 'inference-site.json')['account'], 'TEST_PROJECT')
+        (self.base / 'users/someone-else').mkdir()
+        (self.base / 'users/someone-else/secret').write_text('x')
+        self.command('setfacl', '#!/bin/bash\necho "$*" >> "$HOME/setfacl-calls"\n')
+        user = getpass.getuser()
+        self.team('share', user)
+        calls = (self.home / 'setfacl-calls').read_text().splitlines()
+        access = [c for c in calls if c.startswith('-m u:{}:rwX '.format(user))]
+        defaults = [c for c in calls if c.startswith('-d -m ')]
+        self.assertTrue(access and defaults)
+        everything = ' '.join(access + defaults)
+        self.assertIn(str(self.base / 'checkpoints/qwen06b/config.json'), everything)
+        self.assertIn(str(self.base / 'users') + ' ', ' '.join(access) + ' ')
+        self.assertNotIn(str(self.base / 'users') + '/', everything)  # personal folders stay private
+        self.assertNotIn(' ' + str(self.base / 'users') + ' ', ' ' + ' '.join(defaults) + ' ')
+        self.assertIn(b'No such user', self.team('share', 'no-such-login-xyz', check=False).stderr)
+
+    def test_install_submits_only_what_is_missing(self):
+        self.command('sbatch', '#!/bin/bash\necho "$*" >> "$HOME/sbatch-calls"\nn=$(wc -l < "$HOME/sbatch-calls"); printf "%s\\n" "$((700 + n))"\n')
+        self.command('squeue', '#!/bin/bash\nexit 0\n')
+        shutil.rmtree(str(self.base / 'runtimes/vllm-0.31.0'))
+        output = self.team('install', 'qwen06b', 'qwen235b').stdout.decode()
+        calls = (self.home / 'sbatch-calls').read_text().splitlines()
+        # qwen235b's runtime is there; no checkpoint has a download manifest in the fixture.
+        self.assertEqual(len(calls), 3, output)
+        self.assertIn('--job-name=install-runtime-vllm-0.31.0', calls[0])
+        self.assertIn('--partition=lrd_all_serial', calls[0])
+        self.assertTrue(calls[0].endswith('install/runtime.sbatch vllm-0.31.0'))
+        self.assertIn('--dependency=afterok:701', calls[1])  # qwen06b weights wait for its runtime
+        self.assertNotIn('--dependency', calls[2])
+        self.assertIn('LEONARDO_RELEASE=' + str(REPO), calls[0])
+        (self.base / 'checkpoints/qwen06b/download_manifest.json').write_text('{}')
+        self.assertIn('checkpoint qwen06b: installed', self.team('install', 'qwen06b').stdout.decode())
+
+    def test_diagnose_uses_the_right_queue(self):
+        self.command('sbatch', '#!/bin/bash\necho "$*" >> "$HOME/sbatch-calls"\nprintf "800\\n"\n')
+        self.team('diagnose', 'reach', '--target', 'lrdn0001:31234')
+        self.team('diagnose', 'probe')
+        reach, probe = (self.home / 'sbatch-calls').read_text().splitlines()
+        self.assertIn('--partition=lrd_all_serial', reach)
+        self.assertIn('TARGET=lrdn0001:31234', reach)
+        self.assertIn('--partition=boost_usr_prod', probe)
+        self.assertTrue(probe.endswith('diagnostics/probe.sbatch'))
 
     def test_admin_cli_over_ssh(self):
         # A stand-in ssh that runs the remote command locally, as the same (temporary) HOME.
@@ -232,15 +294,18 @@ class Framework(unittest.TestCase):
         releases = list((self.home / '.leonardo-inference/releases').iterdir())
         self.assertEqual(len(releases), 1)
         self.assertEqual(releases[0].stat().st_mode & 0o077, 0)
+        for path in ('serve/team.py', 'install/runtime.sbatch', 'diagnostics/probe.sbatch'):
+            self.assertTrue((releases[0] / path).is_file(), path)
         output = subprocess.check_output(cli + ['status'], env=self.env).decode()
         self.assertIn('qwen06b', output)
         self.assertIn('starting', output)
         subprocess.check_call(cli + ['down', 'qwen06b'], env=self.env, stdout=subprocess.DEVNULL)
         self.assertEqual((self.home / 'scancel-args').read_text().split(), ['12345'])
-        token = subprocess.check_output(cli + ['gateway', 'token'], env=self.env, stderr=subprocess.DEVNULL).decode().strip()
+        token = subprocess.check_output(cli + ['router', 'token'], env=self.env, stderr=subprocess.DEVNULL).decode().strip()
         self.assertGreaterEqual(len(token), 32)
-        self.assertEqual(subprocess.check_output(cli + ['gateway', 'token'], env=self.env).decode().strip(), token)
+        self.assertEqual(subprocess.check_output(cli + ['router', 'token'], env=self.env).decode().strip(), token)
         self.assertEqual(len(list((self.home / '.leonardo-inference/releases').iterdir())), 1)
+        self.assertEqual(subprocess.run(cli[:2], env=self.env, stdout=subprocess.PIPE).returncode, 0)  # bare call: help
 
     def test_failed_launcher_never_publishes_endpoint(self):
         self.command('srun', '#!/bin/bash\nexit 9\n')

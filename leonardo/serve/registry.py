@@ -1,6 +1,6 @@
 """Shared endpoint registry in $BASE/<site endpoints dir>: discovery and one-server-per-name locks.
 
-Records hold addresses only, never keys: the team folder may be readable by the whole project account.
+Records hold addresses only, never keys: everyone the team folder is shared with can read them.
 A job claims its served model name when it starts, publishes the record after its API checks pass,
 and withdraws both when it stops. A claim held by a job that Slurm no longer knows is taken over.
 """
@@ -26,10 +26,8 @@ def directory(cfg):
     if not relative:
         return None
     path = Path(cfg['base']) / relative
-    if not path.is_dir():
-        path.mkdir(parents=True, exist_ok=True)
-        # Group members publish here too; setgid keeps the project group on new files.
-        path.chmod(0o2770)
+    # Created by `team.py init`; teammates get access through the ACLs `team.py share` sets.
+    path.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -75,7 +73,6 @@ def claim(root, name, job):
         (lock / 'owner').write_text(str(job) + '\n')
         # Teammates' jobs must read the owner to take over a stale claim.
         (lock / 'owner').chmod(0o644)
-        lock.chmod(0o2770)
         return
 
 
@@ -92,7 +89,7 @@ def publish(root, name, record, job):
         raise ValueError('Claim endpoint {} before publishing it'.format(name))
     temporary = root / ('.' + name + '.' + str(job) + '.tmp')
     temporary.write_text(json.dumps(dict(record, name=name, owner=getpass.getuser()), indent=2) + '\n')
-    temporary.chmod(0o640)
+    temporary.chmod(0o644)
     os.replace(str(temporary), str(root / (name + '.json')))
 
 

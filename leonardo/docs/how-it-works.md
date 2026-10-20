@@ -2,7 +2,7 @@
 
 `serve/` is one model-neutral launcher. A model is just a JSON profile; container images, weights and
 secrets live outside Git. This page explains what happens between `prepare_run.sh` and a working API, and
-how the gateway connects those APIs to the cluster, so you can change things without breaking them.
+how the router connects those APIs to the cluster, so you can change things without breaking them.
 
 ## Three layers
 
@@ -19,7 +19,7 @@ flowchart LR
     W[checkpoints/: model weights]
     C[inference-site.json]
   end
-  subgraph Run["~/qwen235b-run-xxxx, private, per run"]
+  subgraph Run["$BASE/users/<login>/runs/qwen235b-xxxx, private, per run"]
     K[.runtime/api_key]
     E[.runtime/endpoint.json]
   end
@@ -32,12 +32,12 @@ flowchart LR
 
 | Layer | Where | Who writes it |
 | --- | --- | --- |
-| Code and profiles | `leonardo/serve/` in this repo, cloned on Leonardo or uploaded by `cli.py` to `~/.leonardo-inference/releases/<hash>/` | Git |
+| Code and profiles | `leonardo/serve/` in this repo, uploaded by `cli.py` to `~/.leonardo-inference/releases/<hash>/serve/` | Git |
 | Assets: runtime image, Python overlay, weights, site config | `$BASE` (the team folder under `$WORK`) | Installed once with `install/` |
-| Run state: copied code, API key, job id, endpoint, evidence | `~/<model>-run-<random>/`, mode 700 | `prepare_run.sh`, then the job |
-| Per-user caches (Triton, TileLang, vLLM, HF) | `$BASE/users/<login>/<profile>--<runtime>/` | Each user's own jobs |
+| Run state: copied code, API key, job id, endpoint, evidence | `$BASE/users/<login>/runs/<profile>-<random>/`, under a mode 700 folder | `inference.py prepare`, then the job |
+| Per-user caches (Triton, TileLang, vLLM, HF) | `$BASE/users/<login>/cache/<profile>--<runtime>/` | Each user's own jobs |
 | Team registry: address-only records and one lock per model name | `$BASE/endpoints/` | Each server job |
-| Gateway: code copy, token, job state | `~/.leonardo-inference/`, mode 700 | `inference.py gateway-up`, then the job |
+| Router: code copy, token, job state | `$BASE/users/<login>/router/`, `router_token` | `team.py router up`, then the job |
 
 ## A server run, step by step
 
@@ -45,7 +45,7 @@ flowchart LR
    checks the release manifest, validates the profile, reads `inference-site.json`, resolves the runtime
    and checkpoint, and checks that every shard (or the single `model.safetensors` of a small model) and
    every overlay file the runtime's catalog entry requires exists and is non-empty. It then copies the manifest's files
-   into a fresh private directory in `$HOME`, writes a new random API key to `.runtime/api_key`, writes
+   into a fresh private directory in `$BASE/users/<login>/runs/`, writes a new random API key to `.runtime/api_key`, writes
    `RUN_CONFIG.json` with every resolved path, and prints only the run path. The key is never printed.
 2. **Submit** (`submit_server.sh`, from the run directory). Builds the `sbatch` command from the profile:
    nodes, GPUs, memory, time, plus the account, partition and QoS from the site file. `SBATCH_ACCOUNT`
@@ -87,36 +87,36 @@ flowchart LR
 - **Unix socket paths have a length limit.** The runtime temp dir is bound to the short `/tmp/inference-tmp`.
 - **The login nodes run Python 3.6.8.** `serve/` and `tools/` use only the standard library and 3.6 syntax.
 
-## The gateway
+## The router
 
-`gateway.py` runs as its own small job (`gateway.sbatch`, default `lrd_all_serial`, 2 CPUs, 4 h) and
+`router.py` runs as its own small job (`router.sbatch`, default `lrd_all_serial`, 2 CPUs, 4 h) and
 listens on `41000 + job id % 10000`. It is the only process that holds server keys on behalf of others:
 
-- **Discovery** from private state only. Every 10 s it scans `~/*-run-*/` for runs that are mode 700 and
+- **Discovery** from private state only. Every 10 s it scans `$BASE/users/<login>/runs/*/` for runs that are mode 700 and
   owned by the same account, have a `.runtime/endpoint.json`, and whose job `squeue` still lists. The
   shared registry is never trusted for routing, because anyone in the project group can write to it.
 - **Routing** by the JSON `model` field of each POST to that server, with `Authorization` replaced by the
   server's own key. `GET /v1/models` lists the routable models; `GET /health` needs no token.
-- **Authentication** with one bearer token in `~/.leonardo-inference/gateway_token` (compared in constant
-  time). The cluster holds the same token in the `leonardo-gateway` Secret.
+- **Authentication** with one bearer token in `$BASE/users/<login>/router_token` (compared in constant
+  time). The cluster holds the same token in the `leonardo-router` Secret.
 - **Streaming**: responses are relayed as they arrive (`read1`), so SSE is not buffered.
 - **Chaining**: each job first queues its successor with `--dependency=singleton` until the `--hours` given
-  to `gateway-up` run out. `down gateway` cancels all jobs named `leonardo-gateway`, pending ones included.
-- **Outbound tunnel** only when the site sets `"outbound_tunnel": true`. Then `gateway-up` copies the chisel
+  to `router up` run out. `down router` cancels all jobs named `leonardo-router`, pending ones included.
+- **Cluster link** only when the site sets `cluster_link.enabled`. Then `router up` copies the chisel
   binary from `$BASE/tools/` after checking its SHA-256 against `catalog.json`, and the job runs
-  `chisel client --fingerprint <pinned> <tunnel_server> R:0.0.0.0:<tunnel_remote_port>:127.0.0.1:<port>`
-  with the password from `~/.leonardo-inference/tunnel_auth` in its environment (not on the command line).
+  `chisel client --fingerprint <pinned> <server> R:0.0.0.0:<remote_port>:127.0.0.1:<port>`
+  with the password from `$BASE/users/<login>/link_auth` in its environment (not on the command line).
 
 Ports by job id, so jobs on a shared node do not collide: distributed master `29000-29999` (+1 for the EP
-hook), model API `31000-40999`, gateway `41000-50999`.
+hook), model API `31000-40999`, router `41000-50999`.
 
 ## Runtimes
 
 `serve/catalog.json` lists every runtime a profile may name: the image (pinned by digest), the pinned
 packages for its Python overlay, the overlay files `prepare` must find, and the modules `cpu-check`
 imports. `vllm-backport-sm80-0.13.1` needs TileLang in its overlay; stock `vllm-0.31.0` needs nothing. The
-install scripts read the same file, so a new runtime is one catalog entry plus `install/01`, `02` and
-`register_runtime.py`.
+install scripts read the same file, so a new runtime is one catalog entry; `cli.py install` pulls,
+extends and registers it (`install/runtime.sbatch`).
 
 ## Profiles
 
@@ -149,13 +149,13 @@ python3 tools/update_manifest.py
 ## Shared layout under `$BASE`
 
 ```text
-inference-site.json                    account, partition, QoS, runtime and checkpoint paths, gateway settings
-runtimes/vllm-backport-sm80/0.13.1/    image.sif, python-overlay/, runtime.json (hashes)
-runtimes/vllm/0.31.0/                  stock vLLM, empty overlay
+inference-site.json                    account, partitions, QoS, router and cluster link settings
+runtimes/<runtime id>/                 image.sif, python-overlay/, runtime.json (hashes)
 checkpoints/{qwen235b,glm53,deepseek41,qwen06b}/
 endpoints/                             registry: <served model>.json and .<name>.lock/, group-writable
-tools/chisel-1.13.0                    tunnel client, only with the outbound tunnel
-users/<login>/<profile>--<runtime>/    private caches, created on first prepare
+tools/chisel-1.13.0                    cluster link client, only when the link is used
+logs/                                  install job logs
+users/<login>/                         private (mode 700): runs/, cache/, router/, logs/, router_token
 staging/, wheels/, cache/              install-time only
 ```
 

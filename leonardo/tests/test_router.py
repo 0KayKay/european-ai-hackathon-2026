@@ -1,4 +1,5 @@
-"""Gateway routing, authentication, streaming and job chaining, with fake servers and Slurm."""
+"""Router routing, authentication, streaming and job chaining, with fake servers and Slurm."""
+import getpass
 import http.client
 import json
 import os
@@ -15,7 +16,7 @@ from socketserver import ThreadingMixIn
 
 REPO = Path(__file__).resolve().parents[1]
 RELEASE = REPO / 'serve'
-TOKEN = 'gateway-token-for-tests-0123456789abcdef'
+TOKEN = 'router-token-for-tests-0123456789abcdef'
 
 
 def free_port():
@@ -56,24 +57,24 @@ class Backend(ThreadingMixIn, HTTPServer):
         threading.Thread(target=self.serve_forever, daemon=True).start()
 
 
-class Gateway(unittest.TestCase):
+class Router(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
-        self.home = root / 'home'
-        self.bin = root / 'bin'
+        self.home, self.bin, self.base = root / 'home', root / 'bin', root / 'team'
         for path in (self.home, self.bin):
             path.mkdir()
-        self.state = self.home / '.leonardo-inference'
-        (self.state / 'gateway/.runtime').mkdir(parents=True)
-        self.state.chmod(0o700)
-        (self.state / 'gateway_token').write_text(TOKEN + '\n')
-        (self.state / 'gateway_token').chmod(0o600)
+        self.mine = self.base / 'users' / getpass.getuser()
+        self.directory = self.mine / 'router'
+        (self.directory / '.runtime').mkdir(parents=True)
+        self.mine.chmod(0o700)
+        (self.mine / 'router_token').write_text(TOKEN + '\n')
+        (self.mine / 'router_token').chmod(0o600)
         self.env = dict(os.environ, HOME=str(self.home), PATH=str(self.bin) + ':' + os.environ['PATH'])
         self.command('squeue', '#!/bin/bash\nprintf "101|a|RUNNING|1:00|1:00:00|n1\\n102|b|RUNNING|1:00|1:00:00|n2\\n"\n')
         self.backends = {name: Backend(name) for name in ('model-a', 'model-b', 'model-c', 'model-d')}
         for job, name in enumerate(sorted(self.backends), start=101):
-            run = self.home / (name + '-run-x')
+            run = self.mine / 'runs' / (name + '-x')
             (run / '.runtime').mkdir(parents=True)
             run.chmod(0o755 if name == 'model-d' else 0o700)  # model-d: not private, never routed
             (run / 'RUN_CONFIG.json').write_text(json.dumps({'profile': {'id': name, 'served_model': name}}))
@@ -83,14 +84,14 @@ class Gateway(unittest.TestCase):
             (run / '.runtime/endpoint.json').write_text(json.dumps({
                 'job_id': str(job), 'host': '127.0.0.1', 'port': self.backends[name].server_port, 'model': name}))
         # model-c (job 103) is not in squeue: a dead job's endpoint must not be routed.
-        (self.state / 'gateway/GATEWAY.json').write_text(json.dumps(
-            {'settings': {'outbound_tunnel': False}, 'release': 'test'}))
+        (self.directory / 'ROUTER.json').write_text(json.dumps(
+            {'base': str(self.base), 'cluster_link': {'enabled': False}, 'release': 'test', 'directory': str(self.directory)}))
         self.port = free_port()
-        self.process = subprocess.Popen([sys.executable, str(RELEASE / 'gateway.py'), 'serve'],
-                                        env=dict(self.env, GATEWAY_PORT=str(self.port), SLURM_JOB_ID='900'),
+        self.process = subprocess.Popen([sys.executable, str(RELEASE / 'router.py'), 'serve'], cwd=str(self.directory),
+                                        env=dict(self.env, ROUTER_PORT=str(self.port), SLURM_JOB_ID='900'),
                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         until = time.monotonic() + 10
-        while not (self.state / 'gateway/.runtime/endpoint.json').exists():
+        while not (self.directory / '.runtime/endpoint.json').exists():
             self.assertLess(time.monotonic(), until, self.process.stdout.read1(10000) if self.process.poll() is not None else 'no endpoint')
             time.sleep(0.05)
 
@@ -175,21 +176,20 @@ class Gateway(unittest.TestCase):
     def test_endpoint_withdrawn_on_stop(self):
         self.process.terminate()
         self.process.wait(timeout=5)
-        self.assertFalse((self.state / 'gateway/.runtime/endpoint.json').exists())
+        self.assertFalse((self.directory / '.runtime/endpoint.json').exists())
 
 
-class GatewayJobs(unittest.TestCase):
+class RouterJobs(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
         self.home, self.bin, self.base = root / 'home', root / 'bin', root / 'team'
         for path in (self.home, self.bin, self.base):
             path.mkdir()
-        site = json.loads((RELEASE / 'site.example.json').read_text())
-        site['account'] = 'TEST_PROJECT'
-        (self.base / 'inference-site.json').write_text(json.dumps(site))
-        self.site = site
         self.env = dict(os.environ, HOME=str(self.home), PATH=str(self.bin) + ':' + os.environ['PATH'])
+        self.team('init', '--account', 'TEST_PROJECT')
+        self.site = json.loads((self.base / 'inference-site.json').read_text())
+        self.mine = self.base / 'users' / getpass.getuser()
         self.command('squeue', '#!/bin/bash\nexit 0\n')
         self.command('sbatch', '#!/bin/bash\nprintf "%s\\n" "$PWD" "$@" >> "$HOME/sbatch-calls"\nprintf "777\\n"\n')
 
@@ -201,55 +201,54 @@ class GatewayJobs(unittest.TestCase):
         path.write_text(source)
         path.chmod(0o700)
 
-    def run_inference(self, *args, cwd=None, env=None):
-        return subprocess.run([sys.executable, str(Path(cwd or RELEASE) / 'inference.py')] + list(args),
-                              env=env or self.env, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    def team(self, *args):
+        return subprocess.run([sys.executable, str(RELEASE / 'team.py')] + list(args) + ['--base', str(self.base)],
+                              env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    def test_up_chains_and_tunnel_switch(self):
-        result = self.run_inference('gateway-up', '--base', str(self.base), '--hours', '9')
+    def next_job(self, job):
+        directory = self.mine / 'router'
+        return subprocess.run([sys.executable, str(directory / 'router.py'), 'next'], cwd=str(directory),
+                              env=dict(self.env, SLURM_JOB_ID=job), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def test_up_chains_and_link_switch(self):
+        result = self.team('router', 'up', '--hours', '9')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(b'Outbound tunnel: off', result.stdout)
-        directory = self.home / '.leonardo-inference/gateway'
+        self.assertIn(b'Cluster link: off', result.stdout)
+        directory = self.mine / 'router'
         calls = (self.home / 'sbatch-calls').read_text().split('\n')
         self.assertEqual(calls[0], str(directory))
-        for flag in ('--job-name=leonardo-gateway', '--dependency=singleton', '--partition=lrd_all_serial',
+        for flag in ('--job-name=leonardo-router', '--dependency=singleton', '--partition=lrd_all_serial',
                      '--time=04:00:00', '--chdir=' + str(directory)):
             self.assertIn(flag, calls)
         self.assertFalse(any(c.startswith('--qos') for c in calls))
-        self.assertEqual((self.home / '.leonardo-inference/gateway_token').stat().st_mode & 0o077, 0)
+        self.assertEqual((self.mine / 'router_token').stat().st_mode & 0o077, 0)
         self.assertFalse((directory / 'chisel').exists())
 
         # Inside the job: 9 h until > 4 h time limit, so a successor is queued exactly once.
-        job_env = dict(self.env, SLURM_JOB_ID='777')
-        self.assertEqual(self.run_inference('gateway-next', cwd=directory, env=job_env).returncode, 0)
+        self.assertEqual(self.next_job('777').returncode, 0)
         self.assertEqual((self.home / 'sbatch-calls').read_text().count('--dependency=singleton'), 2)
-        cfg = json.loads((directory / 'GATEWAY.json').read_text())
+        cfg = json.loads((directory / 'ROUTER.json').read_text())
         cfg['until'] = time.time() + 3600
-        (directory / 'GATEWAY.json').write_text(json.dumps(cfg))
-        result = self.run_inference('gateway-next', cwd=directory, env=dict(job_env, SLURM_JOB_ID='778'))
-        self.assertIn(b'chain ends', result.stdout)
+        (directory / 'ROUTER.json').write_text(json.dumps(cfg))
+        self.assertIn(b'chain ends', self.next_job('778').stdout)
         self.assertEqual((self.home / 'sbatch-calls').read_text().count('--dependency=singleton'), 2)
 
-        # A running gateway is not replaced silently.
-        self.command('squeue', '#!/bin/bash\nprintf "777|leonardo-gateway|RUNNING|1:00|4:00:00|n1\\n"\n')
-        result = self.run_inference('gateway-up', '--base', str(self.base))
+        # A running router is not replaced silently.
+        self.command('squeue', '#!/bin/bash\nprintf "777|leonardo-router|RUNNING|1:00|4:00:00|n1\\n"\n')
+        result = self.team('router', 'up')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(b'--restart', result.stderr)
 
-    def test_outbound_tunnel_needs_settings_auth_and_verified_chisel(self):
-        self.site['gateway'].update(outbound_tunnel=True, tunnel_server='https://example.invalid/leonardo-tunnel',
-                                    tunnel_fingerprint='abc')
+    def test_cluster_link_needs_settings_password_and_verified_chisel(self):
+        self.site['cluster_link'].update(enabled=True, server='https://example.invalid/leonardo-link', fingerprint='abc')
         (self.base / 'inference-site.json').write_text(json.dumps(self.site))
-        result = self.run_inference('gateway-up', '--base', str(self.base))
-        self.assertIn(b'tunnel_auth', result.stderr)
-        state = self.home / '.leonardo-inference'
-        state.mkdir(mode=0o700)
-        (state / 'tunnel_auth').write_text('leonardo:secret\n')
-        (state / 'tunnel_auth').chmod(0o600)
-        (self.base / 'tools').mkdir()
+        self.assertIn(b'link_auth', self.team('router', 'up').stderr)
+        result = subprocess.run([sys.executable, str(RELEASE / 'team.py'), 'router', 'link-auth', '--base', str(self.base)],
+                                input=b'leonardo:secret\n', env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.mine / 'link_auth').stat().st_mode & 0o077, 0)
         (self.base / 'tools/chisel-1.13.0').write_bytes(b'not the pinned binary')
-        result = self.run_inference('gateway-up', '--base', str(self.base))
-        self.assertIn(b'does not match catalog.json', result.stderr)
+        self.assertIn(b'does not match catalog.json', self.team('router', 'up').stderr)
         self.assertFalse((self.home / 'sbatch-calls').exists())
 
 

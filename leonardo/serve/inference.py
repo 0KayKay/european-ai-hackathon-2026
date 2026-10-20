@@ -152,6 +152,7 @@ def preflight(cfg):
     if not shutil.which(cfg['container_command']) or not shutil.which('sbatch'):
         raise ValueError('Container runner and Slurm must be available on this host')
     cache = Path(cfg['cache_path'])
+    private_dir(cache.parent.parent)  # $BASE/users/<login>: holds keys, so never shared
     private_dir(cache.parent)
     private_dir(cache)
     for subdir in ('cache', 'tmp'):
@@ -172,10 +173,26 @@ def site_base(value):
 
 
 def load_site(base):
+    if not (base / 'inference-site.json').exists():
+        raise ValueError('{} is not a team folder yet (no inference-site.json); create it with: cli.py init'.format(base))
     site = load(base / 'inference-site.json')
     if site['schema_version'] != 1:
         raise ValueError('Unsupported site schema')
     return site
+
+
+def user_dir(base):
+    """$BASE/users/<login>: this account's runs, caches, router and logs. Mode 700."""
+    return base / 'users' / identifier(getpass.getuser())
+
+
+def runtime_dir(base, site, runtime_id):
+    # Fixed layout unless the site file maps a runtime somewhere else (older installations).
+    return base / site.get('runtime_paths', {}).get(runtime_id, 'runtimes/' + runtime_id)
+
+
+def checkpoint_dir(base, site, name):
+    return base / site.get('checkpoints', {}).get(name, 'checkpoints/' + name)
 
 
 def prepare_run(model, base_arg):
@@ -187,26 +204,27 @@ def prepare_run(model, base_arg):
     profile = profile_check(load(ROOT / 'profiles' / (name + '.json')))
     base = site_base(base_arg)
     site = load_site(base)
-    if profile['runtime'] not in site['runtime_paths'] or profile['checkpoint'] not in site['checkpoints']:
-        raise ValueError('Runtime {} or checkpoint {} is not installed at this site; see leonardo/install'.format(
-            profile['runtime'], profile['checkpoint']))
-    runtime_path = (base / site['runtime_paths'][profile['runtime']]).resolve()
+    runtime_path = runtime_dir(base, site, profile['runtime']).resolve()
+    if not (runtime_path / 'runtime.json').exists():
+        raise ValueError('Runtime {} is not installed; run: cli.py install {}'.format(profile['runtime'], name))
     runtime = load(runtime_path / 'runtime.json')
     if runtime['id'] != profile['runtime']:
         raise ValueError('Wrong runtime registration')
-    user = identifier(getpass.getuser())
-    users = base / 'users'
-    if not users.is_dir():
-        raise ValueError('Site operator must create the shared users parent directory')
+    model_path = checkpoint_dir(base, site, profile['checkpoint']).resolve()
+    if not (model_path / 'config.json').exists():
+        raise ValueError('Checkpoint {} is not installed; run: cli.py install {}'.format(profile['checkpoint'], name))
+    if not (base / 'users').is_dir():
+        raise ValueError('{}/users is missing; create the team folder with: cli.py init'.format(base))
+    mine = user_dir(base)
     cfg = {'schema_version': 1, 'profile': profile, 'site': site, 'base': str(base),
            'source_release': str(ROOT), 'release': manifest['release'],
-           'model_path': str((base / site['checkpoints'][profile['checkpoint']]).resolve()),
+           'model_path': str(model_path),
            'runtime_path': str(runtime_path), 'sif': str(runtime_path / runtime['sif']),
            'overlay': str(runtime_path / runtime['overlay']),
-           'cache_path': str(users / user / (name + '--' + profile['runtime'])),
+           'cache_path': str(mine / 'cache' / (name + '--' + profile['runtime'])),
            'container_command': shutil.which('singularity') or shutil.which('apptainer') or 'singularity'}
     preflight(cfg)
-    run = Path(tempfile.mkdtemp(prefix=name + '-run-', dir=str(Path.home())))
+    run = Path(tempfile.mkdtemp(prefix=name + '-', dir=str(private_dir(mine / 'runs'))))
     run.chmod(0o700)
     for filename in manifest['files']:
         destination = run / filename
@@ -297,106 +315,6 @@ def submit(args):
     print('Wait for INFERENCE_READY in {}-common-{}.out, then read .runtime/endpoint.json.'.format(cfg['profile']['id'], job))
 
 
-def up(args):
-    """prepare + submit in one step; what the admin CLI runs over SSH."""
-    run = prepare_run(args.model, args.base)
-    print('Run directory: ' + str(run), flush=True)
-    command = [sys.executable, str(run / 'inference.py'), 'submit']
-    for flag in ('reservation', 'qos', 'time'):
-        if getattr(args, flag):
-            command += ['--' + flag, getattr(args, flag)]
-    subprocess.check_call(command, cwd=str(run))
-
-
-def active_jobs():
-    """Own Slurm jobs by id, or None if squeue is unavailable."""
-    try:
-        output = subprocess.check_output(['squeue', '-h', '-u', getpass.getuser(), '-o', '%i|%j|%T|%M|%l|%N'],
-                                         stderr=subprocess.DEVNULL, timeout=30).decode()
-    except (OSError, subprocess.SubprocessError):
-        return None
-    jobs = {}
-    for line in output.splitlines():
-        fields = line.strip().split('|')
-        if len(fields) == 6:
-            jobs[fields[0]] = dict(zip(('job_id', 'name', 'state', 'elapsed', 'limit', 'nodes'), fields))
-    return jobs
-
-
-def own_runs():
-    """Private run directories of this account, newest first, with job id and endpoint when known."""
-    runs = []
-    for path in Path.home().glob('*-run-*'):
-        try:
-            mode = path.lstat()
-            if not stat.S_ISDIR(mode.st_mode) or mode.st_uid != os.getuid() or mode.st_mode & 0o077:
-                continue
-            cfg = load(path / 'RUN_CONFIG.json')
-            job = (path / '.runtime/job_id').read_text().strip() if (path / '.runtime/job_id').exists() else None
-            endpoint = load(path / '.runtime/endpoint.json') if (path / '.runtime/endpoint.json').exists() else None
-        except (OSError, ValueError, KeyError):
-            continue
-        runs.append({'run': path, 'profile': cfg['profile'], 'job': job, 'endpoint': endpoint,
-                     'mtime': mode.st_mtime})
-    return sorted(runs, key=lambda r: -r['mtime'])
-
-
-def status(args):
-    import gateway
-    import registry
-    jobs = active_jobs()
-    report = {'jobs_known': jobs is not None, 'servers': [], 'gateway': gateway.state(jobs), 'registry': None}
-    for run in own_runs():
-        if run['job'] and (jobs is None or run['job'] in jobs):
-            job = (jobs or {}).get(run['job'], {})
-            report['servers'].append({'profile': run['profile']['id'], 'model': run['profile']['served_model'],
-                                      'job_id': run['job'], 'state': job.get('state', 'unknown'),
-                                      'elapsed': job.get('elapsed'), 'limit': job.get('limit'),
-                                      'ready': run['endpoint'] is not None, 'run': str(run['run']),
-                                      'endpoint': run['endpoint'] and '{}:{}'.format(run['endpoint']['host'], run['endpoint']['port'])})
-    if args.base:
-        base = site_base(args.base)
-        root = registry.directory({'base': str(base), 'site': load_site(base)})
-        report['registry'] = registry.records(root) if root else None
-    if args.json:
-        print(json.dumps(report, indent=2))
-        return
-    if jobs is None:
-        print('WARNING: squeue failed; showing runs that may already have ended.')
-    print('Your model servers:')
-    for s in report['servers'] or [{}]:
-        if s:
-            print('  {profile:<12} job {job_id:<10} {state:<10} {elapsed}/{limit}  {0}'.format(
-                ('READY ' + s['model'] + ' at ' + s['endpoint']) if s['ready'] else 'starting (no endpoint yet)', **s))
-        else:
-            print('  none')
-    g = report['gateway']
-    print('Your gateway: ' + (g['summary'] if g else 'not running'))
-    if report['registry'] is not None:
-        print('Team endpoints in the shared registry:')
-        for r in report['registry'] or [None]:
-            r = r and {k: r.get(k, '?') for k in ('name', 'owner', 'host', 'port', 'job_id', 'slurm_expected_end')}
-            print('  {name:<36} {owner:<10} {host}:{port} job {job_id} until {slurm_expected_end}'.format(**r) if r else '  none')
-
-
-def down(args):
-    import gateway
-    if args.target == 'gateway':
-        gateway.down()
-        return
-    jobs = active_jobs()
-    targets = []
-    for run in own_runs():
-        p = run['profile']
-        if run['job'] and args.target in (p['id'], p['served_model'], run['job']):
-            if jobs is None or run['job'] in jobs:
-                targets.append(run['job'])
-    if not targets:
-        raise ValueError('No running server of yours matches {}; see status'.format(args.target))
-    subprocess.check_call(['scancel'] + targets)
-    print('Cancelled job(s) ' + ' '.join(targets))
-
-
 def cpu_check():
     cfg = config()
     preflight(cfg)
@@ -408,52 +326,28 @@ def cpu_check():
     subprocess.check_call(command, env=environment)
 
 
+
+
 def main():
     os.umask(0o077)
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__ + ' Team-folder commands (up, status, install, ...) are in team.py.')
     sub = parser.add_subparsers(dest='command')
-    p = sub.add_parser('prepare', help='check assets and create a private run directory')
+    p = sub.add_parser('prepare', help='check assets and create a private run directory; prints its path')
     p.add_argument('model')
     p.add_argument('--base')
-    for name, text in (('submit', 'submit a prepared run (from its directory)'), ('up', 'prepare and submit')):
-        p = sub.add_parser(name, help=text)
-        if name == 'up':
-            p.add_argument('model')
-            p.add_argument('--base')
-        p.add_argument('--reservation')
-        p.add_argument('--qos', help='override the site QoS, e.g. boost_qos_dbg')
-        p.add_argument('--time', help='override the profile time limit, e.g. 00:30:00')
-        if name == 'submit':
-            p.add_argument('--dry-run', action='store_true')
-    p = sub.add_parser('status', help='your servers and gateway, and the team registry')
-    p.add_argument('--base')
-    p.add_argument('--json', action='store_true')
-    p = sub.add_parser('down', help='cancel your servers for a profile, model or job id, or "gateway"')
-    p.add_argument('target')
-    p = sub.add_parser('gateway-up', help='start the gateway job that routes to your servers')
-    p.add_argument('--base')
-    p.add_argument('--hours', type=float, default=12, help='keep resubmitting for this long (default 12)')
-    p.add_argument('--restart', action='store_true', help='cancel a running gateway first')
-    p = sub.add_parser('gateway-token', help='create, replace or print the gateway token')
-    p.add_argument('action', choices=['ensure', 'set', 'show'])
-    sub.add_parser('gateway-next', help='(used by gateway.sbatch) submit the successor job')
-    sub.add_parser('preflight')
-    sub.add_parser('cpu-check')
-    sub.add_parser('info')
+    p = sub.add_parser('submit', help='submit the prepared run (run from its directory)')
+    p.add_argument('--reservation')
+    p.add_argument('--qos', help='override the site QoS, e.g. boost_qos_dbg')
+    p.add_argument('--time', help='override the profile time limit, e.g. 00:30:00')
+    p.add_argument('--dry-run', action='store_true')
+    sub.add_parser('preflight', help='re-check the run directory and assets')
+    sub.add_parser('cpu-check', help='import the runtime modules in the container, no GPU')
+    sub.add_parser('info', help='print the resolved run configuration')
     args = parser.parse_args()
     if args.command == 'prepare':
         prepare(args)
     elif args.command == 'submit':
         submit(args)
-    elif args.command == 'up':
-        up(args)
-    elif args.command == 'status':
-        status(args)
-    elif args.command == 'down':
-        down(args)
-    elif args.command in ('gateway-up', 'gateway-token', 'gateway-next'):
-        import gateway
-        {'gateway-up': gateway.up, 'gateway-token': gateway.token, 'gateway-next': gateway.next_job}[args.command](args)
     elif args.command == 'preflight':
         assert_private_run()
         preflight(config())

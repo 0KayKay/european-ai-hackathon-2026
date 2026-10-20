@@ -1,6 +1,6 @@
-# Only needed if nccl_check.sbatch shows NCCL falling back to NET/Socket because the image lacks
-# InfiniBand userspace libraries. Build it where you have Docker (laptop, CI), push it to your
-# registry, add it to serve/catalog.json as a new runtime and install it with install/01.
+# Only needed if `cli.py diagnose nccl` shows NCCL falling back to NET/Socket because the image lacks
+# InfiniBand userspace libraries. Build it where you have Docker (laptop, CI), push it to a registry,
+# and add it to serve/catalog.json as a new runtime; `cli.py install` then installs it.
 ARG VLLM_TAG=v0.31.0
 FROM vllm/vllm-openai:${VLLM_TAG}
 RUN apt-get update \

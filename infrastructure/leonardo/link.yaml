@@ -1,10 +1,10 @@
-# The Leonardo gateway job dials OUT to this chisel server (WebSocket on the public Ingress under
-# /leonardo-tunnel) and opens one reverse port, 9000, inside the pod. agentgateway reaches the
-# gateway through the leonardo-inference Service. Nothing here logs in to Leonardo.
+# The cluster link. The router job on Leonardo dials OUT to this chisel server (a WebSocket on the
+# public Ingress under /leonardo-link) and opens one reverse port, 9000, inside this pod. agentgateway
+# reaches the router through the leonardo-router Service. Nothing here logs in to Leonardo.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: leonardo-tunnel
+  name: leonardo-link
   labels:
     app.kubernetes.io/part-of: hackathon
 spec:
@@ -12,10 +12,10 @@ spec:
   strategy:
     type: Recreate
   selector:
-    matchLabels: {app: leonardo-tunnel}
+    matchLabels: {app: leonardo-link}
   template:
     metadata:
-      labels: {app: leonardo-tunnel}
+      labels: {app: leonardo-link}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -34,7 +34,7 @@ spec:
             - containerPort: 8080
               name: websocket
             - containerPort: 9000
-              name: gateway
+              name: router
           readinessProbe:
             httpGet: {path: /health, port: 8080}
           securityContext:
@@ -48,19 +48,19 @@ spec:
       volumes:
         - name: auth
           secret:
-            secretName: leonardo-tunnel
+            secretName: leonardo-link
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: leonardo-tunnel
+  name: leonardo-link
   labels:
     app.kubernetes.io/part-of: hackathon
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
-    cloud.google.com/backend-config: '{"default": "leonardo-tunnel"}'
+    cloud.google.com/backend-config: '{"default": "leonardo-link"}'
 spec:
-  selector: {app: leonardo-tunnel}
+  selector: {app: leonardo-link}
   ports:
     - name: websocket
       port: 8080
@@ -69,20 +69,20 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: leonardo-inference
+  name: leonardo-router
   labels:
     app.kubernetes.io/part-of: hackathon
 spec:
-  selector: {app: leonardo-tunnel}
+  selector: {app: leonardo-link}
   ports:
     - name: http
       port: 8080
-      targetPort: gateway
+      targetPort: router
 ---
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
-  name: leonardo-tunnel
+  name: leonardo-link
 spec:
   # The load balancer would otherwise cut the long-lived WebSocket after 30 s.
   timeoutSec: 86400

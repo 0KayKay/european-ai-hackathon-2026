@@ -1,11 +1,16 @@
-"""One authenticated entry point for all of your model servers, run as its own Slurm job.
+"""The router: one authenticated entry point for all of your model servers, run as its own Slurm job.
 
-The gateway finds your servers through their private run directories (never through the shared
-registry, which anyone in the project could write), routes each request by its "model" field and
-swaps the caller's gateway token for that server's own key. Callers never see a server key.
+It finds your servers through their private run directories in $BASE/users/<login>/runs (never
+through the shared registry, which teammates can write), routes each request by its "model" field
+and swaps the caller's router token for that server's own key. Callers never see a server key.
 
-Optionally (site switch "outbound_tunnel", off by default) it also dials out to a chisel server in
-Kubernetes, so the cluster reaches the gateway without anyone logging in to Leonardo from there.
+Optionally (site setting cluster_link.enabled, off by default) it also opens the cluster link: a
+chisel client that dials out to the chisel server in Kubernetes and offers this router there, so
+agentgateway reaches it without anyone logging in to Leonardo from the cluster.
+
+    python3 router.py serve   # run by router.sbatch inside the job
+    python3 router.py next    # run by router.sbatch: queue the successor job
+Starting, stopping and the token are team.py commands: team.py router up|down|token.
 """
 import argparse
 import datetime
@@ -30,18 +35,19 @@ import time
 import inference
 from inference import ROOT, load, save
 
-STATE = Path.home() / '.leonardo-inference'
-DIRECTORY = STATE / 'gateway'
-TOKEN = STATE / 'gateway_token'
-TUNNEL_AUTH = STATE / 'tunnel_auth'
-JOB_NAME = 'leonardo-gateway'
-DEFAULTS = {'partition': 'lrd_all_serial', 'qos': None, 'time': '04:00:00', 'cpus': 2, 'memory': '8000M',
-            'outbound_tunnel': False, 'tunnel_server': None, 'tunnel_fingerprint': None,
-            'tunnel_proxy': None, 'tunnel_remote_port': 9000}
+JOB_NAME = 'leonardo-router'
+ROUTER_DEFAULTS = {'qos': None, 'time': '04:00:00', 'cpus': 2, 'memory': '8000M'}
+LINK_DEFAULTS = {'enabled': False, 'server': None, 'fingerprint': None, 'proxy': None, 'remote_port': 9000}
 MAX_BODY = 16 * 1024 * 1024
 UPSTREAM_TIMEOUT = 900
 HOP_BY_HOP = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer',
               'transfer-encoding', 'upgrade', 'server', 'date'}
+
+
+def paths(base):
+    """Where this account's router lives: code copy and job state, token, cluster link password."""
+    mine = inference.user_dir(base)
+    return {'directory': mine / 'router', 'token': mine / 'router_token', 'link_auth': mine / 'link_auth'}
 
 
 def write_private(path, text):
@@ -60,25 +66,37 @@ def read_private(path):
     return path.read_text().strip()
 
 
-def token(args):
-    if args.action == 'set':
+def token(base, action):
+    """ensure: create if missing; set: replace from stdin; show: print."""
+    path = paths(base)['token']
+    inference.private_dir(path.parent)
+    if action == 'set':
         value = sys.stdin.readline().strip()
         if len(value) < 32:
-            raise ValueError('Refusing a gateway token shorter than 32 characters')
-        write_private(TOKEN, value + '\n')
-        print('Gateway token replaced. A running gateway keeps the old one until restarted.')
-    elif args.action == 'ensure':
-        if not TOKEN.exists():
-            write_private(TOKEN, secrets.token_urlsafe(32) + '\n')
-            print('Created a new gateway token in ' + str(TOKEN), file=sys.stderr)
+            raise ValueError('Refusing a router token shorter than 32 characters')
+        write_private(path, value + '\n')
+        print('Router token replaced. A running router keeps the old one until restarted.', file=sys.stderr)
+    elif action == 'ensure':
+        if not path.exists():
+            write_private(path, secrets.token_urlsafe(32) + '\n')
+            print('Created a new router token in ' + str(path), file=sys.stderr)
     else:
-        print(read_private(TOKEN))
+        print(read_private(path))
+
+
+def set_link_auth(base):
+    value = sys.stdin.readline().strip()
+    if ':' not in value:
+        raise ValueError('Expected user:password for the cluster link')
+    write_private(paths(base)['link_auth'], value + '\n')
+    print('Cluster link password stored.', file=sys.stderr)
 
 
 def settings(site):
-    merged = dict(DEFAULTS)
-    merged.update(site.get('gateway', {}))
-    return merged
+    router, link = dict(ROUTER_DEFAULTS), dict(LINK_DEFAULTS)
+    router.update(site.get('router', {}))
+    link.update(site.get('cluster_link', {}))
+    return router, link
 
 
 def sha256(path):
@@ -90,18 +108,20 @@ def sha256(path):
 
 
 def job_command(cfg):
-    g, site = cfg['settings'], cfg['site']
+    router, site = cfg['router'], cfg['site']
+    directory = Path(cfg['directory'])
     account = os.environ.get('SBATCH_ACCOUNT') or site['account']
     if account == 'YOUR_PROJECT':
         raise ValueError('Set a valid project allocation in the site configuration')
     command = ['sbatch', '--parsable', '--job-name=' + JOB_NAME, '--dependency=singleton',
-               '--account=' + inference.identifier(account), '--partition=' + inference.identifier(g['partition']),
-               '--nodes=1', '--ntasks=1', '--cpus-per-task=' + str(int(g['cpus'])),
-               '--mem=' + g['memory'], '--time=' + inference.time_limit(g['time']),
-               '--signal=B:TERM@60', '--output=%x-%j.out', '--chdir=' + str(DIRECTORY)]
-    if g['qos']:
-        command.append('--qos=' + inference.identifier(g['qos']))
-    return command + [str(DIRECTORY / 'gateway.sbatch')]
+               '--account=' + inference.identifier(account),
+               '--partition=' + inference.identifier(site.get('cpu_partition', 'lrd_all_serial')),
+               '--nodes=1', '--ntasks=1', '--cpus-per-task=' + str(int(router['cpus'])),
+               '--mem=' + router['memory'], '--time=' + inference.time_limit(router['time']),
+               '--signal=B:TERM@60', '--output=%x-%j.out', '--chdir=' + str(directory)]
+    if router['qos']:
+        command.append('--qos=' + inference.identifier(router['qos']))
+    return command + [str(directory / 'router.sbatch')]
 
 
 def seconds(limit):
@@ -110,60 +130,59 @@ def seconds(limit):
     return int(days or 0) * 86400 + h * 3600 + m * 60 + s
 
 
-def up(args):
+def up(base, site, hours, restart, jobs):
     manifest = inference.verify_release()
-    base = inference.site_base(args.base)
-    site = inference.load_site(base)
-    g = settings(site)
-    current = state(inference.active_jobs())
+    router, link = settings(site)
+    where = paths(base)
+    current = state(base, jobs)
     if current and current['jobs']:
-        if not args.restart:
-            raise ValueError('A gateway is already running ({}); use --restart to replace it'.format(current['summary']))
+        if not restart:
+            raise ValueError('A router is already running ({}); use --restart to replace it'.format(current['summary']))
         down()
-    if g['outbound_tunnel']:
-        if not (g['tunnel_server'] and g['tunnel_fingerprint']):
-            raise ValueError('outbound_tunnel needs tunnel_server and tunnel_fingerprint in the site gateway settings')
-        read_private(TUNNEL_AUTH)
-    token(argparse.Namespace(action='ensure'))
-    inference.private_dir(STATE)
-    staging = Path(tempfile.mkdtemp(prefix='.gateway-', dir=str(STATE)))
+    if link['enabled']:
+        if not (link['server'] and link['fingerprint']):
+            raise ValueError('cluster_link.enabled needs cluster_link.server and cluster_link.fingerprint in the site file')
+        read_private(where['link_auth'])
+    token(base, 'ensure')
+    staging = Path(tempfile.mkdtemp(prefix='.router-', dir=str(where['directory'].parent)))
     for filename in manifest['files']:
         destination = staging / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(str(ROOT / filename), str(destination))
     shutil.copyfile(str(ROOT / 'RELEASE_MANIFEST.json'), str(staging / 'RELEASE_MANIFEST.json'))
     inference.private_dir(staging / '.runtime')
-    if g['outbound_tunnel']:
+    if link['enabled']:
         # Private, verified copy: the shared tools folder could be changed after this check.
         tool = inference.catalog()['tools']['chisel']
         source = base / 'tools' / ('chisel-' + tool['version'])
         if not source.is_file() or sha256(source) != tool['sha256']:
             shutil.rmtree(str(staging))
-            raise ValueError('{} is missing or does not match catalog.json; run install/04_install_chisel.sbatch'.format(source))
+            raise ValueError('{} is missing or does not match catalog.json; run: cli.py install --link-client'.format(source))
         shutil.copyfile(str(source), str(staging / 'chisel'))
         (staging / 'chisel').chmod(0o700)
-    cfg = {'schema_version': 1, 'base': str(base), 'site': site, 'settings': g, 'release': manifest['release'],
-           'until': time.time() + args.hours * 3600}
-    save(staging / 'GATEWAY.json', cfg)
-    if DIRECTORY.exists():
-        shutil.rmtree(str(DIRECTORY))
-    os.rename(str(staging), str(DIRECTORY))
-    # SLURM_SUBMIT_DIR must be the gateway directory: gateway.sbatch starts with cd into it.
-    job = inference.sbatch(job_command(cfg), DIRECTORY / '.runtime/submitting', cwd=str(DIRECTORY))
-    print('Submitted gateway job {}; it resubmits itself until {}.'.format(
+    cfg = {'schema_version': 1, 'base': str(base), 'site': site, 'router': router, 'cluster_link': link,
+           'directory': str(where['directory']), 'release': manifest['release'], 'until': time.time() + hours * 3600}
+    save(staging / 'ROUTER.json', cfg)
+    if where['directory'].exists():
+        shutil.rmtree(str(where['directory']))
+    os.rename(str(staging), str(where['directory']))
+    # SLURM_SUBMIT_DIR must be the router directory: router.sbatch starts with cd into it.
+    job = inference.sbatch(job_command(cfg), where['directory'] / '.runtime/submitting', cwd=str(where['directory']))
+    print('Submitted router job {}; it resubmits itself until {}.'.format(
         job, datetime.datetime.fromtimestamp(cfg['until']).isoformat(timespec='minutes')))
-    print('Outbound tunnel: ' + ('ON to ' + g['tunnel_server'] if g['outbound_tunnel'] else 'off (site setting)'))
+    print('Cluster link: ' + ('ON to ' + link['server'] if link['enabled'] else 'off (site setting cluster_link.enabled)'))
 
 
-def next_job(args):
-    """Called at the start of each gateway job: queue the successor, which starts when this one ends."""
-    cfg = load(DIRECTORY / 'GATEWAY.json')
+def next_job():
+    """Called at the start of each router job: queue the successor, which starts when this one ends."""
+    cfg = load(Path('ROUTER.json'))
     job = os.environ['SLURM_JOB_ID']
-    if time.time() + seconds(cfg['settings']['time']) >= cfg['until']:
-        print('Gateway chain ends with this job (until reached).')
+    if time.time() + seconds(cfg['router']['time']) >= cfg['until']:
+        print('Router chain ends with this job (until reached).')
         return
-    successor = inference.sbatch(job_command(cfg), DIRECTORY / ('.runtime/next-' + job), cwd=str(DIRECTORY))
-    print('Queued successor gateway job ' + successor)
+    directory = Path(cfg['directory'])
+    successor = inference.sbatch(job_command(cfg), directory / ('.runtime/next-' + job), cwd=str(directory))
+    print('Queued successor router job ' + successor)
 
 
 def down():
@@ -171,27 +190,61 @@ def down():
     print('Cancelled all {} jobs of {}.'.format(JOB_NAME, getpass.getuser()))
 
 
-def state(jobs):
-    """Your gateway jobs and endpoint, or None when there is no trace of one."""
+def state(base, jobs):
+    """Your router jobs and listening address, or None when there is no trace of one."""
     mine = [j for j in (jobs or {}).values() if j['name'] == JOB_NAME]
     endpoint = None
-    if (DIRECTORY / '.runtime/endpoint.json').exists():
-        endpoint = load(DIRECTORY / '.runtime/endpoint.json')
+    path = paths(base)['directory'] / '.runtime/endpoint.json'
+    if path.exists():
+        endpoint = load(path)
         if jobs is not None and endpoint['job_id'] not in jobs:
             endpoint = None
     if not mine and not endpoint:
         return None
     parts = ['{} {}'.format(j['job_id'], j['state']) for j in mine]
     if endpoint:
-        parts.append('listening on {}:{}, tunnel {}'.format(endpoint['host'], endpoint['port'],
-                                                         'on' if endpoint['tunnel'] else 'off'))
+        parts.append('listening on {}:{}, cluster link {}'.format(endpoint['host'], endpoint['port'],
+                                                                 'on' if endpoint['cluster_link'] else 'off'))
     return {'jobs': mine, 'endpoint': endpoint, 'summary': '; '.join(parts)}
+
+
+def own_runs(base):
+    """This account's run directories, newest first, with job id and endpoint when known."""
+    runs = []
+    for path in (inference.user_dir(base) / 'runs').glob('*'):
+        try:
+            mode = path.lstat()
+            if not path.is_dir() or path.is_symlink() or mode.st_uid != os.getuid() or mode.st_mode & 0o077:
+                continue
+            cfg = load(path / 'RUN_CONFIG.json')
+            job = (path / '.runtime/job_id').read_text().strip() if (path / '.runtime/job_id').exists() else None
+            endpoint = load(path / '.runtime/endpoint.json') if (path / '.runtime/endpoint.json').exists() else None
+        except (OSError, ValueError, KeyError):
+            continue
+        runs.append({'run': path, 'profile': cfg['profile'], 'job': job, 'endpoint': endpoint, 'mtime': mode.st_mtime})
+    return sorted(runs, key=lambda r: -r['mtime'])
+
+
+def active_jobs():
+    """Own Slurm jobs by id, or None if squeue is unavailable."""
+    try:
+        output = subprocess.check_output(['squeue', '-h', '-u', getpass.getuser(), '-o', '%i|%j|%T|%M|%l|%N'],
+                                         stderr=subprocess.DEVNULL, timeout=30).decode()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    jobs = {}
+    for line in output.splitlines():
+        fields = line.strip().split('|')
+        if len(fields) == 6:
+            jobs[fields[0]] = dict(zip(('job_id', 'name', 'state', 'elapsed', 'limit', 'nodes'), fields))
+    return jobs
 
 
 class Routes:
     """Model name -> your newest ready server, rescanned at most every 10 seconds."""
 
-    def __init__(self):
+    def __init__(self, base):
+        self.base = base
         self.lock = threading.Lock()
         self.table, self.scanned, self.jobs, self.jobs_at = {}, 0, None, 0
 
@@ -199,10 +252,10 @@ class Routes:
         with self.lock:
             now = time.monotonic()
             if now - self.jobs_at > 30:
-                self.jobs, self.jobs_at = inference.active_jobs(), now
+                self.jobs, self.jobs_at = active_jobs(), now
             if now - self.scanned > 10:
                 table = {}
-                for run in reversed(inference.own_runs()):  # oldest first, so newer runs win
+                for run in reversed(own_runs(self.base)):  # oldest first, so newer runs win
                     endpoint = run['endpoint']
                     if not endpoint or (self.jobs is not None and endpoint['job_id'] not in self.jobs):
                         continue
@@ -220,11 +273,11 @@ class Server(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 
-def handler(routes, gateway_token):
-    expected = gateway_token.encode()
+def handler(routes, router_token):
+    expected = router_token.encode()
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = 'leonardo-gateway'
+        server_version = 'leonardo-router'
 
         def log_message(self, *args):
             pass
@@ -249,7 +302,7 @@ def handler(routes, gateway_token):
             header = self.headers.get('Authorization', '')
             if header.startswith('Bearer ') and hmac.compare_digest(header[7:].strip().encode(), expected):
                 return True
-            self.error(401, 'Missing or wrong gateway token', 'unauthorized')
+            self.error(401, 'Missing or wrong router token', 'unauthorized')
             return False
 
         def do_GET(self):
@@ -331,29 +384,30 @@ def handler(routes, gateway_token):
     return Handler
 
 
-def tunnel_command(cfg, port):
-    g = cfg['settings']
-    command = [str(DIRECTORY / 'chisel'), 'client', '--fingerprint', g['tunnel_fingerprint'], '--keepalive', '25s']
-    if g['tunnel_proxy']:
-        command += ['--proxy', g['tunnel_proxy']]
-    return command + [g['tunnel_server'], 'R:0.0.0.0:{}:127.0.0.1:{}'.format(int(g['tunnel_remote_port']), port)]
+def link_command(cfg, port):
+    link = cfg['cluster_link']
+    command = [str(Path(cfg['directory']) / 'chisel'), 'client', '--fingerprint', link['fingerprint'], '--keepalive', '25s']
+    if link['proxy']:
+        command += ['--proxy', link['proxy']]
+    return command + [link['server'], 'R:0.0.0.0:{}:127.0.0.1:{}'.format(int(link['remote_port']), port)]
 
 
-def serve(args):
+def serve():
     os.umask(0o077)
-    cfg = load(DIRECTORY / 'GATEWAY.json')
-    port = int(os.environ['GATEWAY_PORT'])
-    server = Server(('0.0.0.0', port), handler(Routes(), read_private(TOKEN)))
-    tunnel = None
-    if cfg['settings']['outbound_tunnel']:
+    cfg = load(Path('ROUTER.json'))
+    base = Path(cfg['base'])
+    port = int(os.environ['ROUTER_PORT'])
+    server = Server(('0.0.0.0', port), handler(Routes(base), read_private(paths(base)['token'])))
+    link = None
+    if cfg['cluster_link']['enabled']:
         # chisel reads AUTH from the environment, which keeps the password out of the process list.
-        environment = dict(os.environ, AUTH=read_private(TUNNEL_AUTH))
-        tunnel = subprocess.Popen(tunnel_command(cfg, port), env=environment)
+        environment = dict(os.environ, AUTH=read_private(paths(base)['link_auth']))
+        link = subprocess.Popen(link_command(cfg, port), env=environment)
     endpoint = {'job_id': os.environ.get('SLURM_JOB_ID', 'local'), 'host': os.uname().nodename.split('.')[0],
-                'port': port, 'tunnel': tunnel is not None, 'release': cfg['release'],
+                'port': port, 'cluster_link': link is not None, 'release': cfg['release'],
                 'started': datetime.datetime.now().astimezone().isoformat()}
-    save(DIRECTORY / '.runtime/endpoint.json', endpoint)
-    print('GATEWAY_READY', json.dumps(endpoint), flush=True)
+    save(Path('.runtime/endpoint.json'), endpoint)
+    print('ROUTER_READY', json.dumps(endpoint), flush=True)
 
     def stop(signum, frame):
         raise SystemExit(128 + signum)
@@ -363,18 +417,18 @@ def serve(args):
         server.serve_forever()
     finally:
         server.server_close()
-        if tunnel is not None and tunnel.poll() is None:
-            tunnel.terminate()
-            tunnel.wait()
-        path = DIRECTORY / '.runtime/endpoint.json'
+        if link is not None and link.poll() is None:
+            link.terminate()
+            link.wait()
+        path = Path('.runtime/endpoint.json')
         if path.exists() and load(path)['job_id'] == endpoint['job_id']:
             path.unlink()
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['serve'])
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('command', choices=['serve', 'next'])
     try:
-        serve(parser.parse_args())
+        serve() if parser.parse_args().command == 'serve' else next_job()
     except (ValueError, RuntimeError, OSError, KeyError) as error:
         raise SystemExit(str(error))

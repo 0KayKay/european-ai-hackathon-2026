@@ -1,43 +1,28 @@
 #!/bin/bash
-# Download a profile's checkpoint (model_id and revision from serve/profiles/<profile>.json) to
-# $BASE/checkpoints/<checkpoint>, where site.example.json expects it. CPU-only serial queue
-# (internet, no GPU budget). Submit from this folder:
-#
-#   sbatch 03_download_checkpoint.sbatch qwen235b      # ~239 GB, 48 shards
-#   sbatch 03_download_checkpoint.sbatch glm53         # ~328 GB, 62 shards
-#   sbatch 03_download_checkpoint.sbatch deepseek41    # 48 shards
-#   sbatch 03_download_checkpoint.sbatch qwen06b       # ~1.5 GB; prints the revision to pin
-#   MODEL_ID=org/name MODEL_REVISION=<commit> sbatch 03_download_checkpoint.sbatch my-model
-#SBATCH --job-name=install-checkpoint
-#SBATCH --account=YOUR_PROJECT
-#SBATCH --partition=lrd_all_serial
+# Download a profile's model weights (model_id and revision from serve/profiles/<profile>.json) to
+# $BASE/checkpoints/<checkpoint>, using huggingface_hub inside the profile's own runtime image.
+# Submitted by `cli.py install <profile>` on the CPU queue (internet, no GPU budget), after the
+# runtime job. A profile without a pinned revision gets the current one, printed as PIN_REVISION.
+# Sizes: qwen235b ~239 GB, glm53 ~328 GB, deepseek41 48 shards, qwen06b ~1.5 GB.
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=30000M
 #SBATCH --time=04:00:00
-#SBATCH --output=%x-%j.out
 set -euo pipefail
-NAME="${1:?usage: sbatch 03_download_checkpoint.sbatch <profile-name>}"
-PROFILE="${SLURM_SUBMIT_DIR:?}/../serve/profiles/$NAME.json"
-if [[ -f "$PROFILE" ]]; then
-    read -r PROFILE_MODEL PROFILE_REVISION CHECKPOINT RUNTIME < <(python3 -c 'import json, sys
+NAME="${1:?usage: checkpoint.sbatch <profile name>}"
+BASE="${BASE:?}"
+RELEASE="${LEONARDO_RELEASE:?submit with cli.py install, or set LEONARDO_RELEASE to the leonardo/ folder}"
+read -r MODEL_ID PROFILE_REVISION CHECKPOINT RUNTIME < <(python3 -c 'import json, sys
 p = json.load(open(sys.argv[1]))
-print(p["model_id"], p.get("revision") or "-", p["checkpoint"], p["runtime"])' "$PROFILE")
-    MODEL_ID="${MODEL_ID:-$PROFILE_MODEL}"
-    if [[ "$PROFILE_REVISION" != - ]]; then MODEL_REVISION="${MODEL_REVISION:-$PROFILE_REVISION}"; fi
-    # glm53.json has no "revision" field and stays byte-identical to the GPU-validated file.
-    if [[ "$NAME" == glm53 ]]; then MODEL_REVISION="${MODEL_REVISION:-91b69215804f2d2036a8867f6ce44848e278dcda}"; fi
-else
-    : "${MODEL_ID:?set MODEL_ID for an unlisted model}" "${MODEL_REVISION:?pin MODEL_REVISION to a commit}"
-    CHECKPOINT="$NAME" RUNTIME="${RUNTIME:-vllm-0.31.0}"
-fi
-BASE="${BASE:-${WORK:?}/team_vllm}"
-# Any image with huggingface_hub works; the profile's own runtime is already there.
-SIF="${SIF:-$BASE/staging/$RUNTIME/image.sif}"
-mkdir -p "$BASE/checkpoints" "$BASE/cache/hf"
+print(p["model_id"], p.get("revision") or "-", p["checkpoint"], p["runtime"])' "$RELEASE/serve/profiles/$NAME.json")
+if [[ "$PROFILE_REVISION" != - ]]; then MODEL_REVISION="$PROFILE_REVISION"; fi
+# glm53.json has no "revision" field and stays byte-identical to the GPU-validated file.
+if [[ "$NAME" == glm53 ]]; then MODEL_REVISION=91b69215804f2d2036a8867f6ce44848e278dcda; fi
+SIF="$BASE/runtimes/$RUNTIME/image.sif"
+mkdir -p "$BASE/checkpoints" "$BASE/staging/hf-cache"
 export SINGULARITYENV_MODEL_ID="$MODEL_ID"
 export SINGULARITYENV_MODEL_REVISION="${MODEL_REVISION:-}"
 export SINGULARITYENV_MODEL_DIR="$BASE/checkpoints/$CHECKPOINT"
-export SINGULARITYENV_HF_HOME="$BASE/cache/hf"
+export SINGULARITYENV_HF_HOME="$BASE/staging/hf-cache"
 export SINGULARITYENV_HF_HUB_DOWNLOAD_TIMEOUT=120
 export SINGULARITYENV_HF_HUB_DISABLE_TELEMETRY=1
 for v in HF_TOKEN HTTPS_PROXY HTTP_PROXY https_proxy http_proxy NO_PROXY no_proxy; do

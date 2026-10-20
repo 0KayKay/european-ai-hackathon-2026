@@ -1,10 +1,7 @@
 #!/bin/bash
 # Before a new multi-node layout, prove that GPUs on two nodes talk over InfiniBand from inside the
 # container. Prints bandwidth numbers and the transport NCCL picked.
-# Submit from this folder:  BASE=$WORK/<team> RUNTIME=vllm-0.31.0 sbatch nccl_check.sbatch
-#SBATCH --job-name=nccl-check
-#SBATCH --account=YOUR_PROJECT
-#SBATCH --partition=boost_usr_prod
+# Submitted by `cli.py diagnose nccl [--runtime vllm-0.31.0]` (GPU partition, debug QoS).
 #SBATCH --qos=boost_qos_dbg
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=4
@@ -12,16 +9,15 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=480GB
 #SBATCH --time=00:15:00
-#SBATCH --output=%x-%j.out
 set -euo pipefail
-BASE="${BASE:?set BASE to the team folder, e.g. \$WORK/team_vllm}"
+BASE="${BASE:?}"
 RUNTIME="${RUNTIME:-vllm-0.31.0}"
-# The registered image of RUNTIME, as inference-site.json maps it.
+# The registered image of RUNTIME ($BASE/runtimes/<id>, unless the site file maps it elsewhere).
 SIF=$(python3 -c 'import json, sys, os
 site = json.load(open(os.path.join(sys.argv[1], "inference-site.json")))
-path = os.path.join(sys.argv[1], site["runtime_paths"][sys.argv[2]])
+path = os.path.join(sys.argv[1], site.get("runtime_paths", {}).get(sys.argv[2], "runtimes/" + sys.argv[2]))
 print(os.path.join(path, json.load(open(os.path.join(path, "runtime.json")))["sif"]))' "$BASE" "$RUNTIME")
-export SIF SCRIPT_DIR="${SLURM_SUBMIT_DIR:?}"
+export SIF SCRIPT_DIR="${LEONARDO_RELEASE:?}/diagnostics"
 
 HEAD_HOST=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -1)
 MASTER_ADDR=$(getent hosts "$HEAD_HOST" | awk '{print $1; exit}')
@@ -41,5 +37,6 @@ srun --kill-on-bad-exit=1 bash "$SCRIPT_DIR/nccl_task.sh"
 
 echo
 echo "===== transport summary ====="
-grep -hoE 'NET/(IB|Socket)[^ ]*|via NET/[A-Za-z/]+|GDRDMA' "${SLURM_SUBMIT_DIR}/${SLURM_JOB_NAME}-${SLURM_JOB_ID}.out" \
+LOG=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/^ *StdOut=//p')
+grep -hoE 'NET/(IB|Socket)[^ ]*|via NET/[A-Za-z/]+|GDRDMA' "$LOG" \
   | sort | uniq -c || echo "no NET lines found - check NCCL_DEBUG output above"

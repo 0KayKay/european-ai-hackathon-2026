@@ -38,10 +38,10 @@ llm:
     - name: deepseek-v4.1-flash-1017-leonardo
       provider: openAI
       params:
-        baseUrl: http://leonardo-inference:8080/v1
+        baseUrl: http://leonardo-router:8080/v1
       auth:
         key:
-          file: /var/run/leonardo-gateway/token
+          file: /var/run/leonardo-router/token
       guardrails:
         request:
           - webhook:
@@ -57,10 +57,10 @@ llm:
     - name: glm-5.3-flash-leonardo
       provider: openAI
       params:
-        baseUrl: http://leonardo-inference:8080/v1
+        baseUrl: http://leonardo-router:8080/v1
       auth:
         key:
-          file: /var/run/leonardo-gateway/token
+          file: /var/run/leonardo-router/token
       guardrails:
         request:
           - webhook:
@@ -76,10 +76,10 @@ llm:
     - name: qwen3-0.6b-leonardo
       provider: openAI
       params:
-        baseUrl: http://leonardo-inference:8080/v1
+        baseUrl: http://leonardo-router:8080/v1
       auth:
         key:
-          file: /var/run/leonardo-gateway/token
+          file: /var/run/leonardo-router/token
       guardrails:
         request:
           - webhook:
@@ -95,10 +95,10 @@ llm:
     - name: qwen3-235b-a22b-fp8-leonardo
       provider: openAI
       params:
-        baseUrl: http://leonardo-inference:8080/v1
+        baseUrl: http://leonardo-router:8080/v1
       auth:
         key:
-          file: /var/run/leonardo-gateway/token
+          file: /var/run/leonardo-router/token
       guardrails:
         request:
           - webhook:

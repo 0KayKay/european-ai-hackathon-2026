@@ -1,6 +1,6 @@
 """Publish an endpoint only after tests; withdraw it when health fails.
 
-The private record (.runtime/endpoint.json) is what the gateway and client use. When the site
+The private record (.runtime/endpoint.json) is what the router and client use. When the site
 configures a shared registry, the job also claims its model name there at start and publishes an
 address-only record after the checks.
 """

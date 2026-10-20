@@ -3,7 +3,7 @@
 agentgateway refuses to start when a key file it references is missing, so the Leonardo routes
 cannot live in the base config, which every local stack uses. The opt-in Kustomize component
 replaces the config with this rendered copy instead. Every served_model in serve/profiles/ gets an
-OpenAI-compatible route to the leonardo-inference Service, the gateway token as its key and the
+OpenAI-compatible route to the leonardo-router Service, the router token as its key and the
 same request guardrails as the default route. Exact model names win over the "*" route.
 
     python3 tools/render_agentgateway.py          # write
@@ -17,8 +17,8 @@ import sys
 LEONARDO = Path(__file__).resolve().parents[1]
 BASE = LEONARDO.parent / 'infrastructure/base/agentgateway.yaml'
 OUTPUT = LEONARDO.parent / 'infrastructure/leonardo/agentgateway.yaml'
-UPSTREAM = 'http://leonardo-inference:8080/v1'
-TOKEN_FILE = '/var/run/leonardo-gateway/token'
+UPSTREAM = 'http://leonardo-router:8080/v1'
+TOKEN_FILE = '/var/run/leonardo-router/token'
 
 
 def guardrails(lines):

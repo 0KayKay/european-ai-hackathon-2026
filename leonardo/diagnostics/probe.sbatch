@@ -1,17 +1,13 @@
 #!/bin/bash
 # Find out what a GPU node looks like from the inside, then serve a static page for ~15 minutes so
-# you can test login node -> compute node and laptop -> compute node (ssh -L) without vLLM.
-# Submit from this folder:  sbatch probe.sbatch   (set SBATCH_ACCOUNT, or edit --account)
-#SBATCH --job-name=probe
-#SBATCH --account=YOUR_PROJECT
-#SBATCH --partition=boost_usr_prod
+# you can test whether other nodes reach a port on a GPU node, without vLLM in the way.
+# Submitted by `cli.py diagnose probe` (GPU partition, debug QoS).
 #SBATCH --qos=boost_qos_dbg
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=120GB
 #SBATCH --time=00:20:00
-#SBATCH --output=%x-%j.out
 set -uo pipefail
 
 section() { printf '\n===== %s =====\n' "$1"; }
@@ -64,10 +60,8 @@ curl -sS -m 5 "http://127.0.0.1:${PORT}/" >/dev/null && echo "local check OK"
 cat <<EOF
 
 Test it now (the page stays up for ~15 minutes):
-  on a login node:   curl http://$(hostname -s):${PORT}/
-  from a serial job: TARGET=$(hostname -s):${PORT} sbatch reach.sbatch
-  from your laptop:  ssh -N -L 8000:$(hostname -s):${PORT} ${USER}@login01-ext.leonardo.cineca.it
-                     then open http://127.0.0.1:8000/
+  from the router's CPU queue: cli.py diagnose reach --target $(hostname -s):${PORT}
+  from a login node:           curl http://$(hostname -s):${PORT}/
 EOF
 sleep 900
 kill "$SRV" 2>/dev/null

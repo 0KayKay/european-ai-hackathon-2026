@@ -1,0 +1,95 @@
+{
+  "model_job_id": "61574938",
+  "runtime_id": "vllm-backport-sm80-0.13.1-ppkv1",
+  "reported_version": "0.13.1",
+  "reported_build_commit": "gcde54e8ed",
+  "sif_sha256": "775d1d1acecb610301473c9b8ab74deb08bbec1766691fdf9e7c4fcea4957fa1",
+  "source_capture": "Read-only extraction from the same installed SIF/overlay and container environment as the measured job, using importlib module discovery without importing the GPU engine. File hashes and source line numbers below identify the inspected bytes.",
+  "source_references": {
+    "vllm/engine/arg_utils.py": {
+      "sha256": "21b22a48de65296e10b3a41ed1bd71ef2efefc463225d16381a919ae203d09d7",
+      "lines": [
+        772,
+        1748,
+        1751
+      ]
+    },
+    "vllm/entrypoints/launchers/launcher.py": {
+      "sha256": "6481ff42c76eaed37354db4875c80db429d465781e52d3185b9e876d3ad7e4be",
+      "lines": [
+        138,
+        154
+      ]
+    },
+    "vllm/v1/utils.py": {
+      "sha256": "4093f1c040a5f3def599bb044b72109301b970f70a5e5b622fd03a450a11e36a",
+      "lines": [
+        598,
+        650
+      ]
+    },
+    "vllm/v1/engine/async_llm.py": {
+      "sha256": "32ab1c7b43bfa7e5fcada335f49627d3c540a43bb8376b4845006792c3415fb4",
+      "lines": [
+        268,
+        280,
+        775,
+        829
+      ]
+    },
+    "vllm/v1/executor/multiproc_executor.py": {
+      "sha256": "6b6580947c7677926c5e43b4e48a5bd21cd45f7afd5d651edb509510c23664d5",
+      "lines": [
+        495,
+        524
+      ]
+    },
+    "vllm/_version.py": {
+      "sha256": "265f38b8c6d607685c00bd498a524e40acf38abdfb91ce09ef1635784afd33c9",
+      "lines": [
+        21,
+        24
+      ]
+    }
+  },
+  "observations": {
+    "operator_cancel": "2026-10-20T22:01:45.165+02:00",
+    "engine_shutdown_mode": "abort",
+    "engine_shutdown_timeout_seconds": 0,
+    "engine_manager_force_kill_logged": "22:01:45",
+    "output_handler_exception": "EngineDeadError at 22:01:45 after MPClient resource cleanup",
+    "first_tcpstore_warning": "22:01:46.253576452",
+    "startup_or_serving_tracebacks_before_cancel": 0,
+    "startup_or_serving_dist_network_errors_before_cancel": 0,
+    "all_api_checks_passed": 21,
+    "all_slurm_steps_terminal": true,
+    "resource_tracker_warnings": "At shutdown, resource_tracker reported semaphore/shared-memory objects to clean up. Persistent IPC leakage was not measured."
+  },
+  "causal_analysis": [
+    {
+      "status": "confirmed by pinned source and CPU reproduction",
+      "finding": "The configured default shutdown timeout is zero. The process manager sends SIGTERM and immediately reaches the forced process-tree termination path, giving the engine no cleanup wait. CPU reproduction killed a live cleanup worker with SIGKILL at zero timeout; a one-second grace let that worker finish."
+    },
+    {
+      "status": "confirmed source order; consistent with observed traceback",
+      "finding": "AsyncLLM.shutdown stops the engine client before cancelling its output-handler task. The task observes EngineDeadError while intentional engine teardown is in progress and logs it as an exception."
+    },
+    {
+      "status": "inference supported by timestamps, forced-kill log and Slurm cancellation semantics",
+      "finding": "Immediate engine/process-tree termination and job-wide cancellation can close the head-node TCPStore before peer NCCL watchdogs finish. Their recvValue/Broken pipe/DistNetworkError messages follow the cancellation, rather than the serving checks."
+    }
+  ],
+  "decision": {
+    "runtime_or_launcher_fix_required_for_observed_abort_contract": false,
+    "reason": "The CLI down command requests immediate allocation cancellation. All completed requests passed, the model was removed from the router, endpoints and keys were removed, and every allocation/step ended. The observed warnings do not demonstrate a serving failure or an unreleased allocation. Document the abort contract and diagnostic distinction; preserve the measured runtime/serve bytes.",
+    "limit": "Graceful draining and warning-free teardown are not established. A positive vLLM timeout alone is not a validated remedy for simultaneous Slurm cancellation; a drain feature needs coordinated signal handling and another multi-node GPU run. Unexpected occurrences before an operator stop or while requests are serving still require failure investigation."
+  },
+  "reproduction": "cpu-abort-diagnosis.json",
+  "reproducer": "reproduce_abort_shutdown.py",
+  "sources": [
+    {
+      "title": "Slurm scancel documentation",
+      "url": "https://slurm.schedmd.com/scancel.html"
+    }
+  ]
+}

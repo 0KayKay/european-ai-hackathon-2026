@@ -56,3 +56,44 @@ TCPStore warning followed it by about a second. Resource and endpoint cleanup
 passed, but log-clean graceful worker teardown was not established. NCCL also
 emitted informational unused-CTS messages during the run; the captured log had
 no `NCCL WARN`, `NCCL ERROR` or `StopIteration` markers.
+
+## Shutdown root cause investigation
+
+[The source-level diagnosis](shutdown-root-cause.json) identifies the exact installed
+backport files by SHA-256 and source line, including its reported build
+`0.13.1 / gcde54e8ed`. The default `shutdown_timeout=0` is passed from the API
+launcher to the process manager. It sends TERM and proceeds immediately to
+forced engine-process-tree termination, leaving no engine cleanup wait.
+`AsyncLLM.shutdown` cancels its output-handler task after engine/client teardown;
+the task then reports `EngineDeadError` during the intentional stop.
+
+The TCPStore warning follows the cancellation by about one second. The forced
+engine kill and [job-wide Slurm cancellation](https://slurm.schedmd.com/scancel.html)
+explain peers losing that control connection while their NCCL watchdogs are
+still checking it. This causal link is supported by the log/source sequence; it
+is not a measurement of the exact destruction order of every distributed rank.
+Resource-tracker cleanup warnings also appeared. Persistent IPC leakage was not
+measured, so allocation cleanup is the claim supported by the terminal Slurm
+records.
+
+[CPU reproduction results](cpu-abort-diagnosis.json) execute the exact hash-pinned
+process-manager function against one owned cleanup worker. Timeout zero invokes
+SIGKILL before its bounded cleanup finishes; a one-second timeout permits normal
+exit. The [reproducer](reproduce_abort_shutdown.py), run with Python 3.12+ to match the
+container, retains the function body and annotations and supplies CPU stand-ins
+for its logger, process type and tree killer. The latter uses SIGKILL on that
+single leaf. It loads no model or GPU:
+
+```bash
+python3 reproduce_abort_shutdown.py \
+  --source /path/to/installed/vllm/v1/utils.py \
+  --output cpu-abort-diagnosis.json
+```
+
+The measured `cli.py down` contract is immediate cancellation. Completed inference
+and allocation cleanup passed, so this investigation adds evidence and clarifies
+the stop contract without changing the GPU-validated engine or launcher. A
+positive timeout in the CPU experiment does not validate graceful Slurm shutdown
+or request draining. That feature would need coordinated process signalling and
+a separate multi-node validation. Similar errors during serving or before an
+intentional stop remain actionable failures.

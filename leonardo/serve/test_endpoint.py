@@ -6,9 +6,16 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+import re
 import time
 import urllib.error
 import urllib.request
+
+
+def final_number(content):
+    """The last number in an answer, so "42", "42." and "The answer is 42" all count, and "43" does not."""
+    numbers = re.findall(r"-?\d+(?:\.\d+)?", content.replace(",", ""))
+    return float(numbers[-1]) if numbers else None
 
 
 def main():
@@ -52,7 +59,8 @@ def main():
             results[name] = {"passed": False, "error_type": type(error).__name__, "error": str(error).replace(key, "[REDACTED]")}
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(results, indent=2, ensure_ascii=False) + "\n")
-        print(name, "PASS" if results[name]["passed"] else "FAIL", flush=True)
+        # On failure, show why (the answer is in the error), so the job log alone explains it.
+        print(name, "PASS" if results[name]["passed"] else "FAIL: " + results[name]["error"][:300], flush=True)
 
     def auth_check():
         try:
@@ -75,7 +83,7 @@ def main():
     def arithmetic():
         obj = completion("What is 17 + 25? Give only the number.")
         content = obj["response"]["choices"][0]["message"].get("content") or ""
-        assert content.strip() == "42", content
+        assert final_number(content) == 42, "answer: " + repr(content)
         return obj
 
     check("arithmetic", arithmetic)
@@ -136,8 +144,8 @@ def main():
         start = time.monotonic()
         with ThreadPoolExecutor(max_workers=4) as executor:
             responses = list(executor.map(completion, prompts))
-        for obj in responses:
-            assert obj["response"]["choices"][0]["message"].get("content", "").strip() == "42"
+        answers = [obj["response"]["choices"][0]["message"].get("content") or "" for obj in responses]
+        assert all(final_number(a) == 42 for a in answers), "answers: " + repr(answers)
         return {"batch_seconds": round(time.monotonic() - start, 3), "responses": responses}
 
     check("four_concurrent_requests", concurrent)

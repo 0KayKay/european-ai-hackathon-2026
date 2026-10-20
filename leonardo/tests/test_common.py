@@ -176,6 +176,13 @@ class Framework(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             self.prepare('glm53')
 
+    def test_number_checks_accept_phrasing_but_not_wrong_answers(self):
+        import test_endpoint
+        for answer in ('42', '42.', 'The answer is 42.', '17 + 25 = 42', '42.0'):
+            self.assertEqual(test_endpoint.final_number(answer), 42, answer)
+        for answer in ('43', '', 'forty-two', '42 or 43'):
+            self.assertNotEqual(test_endpoint.final_number(answer), 42, answer)
+
     def test_check_suites_and_runtime_catalog_are_enforced(self):
         p = inference.load(RELEASE / 'profiles/qwen06b.json')
         for edit in ({'checks': 'nonsense'}, {'runtime': 'not-in-catalog'}):

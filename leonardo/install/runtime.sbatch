@@ -28,6 +28,7 @@ export SINGULARITY_TMPDIR="$STAGING/tmp" SINGULARITY_CACHEDIR="$STAGING/oci-cach
 
 echo "== 1/3 pulling $IMAGE"
 SIF="$STAGING/image.sif"
+REUSED=$(python3 "$RELEASE/install/overlay_files.py" reuse "$BASE" "$RELEASE/serve" "$RUNTIME" "$STAGING")
 if [[ ! -s "$SIF" ]]; then
     singularity pull "$SIF.partial" "$IMAGE"
     mv "$SIF.partial" "$SIF"
@@ -42,6 +43,7 @@ export SINGULARITYENV_PIP_DISABLE_PIP_VERSION_CHECK=1 SINGULARITYENV_TMPDIR="$ST
 in_image() { singularity exec --cleanenv --no-home --contain --bind "$BASE" "$SIF" "$@" </dev/null; }
 # One line per package: name version wheel sha256 modules-to-import
 while read -r NAME VERSION WHEEL SHA MODULES; do
+    [[ "$REUSED" == yes ]] && continue
     if [[ ! -s "$STAGING/wheels/$WHEEL" ]]; then
         in_image python3 -m pip download --no-deps --only-binary=:all: --dest "$STAGING/wheels" "$NAME==$VERSION"
     fi
@@ -57,10 +59,17 @@ for module in modules.split(","):
 done < <(python3 -c 'import json, sys
 for p in json.load(open(sys.argv[1]))["runtimes"][sys.argv[2]]["overlay_packages"]:
     print(p["name"], p["version"], p["wheel"], p["sha256"], ",".join(p.get("import_check", [p["name"]])))' "$CATALOG" "$RUNTIME")
+python3 "$RELEASE/install/overlay_files.py" copy "$RELEASE/serve" "$RUNTIME" "$STAGING/python-overlay"
 python3 -c 'import json, os, sys
 for name in json.load(open(sys.argv[1]))["runtimes"][sys.argv[2]]["overlay_required"]:
     assert os.path.getsize(os.path.join(sys.argv[3], name)) > 0, name' "$CATALOG" "$RUNTIME" "$STAGING/python-overlay"
 in_image python3 -c 'import vllm, torch; print("versions: vllm", vllm.__version__, "torch", torch.__version__, "cuda", torch.version.cuda)'
+# Import the patch target too: a different vLLM source hash must fail before registration.
+IMPORTS=$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["runtimes"][sys.argv[2]]["imports"]))' "$CATALOG" "$RUNTIME")
+in_image python3 -c 'import importlib, sys
+for name in sys.argv[1].split(","):
+    importlib.import_module(name)
+    print("RUNTIME_IMPORT_OK", name)' "$IMPORTS"
 
 echo "== 3/3 registering"
 python3 "$RELEASE/install/register_runtime.py" --id "$RUNTIME" --sif "$SIF" \

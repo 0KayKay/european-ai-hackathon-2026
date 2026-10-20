@@ -12,10 +12,12 @@ moderation classifiers. It is a reusable template: everything below starts from 
 | `qwen235b` | Qwen3-235B-A22B-FP8 | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | 7 min | GPU-validated |
 | `glm53` | GLM-5.3-Flash | `glm-5.3-flash-leonardo` | 2 nodes, 8 A100 | 13 min | GPU-validated |
 | `deepseek41` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-leonardo` | 2 nodes, 8 A100 | 26 min | GPU-validated |
+| `deepseek41-16gpu` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | 4 nodes, 16 A100 | 15 min | Earlier launcher/load-tested; unified CLI rerun pending |
 | `qwen06b` | Qwen3-0.6B | `qwen3-0.6b-leonardo` | 1 A100 | 1.5 min | GPU-validated, current launcher |
 
 The large models run with a 2,048-token context and 4 concurrent sequences (DeepSeek: 2) for up to two
-hours per job. The large models were validated with an earlier version of the launcher; see
+hours per job. The separate sixteen-GPU DeepSeek profile has 8 sequence slots and GPU-resident
+Engram; see [its guide and patch details](docs/deepseek16.md). The large models were validated with an earlier version of the launcher; see
 [Validation status](#validation-status).
 
 The serving framework was built by Junghwa Lee ([@Jules0315](https://github.com/Jules0315)) on top of the
@@ -252,6 +254,8 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
   ports, profile rules and the release manifest. Read it before changing `serve/`.
 - [docs/history.md](docs/history.md): how the models were brought up, which compatibility problems were
   solved, and what was consolidated from Junghwa's repository and the starter kit.
+- [docs/deepseek16.md](docs/deepseek16.md): optional four-node DeepSeek configuration, pinned PP KV
+  cache patch, runtime installation, historical load evidence and remaining integration validation.
 - [The Kubernetes component](../infrastructure/leonardo/kustomization.yaml).
 
 ### Validation status

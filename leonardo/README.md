@@ -13,10 +13,14 @@ moderation classifiers. It is a reusable template: everything below starts from 
 | `glm53` | GLM-5.3-Flash | `glm-5.3-flash-leonardo` | 2 nodes, 8 A100 | 13 min | GPU-validated |
 | `deepseek41` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-leonardo` | 2 nodes, 8 A100 | 26 min | GPU-validated |
 | `qwen06b` | Qwen3-0.6B | `qwen3-0.6b-leonardo` | 1 A100 | 1.5 min | GPU-validated, current launcher |
+| `qwen235b-stock` | Qwen3-235B-A22B-FP8 on stock vLLM | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | | ran on 8 Oct, not with this launcher |
 
 The large models run with a 2,048-token context and 4 concurrent sequences (DeepSeek: 2) for up to two
 hours per job. The large models were validated with an earlier version of the launcher; see
-[Validation status](#validation-status).
+[Validation status](#validation-status). `qwen235b-stock` is the configuration that first ran Qwen-235B on
+stock vLLM 0.31.0, a fallback that does not need the community SM80 runtime; it serves the same name as
+`qwen235b`, so run only one of the two. [docs/research.md](docs/research.md) explains what each model
+needed on Leonardo's A100s.
 
 The serving framework was built by Junghwa Lee ([@Jules0315](https://github.com/Jules0315)) on top of the
 team's starter kit, and copied from [Jules0315/Guardrails-vllm](https://github.com/Jules0315/Guardrails-vllm)
@@ -82,36 +86,30 @@ their own personal folder in `users/`.
 ### Optional: connect the GKE cluster
 
 Prepared, but **off until the organisers approve** the outbound connection, because the terms forbid
-working around security controls. First find out what the router's CPU queue can reach (see
-[Troubleshooting](#troubleshooting)): GPU-node ports, and the internet directly or through the hackathon
-proxy. Then:
+working around security controls. The cluster's maintainers enable the Kubernetes side with
+[infrastructure/leonardo/README.md](../infrastructure/leonardo/README.md); they need your router token
+(`./leonardo/cli.py router token`) and give you the link password and the server's fingerprint. Then:
 
-1. Create two secrets in GKE: the chisel server's key and the one user it accepts (which may open only
-   port 9000), and your router token.
+1. Check that the router's CPU queue reaches the link server; the log should say `101: REACHABLE`:
 
    ```bash
-   SERVER_KEY=$(docker run --rm jpillora/chisel:1.13.0 server --keygen -)
-   LINK_PASSWORD=$(openssl rand -hex 24)
-   kubectl create secret generic leonardo-link --from-literal=server.key="$SERVER_KEY" \
-     --from-literal=users.json="{\"leonardo:$LINK_PASSWORD\": [\"^R:0.0.0.0:9000\$\"]}"
-   ./leonardo/cli.py router token | kubectl create secret generic leonardo-router --from-file=token=/dev/stdin
+   ./leonardo/cli.py diagnose reach --link-url https://european-ai-hackathon-2026.codify.ch/leonardo-link
    ```
 
-2. Add `components: [../leonardo]` to `infrastructure/gke/kustomization.yaml` and deploy. This adds the
-   chisel server under `https://european-ai-hackathon-2026.codify.ch/leonardo-link`, the `leonardo-router`
-   Service and one agentgateway route per model. Read the server's fingerprint with
-   `kubectl logs deploy/leonardo-link | grep Fingerprint`.
-3. In `$BASE/inference-site.json`, set `cluster_link.enabled` to `true`, `server` to that URL,
-   `fingerprint`, and `proxy` if the route needs the hackathon proxy.
-4. Install the chisel client and restart your router with the link password:
+2. In `$BASE/inference-site.json`, set `cluster_link.enabled` to `true`, `server` to that URL, `fingerprint`,
+   and `proxy` only if the check needed one (`--proxy`).
+3. Install the chisel client and restart your router with the link password:
 
    ```bash
    ./leonardo/cli.py install --link-client
    printf 'leonardo:%s\n' "$LINK_PASSWORD" > /tmp/link_auth
    ./leonardo/cli.py router up --restart --link-auth-file /tmp/link_auth && rm /tmp/link_auth
+   ./leonardo/cli.py status     # "cluster link connected since ..."
    ```
 
 The backend then uses the "Served as" names from the table above as model names in its agentgateway calls.
+If `status` shows the link as `retrying`, its error says why; [docs/cluster-link.md](docs/cluster-link.md)
+lists the states.
 
 ## Usage
 
@@ -125,14 +123,14 @@ Leonardo does not have that exact version yet.
 | --- | --- | --- |
 | `init` | `--account` (required); `--partition`, `--qos`, `--cpu-partition` to change the defaults; `--force` | Creates the team folder with its subfolders and the settings file `inference-site.json` (Slurm account, partitions, QoS, router and cluster link settings), plus your private personal folder. Run once per team; it never overwrites existing settings unless you add `--force`. |
 | `share` | `LOGIN...`, `--revoke` | Gives the named Leonardo users read and write access to the team folder, including everything created later, so they can install models and start their own servers. Personal folders stay private. `--revoke` takes the access away again. |
-| `install` | `PROFILE...`, `--link-client` | Submits CPU-queue jobs that download what the profiles need: the container image (runtime) and the model weights (checkpoint). Skips what is already installed; a weights job waits until its runtime job has finished. `--link-client` also downloads the chisel client for the cluster link. |
+| `install` | `PROFILE...`, `--config-only`, `--link-client` | Submits CPU-queue jobs that download what the profiles need: the container image (runtime) and the model weights (checkpoint). Skips what is already installed; a weights job waits until its runtime job has finished. `--config-only` downloads only the model's configuration and tokenizer files, enough for `diagnose compat`. `--link-client` also downloads the chisel client for the cluster link. |
 | `up` | `PROFILE`; `--qos`, `--time`, `--reservation` | Checks that the profile's runtime and weights are installed, creates a private run folder with a new API key and submits the model server job. The job starts vLLM, runs the profile's API checks and announces the server only if they pass. `--qos boost_qos_dbg --time 00:30:00` makes a short test job that usually starts sooner. |
 | `status` | | Shows installed runtimes and checkpoints, running install jobs, your model servers (`starting`, or `READY` with node and port), your router, and every ready server in the team registry. |
 | `logs` | `TARGET`; `--lines`, `--follow` | Prints the end of a job's log. `TARGET` is a job id (any job: install, server, router, check), a profile or served model name (your newest run), or `router`. |
 | `down` | `TARGET` | Cancels your model servers for a profile, served model name or job id. `down router` stops your router, including its queued successor. |
 | `router` | `up`, `down` or `token`; `--hours`, `--restart`, `--token-file`, `--link-auth-file` | `up` starts your router job, which renews itself every 4 hours until `--hours` (default 12) have passed; `--restart` replaces a running router. `token` prints the bearer token that callers of the router need; it is created on first use, and `--token-file` installs a given one instead. `--link-auth-file` stores the cluster link password. |
 | `forward` | `--local-port` (default 18000) | Opens an SSH port forward from `127.0.0.1:<port>` on your laptop through the login node to your router, until you press Ctrl-C. |
-| `diagnose` | `probe`, `reach` or `nccl`; `--target`, `--proxy`, `--link-url`, `--runtime` | `probe`: a short GPU job that prints the node's network, InfiniBand and GPU setup and serves a test page. `reach`: a CPU-queue job that tests whether it reaches a GPU node (`--target` from a probe), the internet, a proxy (`--proxy`) and the cluster link server (`--link-url`). `nccl`: a two-node job that measures GPU communication over InfiniBand. |
+| `diagnose` | `probe`, `reach`, `nccl` or `compat`; `--target`, `--proxy`, `--link-url`, `--runtime`, `--profile` | `probe`: a short GPU job that prints the node's network, InfiniBand and GPU setup and serves a test page. `reach`: a CPU-queue job that tests whether it reaches a GPU node (`--target` from a probe), the internet, a proxy (`--proxy`) and the cluster link server (`--link-url`). `nccl`: a two-node job that measures GPU communication over InfiniBand. `compat`: a one-GPU job that checks a profile's runtime against its model (kernels and attention backends for an A100) without loading weights. |
 | `sync` | | Only uploads the code. |
 
 ### Install a model
@@ -222,6 +220,10 @@ with plain `sbatch`, without the CLI.
   checks from the router's CPU queue whether it reaches that GPU node, the internet, and the cluster link
   server. A router that answers `502 upstream_unreachable` means the first one failed.
 - `./leonardo/cli.py diagnose nccl` checks NCCL bandwidth over InfiniBand between two GPU nodes.
+- `./leonardo/cli.py diagnose compat --profile glm53` checks, on one GPU, whether the profile's runtime has
+  the kernels its model needs on an A100, before you spend two nodes on it. It needs the runtime and the
+  model's configuration (`install glm53 --config-only` is enough) and ends with `COMPAT_OK` or a list of
+  what failed.
 
 ## Further information and project structure
 
@@ -239,20 +241,25 @@ leonardo/
     site.example.json   template for $BASE/inference-site.json
     client.py       direct client for one server
   install/        install job scripts (runtime, checkpoint, link client)
-  diagnostics/    check job scripts (probe, reach, NCCL)
+  diagnostics/    check job scripts (probe, reach, NCCL, compatibility)
   validation/     evidence from GPU runs, hashes of the code that passed them
-  docs/           how-it-works.md, history.md
+  docs/           how-it-works.md, slurm-jobs.md, research.md, cluster-link.md, history.md
   tools/          generators and the repository check
-  tests/          local tests with simulated Slurm, containers, SSH and HTTP
+  tests/          local tests with simulated Slurm, containers, SSH and HTTP;
+                  cluster_link_poc/ runs the cluster link end to end in a local Kubernetes cluster
 infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 ```
 
 - [docs/slurm-jobs.md](docs/slurm-jobs.md): every Slurm job, and how to run it without the CLI.
 - [docs/how-it-works.md](docs/how-it-works.md): a server run step by step, the router, the registry,
   ports, profile rules and the release manifest. Read it before changing `serve/`.
+- [docs/research.md](docs/research.md): Junghwa's research behind the profiles: what failed on the A100s,
+  why, and how it was solved. Read it before adding a model or a runtime.
+- [docs/cluster-link.md](docs/cluster-link.md): how the cluster reaches the router, and the alternatives.
 - [docs/history.md](docs/history.md): how the models were brought up, which compatibility problems were
   solved, and what was consolidated from Junghwa's repository and the starter kit.
-- [The Kubernetes component](../infrastructure/leonardo/kustomization.yaml).
+- [infrastructure/leonardo/README.md](../infrastructure/leonardo/README.md): the Kubernetes side of the
+  cluster link, for the cluster's maintainers.
 
 ### Validation status
 
@@ -263,8 +270,8 @@ each run. With the current launcher, `qwen06b` went through the whole path on Le
 router and `cli.py forward`. The three large models passed with an earlier launcher: their profiles and the
 container command are unchanged, but `inference.py`, `lifecycle.py`, `node.py` and `test_endpoint.py`
 have changed since, so each needs one debug-queue run before the team relies on it. The backport runtime's
-install job and the cluster link have not run on Leonardo or GKE yet (the cluster link only on a
-workstation). All runs used one operator account; sustained load and unattended operation are untested.
+install job and the cluster link have not run on Leonardo or GKE yet; the cluster link has run end to end
+in a local Kubernetes cluster with the repository's manifests ([docs/cluster-link.md](docs/cluster-link.md)). All runs used one operator account; sustained load and unattended operation are untested.
 
 ## Contributing and extending
 

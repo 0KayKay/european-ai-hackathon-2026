@@ -69,6 +69,8 @@ open(path, "w").write(text)
 PY
 fi
 kubectl apply -f "$WORKDIR/manifests.yaml" >/dev/null
+# Pods read these secrets when they start: on a rerun (KEEP=1 before), restart them to pick up the new ones.
+kubectl -n "$NS" rollout restart deployment >/dev/null
 for deployment in agentgateway auth backend leonardo-link; do
     kubectl -n "$NS" rollout status "deployment/$deployment" --timeout=180s >/dev/null
 done
@@ -150,6 +152,12 @@ $TEAM router up --base "$BASE" --hours 1 >/dev/null
 for i in $(seq 60); do kubectl -n "$NS" logs deploy/leonardo-link 2>/dev/null | grep -q 'R:9000.*Listening' && break; sleep 1; done
 if kubectl -n "$NS" logs deploy/leonardo-link | grep -q 'R:9000.*Listening'; then pass "router job opened the cluster link (reverse port 9000 in the chisel pod)"
 else fail "cluster link did not open"; cat "$MINE/router/leonardo-router-4242.out"; exit 1; fi
+link_state() {  # the router's view of the link, as team.py status shows it
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["cluster_link"]["state"])' "$MINE/router/.runtime/endpoint.json"
+}
+for i in $(seq 20); do [[ $(link_state) == connected ]] && break; sleep 0.5; done
+$TEAM status --base "$BASE" | grep -q 'cluster link connected since' && pass "team.py status shows the link as connected" \
+    || fail "status does not show the link: $($TEAM status --base "$BASE" | grep -i router)"
 
 echo "== checks through agentgateway"
 call() {  # call <expected status> <description> <curl args...>
@@ -181,6 +189,8 @@ for i in $(seq 90); do
     [[ "$s" == 200 ]] && { OK=1; break; }; sleep 2
 done
 [[ $OK == 1 ]] && pass "link came back by itself after the chisel pod was replaced ($(( $(date +%s) - START )) s)" || fail "link did not recover"
+grep -q 'client: Disconnected' "$MINE/router/leonardo-router-4242.out" && [[ $(link_state) == connected ]] \
+    && pass "the router saw the outage and reports the link connected again" || fail "router link state: $(link_state)"
 $TEAM router down --base "$BASE" >/dev/null 2>&1 || true
 sleep 3
 call 503 "with the router stopped, agentgateway fails fast instead of hanging" "${AUTH[@]}" -d "$CHAT"

@@ -1,7 +1,7 @@
 {
   "release": "inference/2026-10-20-unified",
   "files": {
-    "catalog.json": "8c7c8f95ae3d92bc3a5eb950a38ab732b9f9bcdb537a2b185bf306bbefd3d856",
+    "catalog.json": "7d355d818684d41fef90e4392e2529e762614777b560f2740d84da22e10b16ec",
     "client.py": "ad6770d5d47a8530a4a2901cfb7bcd4250af3ab43cd6dac0ff5817a7011cefbe",
     "hooks/nccl_ep.py": "e2a51d455d1e4e040854b5b97fc7c448fcbebbf89f6c66cff5cd859f976f1630",
     "hooks/warm_engram.py": "835074a2e39444c6970923bc882de291e4818af0947e05451bd6abcdfbdf9e89",

@@ -38,7 +38,7 @@
   },
   "tools": {
     "chisel": {
-      "about": "Reverse tunnel client for the gateway's outbound connection. Off unless the site enables outbound_tunnel.",
+      "about": "chisel client for the cluster link from the router job to Kubernetes. Only used when cluster_link.enabled is true in the site file.",
       "version": "1.13.0",
       "url": "https://github.com/jpillora/chisel/releases/download/v1.13.0/chisel_1.13.0_linux_amd64.gz",
       "sha256_gz": "902a38e824bfb4d4e428faa45607a9b71fc74ff28bf1392cf8121650061c6971",

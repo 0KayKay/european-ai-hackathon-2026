@@ -1,0 +1,19 @@
+{
+  "release": "inference/2026-10-20",
+  "files": {
+    "client.py": "ad6770d5d47a8530a4a2901cfb7bcd4250af3ab43cd6dac0ff5817a7011cefbe",
+    "hooks/nccl_ep.py": "e2a51d455d1e4e040854b5b97fc7c448fcbebbf89f6c66cff5cd859f976f1630",
+    "hooks/warm_engram.py": "835074a2e39444c6970923bc882de291e4818af0947e05451bd6abcdfbdf9e89",
+    "inference.py": "07304c8b7692cf40915161473a349ef9d5f4c6bdb2d7530c9f95849948016ffa",
+    "lifecycle.py": "3222e290aaf259db1413e615f1090471c3f47caa786c25ff0576a8518eb4a9ad",
+    "node.py": "27af37c2200621ebb83b6ac87a72d48048a8408debaea3a7f7123a73f6210e16",
+    "prepare_run.sh": "033bc136770dd19e1508894ab18b9c22c10a48a20071cb2a8588c839324b4ad5",
+    "profiles/deepseek41.json": "a3519da4b8209410ae2b6e3cc7576e57e7de08ded4173784cd8ae0a1b198fbc0",
+    "profiles/glm53.json": "dabd5597f725cd48928806e75b281e77ce669c777cc324ef121317a74d52b448",
+    "profiles/qwen235b.json": "bd6731d40827ff3a95c6bff0529cdbd428ee54a0d585565c0f303d7a028a41e7",
+    "serve_model.sbatch": "ed3c145e69dc5d6f958bad6c97104d8aafd91ab23c5d2b6a9c24eb32d5b7d7d6",
+    "site.example.json": "c8f244794947bb74997803053e476531db804b192daf2e7d6e529a89aea065c3",
+    "submit_server.sh": "91f1f82e423e1aad97a1827a76a0874e2912130bb4d43d22dad7ed1162d006b9",
+    "test_endpoint.py": "d1dc4ce617054963e3f1d472bbd3988ecad980e48853f1c2933e3d44cc1c1941"
+  }
+}

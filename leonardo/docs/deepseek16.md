@@ -99,14 +99,32 @@ regression, and 14 English finite load bursts with 422/422 successful requests.
 Each request produced 128 completion tokens. The client ran in a CPU-only
 Singularity process on the allocated inference head node over localhost HTTP.
 
-The engine arguments and patch bytes are preserved. The profile ID, served model
-name and direct-client port are changed to avoid collisions. **The unified CLI,
-new runtime installer, new name and router have not been GPU-rerun for this
-profile.** Local tests check preparation/submission, patch behavior, runtime
-isolation, hashes and evidence totals; they do not replace that GPU run.
+The [fresh CLI/router run](../validation/runs/2026-10-20-deepseek41-16gpu-cli/README.md)
+validated this separate profile, model name and patched runtime using commit
+`5fccaf4a21c2c1146b5dff07395b7ad4f1cb6d25` and CLI release `a4c0ab387e5527fe`. Installer job `61574015` built and
+registered the separate overlay from verified existing base assets and imported
+the patched real allocator on CPU. It reused the existing pinned checkpoint.
 
-Before relying on this integration, record a fresh installation, seven passing
-startup checks, a streamed response and a tool call through the router, then
-verify shutdown. Use English prompts. The earlier burst test does not establish
+GPU job `61574938` allocated four nodes/sixteen GPUs with `boost_qos_dbg` and a
+30-minute limit. Health was reached after 1096.03 seconds, excluding queue
+wait; all seven startup checks passed before `READY`. From the laptop, two more
+seven-check suites passed through the unmodified `cli.py forward` and CPU router
+job `61574567`. These included authenticated model selection, SSE content and
+`[DONE]`, forced function-call JSON, and four concurrent requests. The function
+was not executed. Model and router shutdown, endpoint withdrawal and tunnel
+cleanup were verified. The cluster link remained disabled. Intentional cancellation
+also produced an AsyncLLM output-handler traceback and TCPStore/DistNetworkError
+warnings after the cancellation marker. Resource/endpoint cleanup passed; see
+[shutdown observations](../validation/runs/2026-10-20-deepseek41-16gpu-cli/shutdown-observations.json)
+for the separate teardown diagnostics.
+
+All executed `serve/` bytes and the profile are preserved in the fresh evidence.
+The profile's embedded `validation` description predates this rerun; the linked
+run and `validation/validated_code.json` record the current status without
+changing the GPU-tested source bytes.
+
+This was a short functional test with one operator and English prompts, not a
+new load benchmark. The earlier 422-request burst test does not establish
 sustained capacity, multi-account behavior, long-context performance or a
-CPU-offload load result. Keep this distinction when updating validation records.
+CPU-offload load result. A fresh image/weights download, cluster link/GKE and
+unattended operation were not tested by this rerun.

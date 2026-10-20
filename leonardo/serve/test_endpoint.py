@@ -1,4 +1,7 @@
-"""Authenticated text, SSE, function-call and concurrency tests; no tool execution."""
+"""Authenticated text, SSE, function-call, concurrency and classification tests; no tool execution.
+
+The profile's "checks" suite (inference.CHECK_SUITES) decides which of them run.
+"""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -17,10 +20,11 @@ def main():
     args = parser.parse_args()
     key = args.api_key_file.read_text().strip()
     base = args.base_url.rstrip("/")
-    from inference import ROOT, load
+    from inference import ROOT, check_suite, load
     profile = load(args.profile) if args.profile else load(ROOT / "RUN_CONFIG.json")["profile"]
     model = profile["served_model"]
-    template = profile["client"]["chat_template_kwargs"]
+    template = profile["client"].get("chat_template_kwargs", {})
+    suite = check_suite(profile)
     results = {}
 
     def request(path, body=None, authenticated=True):
@@ -39,6 +43,8 @@ def main():
         return {"elapsed_seconds": round(time.monotonic() - start, 3), "response": obj}
 
     def check(name, function):
+        if name not in suite:
+            return
         try:
             result = function()
             results[name] = {"passed": True, "result": result}
@@ -135,6 +141,23 @@ def main():
         return {"batch_seconds": round(time.monotonic() - start, 3), "responses": responses}
 
     check("four_concurrent_requests", concurrent)
+
+    def any_completion():
+        obj = completion("Hello! Please reply with a short greeting.", {"max_tokens": 64})
+        message = obj["response"]["choices"][0]["message"]
+        assert any((message.get(field) or "").strip() for field in ("content", "reasoning_content", "reasoning")), message
+        return obj
+
+    check("any_completion", any_completion)
+
+    def classification():
+        body = {"model": model, "input": ["Hello, how are you today?"]}
+        with request("/classify", body) as response:
+            obj = json.load(response)
+        assert obj["data"] and "label" in obj["data"][0], obj
+        return obj
+
+    check("classification", classification)
     raise SystemExit(0 if all(r["passed"] for r in results.values()) else 1)
 
 

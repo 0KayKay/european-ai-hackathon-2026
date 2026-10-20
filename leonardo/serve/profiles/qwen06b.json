@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "id": "qwen06b",
+  "model_id": "Qwen/Qwen3-0.6B",
+  "revision": null,
+  "checkpoint": "qwen06b",
+  "expected_shards": 1,
+  "runtime": "vllm-0.31.0",
+  "served_model": "qwen3-0.6b-leonardo",
+  "resources": {
+    "nodes": 1,
+    "gpus_per_node": 1,
+    "cpus_per_task": 8,
+    "memory": "120GB",
+    "time": "01:00:00"
+  },
+  "parallelism": {
+    "tensor": 1,
+    "pipeline": 1
+  },
+  "engine_args": [
+    "--dtype",
+    "bfloat16",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--max-model-len",
+    "8192",
+    "--max-num-seqs",
+    "16",
+    "--reasoning-parser",
+    "qwen3",
+    "--tool-call-parser",
+    "hermes",
+    "--enable-auto-tool-choice"
+  ],
+  "environment": {},
+  "hooks": [],
+  "checks": "chat_tools",
+  "client": {
+    "local_port": 18086,
+    "timeout_seconds": 120,
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "startup_timeout_seconds": 1200,
+  "validation": "Not yet run through serve/. The same model ran on stock vLLM 0.31.0 through the bring-up kit on 7 Oct. Cheap end-to-end test of registry, gateway and tunnel; also the template for one-GPU moderation models. Pin revision after the first download."
+}

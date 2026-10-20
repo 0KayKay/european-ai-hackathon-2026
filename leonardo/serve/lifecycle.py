@@ -1,4 +1,9 @@
-"""Publish a private endpoint only after tests; withdraw it when health fails."""
+"""Publish an endpoint only after tests; withdraw it when health fails.
+
+The private record (.runtime/endpoint.json) is what the gateway and client use. When the site
+configures a shared registry, the job also claims its model name there at start and publishes an
+address-only record after the checks.
+"""
 import argparse
 import datetime
 import os
@@ -10,10 +15,12 @@ import time
 import urllib.error
 import urllib.request
 
-from inference import ROOT, config, load, save
+from inference import ROOT, check_suite, config, load, save
+import registry
 
 
 child = None
+claimed = None
 
 
 def stop(signum, frame):
@@ -51,7 +58,7 @@ def healthy(port):
 
 
 def main():
-    global child
+    global child, claimed
     os.umask(0o077)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
@@ -61,6 +68,11 @@ def main():
     cfg = config()
     port = int(os.environ['INFERENCE_API_PORT'])
     job = os.environ['SLURM_JOB_ID']
+    shared = registry.directory(cfg)
+    if shared is not None:
+        registry.claim(shared, cfg['profile']['served_model'], job)
+        claimed = shared
+    suite = check_suite(cfg['profile'])
     start = time.monotonic()
     while not healthy(port):
         if not alive(args.launcher_pid):
@@ -76,7 +88,7 @@ def main():
     if child.wait() != 0:
         raise RuntimeError('English-only API checks failed; endpoint withheld')
     checks = load(output)
-    if len(checks) != 7 or not all(c['passed'] for c in checks.values()):
+    if sorted(checks) != sorted(suite) or not all(c['passed'] for c in checks.values()):
         raise RuntimeError('API checks incomplete')
     if not alive(args.launcher_pid) or not healthy(port):
         raise RuntimeError('Model stopped during validation; endpoint withheld')
@@ -87,11 +99,13 @@ def main():
     endpoint = {'job_id': job, 'host': os.uname().nodename.split('.')[0], 'port': port,
                 'model': cfg['profile']['served_model'], 'profile': cfg['profile']['id'],
                 'runtime': cfg['profile']['runtime'], 'release': cfg['release'],
-                'nodes': os.environ['SLURM_JOB_NODELIST'], 'checks_passed': 7,
+                'nodes': os.environ['SLURM_JOB_NODELIST'], 'checks_passed': len(suite),
                 'ready_at': datetime.datetime.now().astimezone().isoformat(), 'slurm_expected_end': end,
                 'note': 'Service stops about 90 seconds before allocation expiry.'}
     save(ROOT / '.runtime/endpoint.json', endpoint)
     save(ROOT / ('evidence/ready-' + job + '.json'), endpoint)
+    if claimed is not None:
+        registry.publish(claimed, cfg['profile']['served_model'], endpoint, job)
     print('INFERENCE_READY', endpoint, flush=True)
     failures = 0
     while True:
@@ -110,3 +124,5 @@ if __name__ == '__main__':
         path = ROOT / '.runtime/endpoint.json'
         if path.exists():
             path.unlink()
+        if claimed is not None:
+            registry.withdraw(claimed, config()['profile']['served_model'], os.environ['SLURM_JOB_ID'])

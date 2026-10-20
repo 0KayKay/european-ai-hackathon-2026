@@ -21,6 +21,7 @@ MODELS = tuple(sorted(p.stem for p in (RELEASE / 'profiles').glob('*.json')))
 sys.path.insert(0, str(RELEASE))
 import inference
 import node
+import registry
 
 
 def allocated_ports():
@@ -59,17 +60,23 @@ class Framework(unittest.TestCase):
         self.command('squeue', '#!/bin/bash\nprintf "2030-01-01T00:00:00\\n"\n')
         site = inference.load(RELEASE / 'site.example.json')
         site['account'] = 'TEST_PROJECT'
-        runtime = self.base / site['runtime_paths']['vllm-backport-sm80-0.13.1']
-        (runtime / 'python-overlay/tilelang').mkdir(parents=True)
-        (runtime / 'python-overlay/tilelang/__init__.py').write_text('# test fixture\n')
-        (runtime / 'image.sif').write_bytes(b'fake-sif')
-        inference.save(runtime / 'runtime.json', {'id': 'vllm-backport-sm80-0.13.1', 'sif': 'image.sif', 'sif_size': 8, 'overlay': 'python-overlay'})
+        for runtime_id, relative in site['runtime_paths'].items():
+            runtime = self.base / relative
+            (runtime / 'python-overlay').mkdir(parents=True)
+            for name in inference.catalog()['runtimes'][runtime_id]['overlay_required']:
+                (runtime / 'python-overlay' / name).parent.mkdir(parents=True, exist_ok=True)
+                (runtime / 'python-overlay' / name).write_text('# test fixture\n')
+            (runtime / 'image.sif').write_bytes(b'fake-sif')
+            inference.save(runtime / 'runtime.json', {'id': runtime_id, 'sif': 'image.sif', 'sif_size': 8, 'overlay': 'python-overlay'})
         for model in MODELS:
             path = self.base / site['checkpoints'][model]
             path.mkdir(parents=True)
             for name in ('config.json', 'tokenizer_config.json'):
                 (path / name).write_text('{}')
             profile = inference.load(RELEASE / 'profiles' / (model + '.json'))
+            if profile.get('expected_shards') == 1:
+                (path / 'model.safetensors').write_bytes(b'x')
+                continue
             shards = ['shard-{}.safetensors'.format(i) for i in range(profile.get('expected_shards', 2))]
             for name in shards:
                 (path / name).write_bytes(b'x')
@@ -91,9 +98,10 @@ class Framework(unittest.TestCase):
     def test_private_pinned_runs_and_runtime_reuse(self):
         runs = [self.prepare(name) for name in MODELS]
         configs = [inference.load(p / 'RUN_CONFIG.json') for p in runs]
-        self.assertEqual(configs[0]['sif'], configs[1]['sif'])
-        self.assertEqual(configs[0]['overlay'], configs[1]['overlay'])
-        self.assertNotEqual(configs[0]['cache_path'], configs[1]['cache_path'])
+        backport = [c for c in configs if c['profile']['runtime'] == 'vllm-backport-sm80-0.13.1']
+        self.assertEqual(backport[0]['sif'], backport[1]['sif'])
+        self.assertEqual(backport[0]['overlay'], backport[1]['overlay'])
+        self.assertNotEqual(backport[0]['cache_path'], backport[1]['cache_path'])
         keys = [(p / '.runtime/api_key').read_text() for p in runs]
         self.assertNotEqual(keys[0], keys[1])
         self.assertEqual(len(set(keys)), len(MODELS))
@@ -149,6 +157,91 @@ class Framework(unittest.TestCase):
                 self.assertIn('--enable-expert-parallel', command)
                 self.assertNotIn('--enable-ep-weight-filter', command)
 
+    def test_single_node_profile_and_runtime_without_overlay(self):
+        cfg = inference.load(self.prepare('qwen06b') / 'RUN_CONFIG.json')
+        command = node.engine_command(cfg, 0, '10.0.0.1', 29500, 31001)
+        for flag in ('--nnodes', '--node-rank', '--master-addr', '--master-port', '--headless'):
+            self.assertNotIn(flag, command)
+        self.assertEqual(command[-4:], ['--host', '0.0.0.0', '--port', '31001'])
+        # The backport runtime still insists on its TileLang overlay.
+        (self.base / 'runtimes/vllm-backport-sm80/0.13.1/python-overlay/tilelang/__init__.py').unlink()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.prepare('glm53')
+
+    def test_check_suites_and_runtime_catalog_are_enforced(self):
+        p = inference.load(RELEASE / 'profiles/qwen06b.json')
+        for edit in ({'checks': 'nonsense'}, {'runtime': 'not-in-catalog'}):
+            obj = copy.deepcopy(p)
+            obj.update(edit)
+            with self.assertRaises(ValueError):
+                inference.profile_check(obj)
+        self.assertEqual(len(inference.check_suite(p)), 7)
+        self.assertNotIn('forced_function_call', inference.CHECK_SUITES['chat'])
+
+    def test_registry_claims_one_server_per_name(self):
+        root = self.base / 'endpoints'
+        root.mkdir()
+        old_path = os.environ['PATH']
+        os.environ['PATH'] = self.env['PATH']
+        try:
+            registry.claim(root, 'model-a', '100')
+            registry.claim(root, 'model-a', '100')  # idempotent for the owner
+            with self.assertRaises(ValueError):
+                registry.claim(root, 'model-a', '200')  # squeue reports job 100 as active
+            with self.assertRaises(ValueError):
+                registry.publish(root, 'model-a', {'job_id': '200'}, '200')
+            registry.publish(root, 'model-a', {'job_id': '100', 'host': 'n1', 'port': 1}, '100')
+            self.assertEqual(registry.records(root)[0]['owner'], __import__('getpass').getuser())
+            registry.withdraw(root, 'model-a', '200')  # not the owner: no effect
+            self.assertTrue((root / 'model-a.json').exists())
+            self.command('squeue', '#!/bin/bash\necho "slurm_load_jobs error: Invalid job id specified" >&2\nexit 1\n')
+            registry.claim(root, 'model-a', '200')  # job 100 is gone: take over
+            self.assertFalse((root / 'model-a.json').exists())
+            self.command('squeue', '#!/bin/bash\necho "Socket timed out" >&2\nexit 1\n')
+            with self.assertRaises(ValueError):
+                registry.claim(root, 'model-a', '300')  # unknown state: never take over
+            for bad in ('../x', '.hidden', 'a/b', ''):
+                with self.assertRaises(ValueError):
+                    registry.claim(root, bad, '1')
+        finally:
+            os.environ['PATH'] = old_path
+
+    def test_up_status_down(self):
+        self.command('scancel', '#!/bin/bash\necho "$@" > "$HOME/scancel-args"\n')
+        self.command('squeue', '#!/bin/bash\nprintf "12345|qwen06b-common|RUNNING|1:00|1:00:00|lrdn0001\\n"\n')
+        output = subprocess.check_output([sys.executable, str(RELEASE / 'inference.py'), 'up', 'qwen06b', '--base', str(self.base),
+                                          '--qos', 'boost_qos_dbg', '--time', '00:30:00'], env=self.env, stderr=subprocess.PIPE).decode()
+        self.assertIn('Submitted job 12345', output)
+        report = json.loads(subprocess.check_output([sys.executable, str(RELEASE / 'inference.py'), 'status', '--json',
+                                                     '--base', str(self.base)], env=self.env).decode())
+        self.assertEqual([(s['profile'], s['job_id'], s['ready']) for s in report['servers']], [('qwen06b', '12345', False)])
+        self.assertEqual(report['registry'], [])
+        subprocess.check_call([sys.executable, str(RELEASE / 'inference.py'), 'down', 'qwen3-0.6b-leonardo'], env=self.env, stdout=subprocess.DEVNULL)
+        self.assertEqual((self.home / 'scancel-args').read_text().split(), ['12345'])
+        bad = subprocess.run([sys.executable, str(RELEASE / 'inference.py'), 'down', 'glm53'], env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertNotEqual(bad.returncode, 0)
+
+    def test_admin_cli_over_ssh(self):
+        # A stand-in ssh that runs the remote command locally, as the same (temporary) HOME.
+        self.command('ssh', '#!/bin/bash\nwhile [[ "$1" == -* ]]; do [[ "$1" == -[oL] ]] && shift; shift; done\nshift\nexec bash -c "$*"\n')
+        self.command('squeue', '#!/bin/bash\nprintf "12345|qwen06b-common|PENDING|0:00|1:00:00|\\n"\n')
+        self.command('scancel', '#!/bin/bash\necho "$@" > "$HOME/scancel-args"\n')
+        cli = [sys.executable, str(REPO / 'cli.py'), '--user', 'tester', '--base', str(self.base)]
+        output = subprocess.check_output(cli + ['up', 'qwen06b', '--qos', 'boost_qos_dbg'], env=self.env).decode()
+        self.assertIn('Submitted job 12345', output)
+        releases = list((self.home / '.leonardo-inference/releases').iterdir())
+        self.assertEqual(len(releases), 1)
+        self.assertEqual(releases[0].stat().st_mode & 0o077, 0)
+        output = subprocess.check_output(cli + ['status'], env=self.env).decode()
+        self.assertIn('qwen06b', output)
+        self.assertIn('starting', output)
+        subprocess.check_call(cli + ['down', 'qwen06b'], env=self.env, stdout=subprocess.DEVNULL)
+        self.assertEqual((self.home / 'scancel-args').read_text().split(), ['12345'])
+        token = subprocess.check_output(cli + ['gateway', 'token'], env=self.env, stderr=subprocess.DEVNULL).decode().strip()
+        self.assertGreaterEqual(len(token), 32)
+        self.assertEqual(subprocess.check_output(cli + ['gateway', 'token'], env=self.env).decode().strip(), token)
+        self.assertEqual(len(list((self.home / '.leonardo-inference/releases').iterdir())), 1)
+
     def test_failed_launcher_never_publishes_endpoint(self):
         self.command('srun', '#!/bin/bash\nexit 9\n')
         run = self.prepare('glm53')
@@ -184,11 +277,16 @@ class Framework(unittest.TestCase):
                             time.sleep(0.1)
                         self.assertTrue((run / '.runtime/endpoint.json').exists(), (run / 'batch-test.log').read_text())
                         checks = inference.load(run / ('evidence/api-tests-' + str(job) + '.json'))
-                        self.assertEqual(len(checks), 7)
+                        profile = inference.load(run / 'RUN_CONFIG.json')['profile']
+                        self.assertEqual(sorted(checks), sorted(inference.check_suite(profile)))
                         self.assertTrue(all(v['passed'] for v in checks.values()))
+                        record = self.base / 'endpoints' / (profile['served_model'] + '.json')
+                        self.assertEqual(inference.load(record)['job_id'], str(job))
+                        self.assertNotIn((run / '.runtime/api_key').read_text().strip(), record.read_text())
                         process.send_signal(signal.SIGTERM)
                         self.assertEqual(process.wait(timeout=8), 143)
                         self.assertFalse((run / '.runtime/endpoint.json').exists())
+                        self.assertEqual(list((self.base / 'endpoints').iterdir()), [])
                         pid = int((run / '.runtime/fake-server-pid').read_text())
                         with self.assertRaises(ProcessLookupError):
                             os.kill(pid, 0)

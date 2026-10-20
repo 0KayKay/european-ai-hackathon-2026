@@ -1,0 +1,18 @@
+# The gateway token the Leonardo gateway expects, used by the Leonardo routes in agentgateway.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentgateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: agentgateway
+          volumeMounts:
+            - name: leonardo-gateway
+              mountPath: /var/run/leonardo-gateway
+              readOnly: true
+      volumes:
+        - name: leonardo-gateway
+          secret:
+            secretName: leonardo-gateway

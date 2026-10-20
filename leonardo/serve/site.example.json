@@ -4,12 +4,27 @@
   "partition": "boost_usr_prod",
   "qos": "boost_qos_lprod",
   "ssh_host": "login01-ext.leonardo.cineca.it",
+  "endpoints": "endpoints",
   "runtime_paths": {
-    "vllm-backport-sm80-0.13.1": "runtimes/vllm-backport-sm80/0.13.1"
+    "vllm-backport-sm80-0.13.1": "runtimes/vllm-backport-sm80/0.13.1",
+    "vllm-0.31.0": "runtimes/vllm/0.31.0"
   },
   "checkpoints": {
     "glm53": "checkpoints/glm53",
     "deepseek41": "checkpoints/deepseek41",
-    "qwen235b": "checkpoints/qwen235b"
+    "qwen235b": "checkpoints/qwen235b",
+    "qwen06b": "checkpoints/qwen06b"
+  },
+  "gateway": {
+    "partition": "lrd_all_serial",
+    "qos": null,
+    "time": "04:00:00",
+    "cpus": 2,
+    "memory": "8000M",
+    "outbound_tunnel": false,
+    "tunnel_server": null,
+    "tunnel_fingerprint": null,
+    "tunnel_proxy": null,
+    "tunnel_remote_port": 9000
   }
 }

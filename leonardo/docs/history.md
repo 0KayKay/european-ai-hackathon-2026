@@ -11,6 +11,7 @@
 | 18 Oct | Common framework: one launcher, model profiles, shared runtime. GLM (job 61299807) and DeepSeek-V4.1 (job 61300901) passed 7/7 API checks at startup and in 2 SSH-tunnel repeats. |
 | 19 Oct | Qwen3-235B moved onto the common runtime (job 61389137, 7/7 ×3). The API port base moved from 21000 to 31000 after it was found that API and master ports could collide for job suffixes 8000–8999. |
 | 20 Oct | Copied into this repository and consolidated (below). |
+| 20 Oct | Unified: `bringup/` folded into `serve/` (stock vLLM runtime, one-GPU profile, check suites) and `diagnostics/`; team registry, gateway job, admin CLI, opt-in Kubernetes tunnel. Not yet run on GPUs. |
 
 Startup times to a healthy API (cold caches, excluding queue): Qwen 7.0 min, GLM 13.3 min, DeepSeek 25.8 min.
 
@@ -52,7 +53,7 @@ the history, so only the current version stays in the tree:
 | --- | --- |
 | `releases/inference/2026-10-19-docs1` | `serve/`, execution files byte-identical |
 | `releases/inference/2026-10-18`, `-18-docs1`, `-19-r2` | Removed: same code (only the port line differs), evidence kept in `validation/` |
-| `qwen/` | `bringup/`, without `05`/`06` (superseded by `install/03` and the `qwen235b` profile) |
+| `qwen/` | `bringup/`, without `05`/`06` (superseded by `install/03` and the `qwen235b` profile); then unified, below |
 | `releases/glm53/operator-2026-10-13` `02`, `05`, `03` | `install/01`, `02`, `03`, generalised to any profile and the `$BASE` layout |
 | `releases/glm53/operator-…`, `candidates/glm53/…`, `releases/glm53-tools/…` | Removed: GLM-only launcher, per-user candidate and helpers, all replaced by `serve/` |
 | `tools/register_runtime.py` | `install/register_runtime.py` |
@@ -68,3 +69,23 @@ Nothing is lost: the original repository stays unchanged at
 The install scripts were rewritten for the generic layout and have not yet been re-run in this form.
 Expect to debug paths on the first fresh install. The team's existing installation on Leonardo does not
 need them.
+
+## Unifying `bringup/` into `serve/`
+
+The starter kit (`bringup/`) and the framework (`serve/`) each had their own launcher, key handling and
+endpoint files. They are now one path:
+
+| `bringup/` | Now |
+| --- | --- |
+| `00_prepare.sbatch` (image and model download) | `install/01_pull_runtime.sbatch vllm-0.31.0`, `install/03_download_checkpoint.sbatch <profile>` |
+| `02_vllm_single.sbatch`, `04_vllm_multinode.sbatch`, `run_vllm.sh` | profiles on the `vllm-0.31.0` runtime, such as `qwen06b`, through `serve/` |
+| `smoke_test.sh` | `test_endpoint.py` with the `minimal` (or any other) check suite |
+| `common.sh` endpoint files and mkdir locks | `serve/registry.py`: same atomic locks, JSON records, stale-lock takeover via `squeue` |
+| per-user key in `~/.config/leonardo-vllm/` | a fresh key per run, as `serve/` always did; the gateway holds them |
+| `tunnel.sh` (follows an endpoint over SSH) | `cli.py tunnel` to the gateway, or `client.py tunnel` to one server |
+| `01_probe.sbatch`, `03_nccl_check.sbatch`, `Dockerfile.ib` | `diagnostics/`, now using a registered runtime instead of `common.sh` |
+
+`install/02_install_tilelang.sbatch` became `02_install_overlay.sbatch`, which installs whatever pinned
+packages `serve/catalog.json` lists for a runtime. The bring-up kit's regression tests covered its locking,
+smoke test and tunnel; the equivalent behaviour is now tested in `tests/test_common.py` and
+`tests/test_gateway.py`. The old files are in this repository's history.

@@ -1,0 +1,21 @@
+# Opt-in: connects agentgateway to the models on CINECA Leonardo. Not enabled yet: the gateway's
+# outbound connection needs the organisers' approval. To enable on GKE, add to gke/kustomization.yaml:
+#   components:
+#     - ../leonardo
+# and create the two secrets described in leonardo/README.md ("Connect the cluster").
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - tunnel.yaml
+configMapGenerator:
+  # Base config plus one route per Leonardo model; regenerate with leonardo/tools/render_agentgateway.py.
+  - name: agentgateway-config
+    behavior: replace
+    files:
+      - config.yaml=agentgateway.yaml
+patches:
+  - path: agentgateway-token.yaml
+  - path: ingress-path.yaml
+    target:
+      kind: Ingress
+      name: frontend

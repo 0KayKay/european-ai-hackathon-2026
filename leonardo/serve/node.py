@@ -12,9 +12,11 @@ def engine_command(cfg, rank, master, master_port, api_port):
     p = profile_check(cfg['profile'])
     parallel = p['parallelism']
     command = ['vllm', 'serve', cfg['model_path'], '--served-model-name', p['served_model'],
-               '--tensor-parallel-size', str(parallel['tensor']), '--pipeline-parallel-size', str(parallel['pipeline']),
-               '--nnodes', str(p['resources']['nodes']), '--node-rank', str(rank),
-               '--master-addr', master, '--master-port', str(master_port)] + p['engine_args']
+               '--tensor-parallel-size', str(parallel['tensor']), '--pipeline-parallel-size', str(parallel['pipeline'])]
+    if p['resources']['nodes'] > 1:
+        command += ['--nnodes', str(p['resources']['nodes']), '--node-rank', str(rank),
+                    '--master-addr', master, '--master-port', str(master_port)]
+    command += p['engine_args']
     return command + (['--host', '0.0.0.0', '--port', str(api_port)] if rank == 0 else ['--headless'])
 
 

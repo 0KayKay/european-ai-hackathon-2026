@@ -2,6 +2,8 @@
 
 Local stack: React/Vite served by Caddy → agentgateway → FastAPI, with Better Auth and PostgreSQL 18.
 Terraform for GKE is in `infrastructure/terraform/gke`; the local Tilt stack remains separate.
+Open-weight models (Qwen3-235B, GLM-5.3, DeepSeek-V4.1) run on CINECA's Leonardo; see
+[leonardo/README.md](leonardo/README.md).
 
 ## Prerequisites
 
@@ -20,7 +22,7 @@ Set `AGENTGATEWAY_API_KEY` in that private file to the value of the `gateway-int
 !!Important: for local development this setup currently only supports gemini-3.8-flash which is set up in
 `infrastructure/base/agentgateway.yaml`. This uses you local auth, so you need to sign in to
 `european-ai-hackathon-2026` and have the required permissions to invoke the model. This will change later to use a
-model from the Leonardo cluster.
+model from the Leonardo cluster ([leonardo/](leonardo/README.md)).
 
 ## GitHub sign-in
 

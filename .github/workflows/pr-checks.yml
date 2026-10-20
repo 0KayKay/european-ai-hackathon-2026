@@ -37,6 +37,17 @@ jobs:
       - run: uv run --locked ruff format --check .
       - run: uv run --locked pytest -q
 
+  leonardo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: leonardo
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 tools/check_repository.py
+      - run: python3 -m unittest discover -s tests -v
+      - run: python3 -m unittest discover -s bringup/tests -v
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

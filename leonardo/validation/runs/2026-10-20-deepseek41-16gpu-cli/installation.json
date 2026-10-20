@@ -1,0 +1,29 @@
+{
+  "job_id": "61574015",
+  "slurm_result": "COMPLETED|0:0|00:04:49|2026-10-20T21:22:54|2026-10-20T21:27:43",
+  "runtime_id": "vllm-backport-sm80-0.13.1-ppkv1",
+  "sif_sha256": "775d1d1acecb610301473c9b8ab74deb08bbec1766691fdf9e7c4fcea4957fa1",
+  "sif_registration": "hardlink",
+  "base_sif_reused_by_hardlink": true,
+  "overlay_file_count": 7551,
+  "patch_files_sha256": {
+    "pp_kv_guard.py": "d87aba9acb44929dc2c3b6edd561ae713b8bc80d2e896bc5f3e5985d19e29aab",
+    "sitecustomize.py": "6e847d74dee3d59a11e5b9ccf1e5208de486744bb4f10d009ce5ca27003650b7"
+  },
+  "allocator_source_sha256": "3326435f857c903711939d4f6b2776395262729b464b3973949c1234a163ff3f",
+  "patch_import_passed": true,
+  "runtime_ready": true,
+  "checkpoint_download_submitted": false,
+  "cluster_link_enabled": false,
+  "cli_source_commit": "5fccaf4a21c2c1146b5dff07395b7ad4f1cb6d25",
+  "cli_release_hash": "a4c0ab387e5527fe",
+  "operator_source_hashes": {
+    "cli.py": "b90ac1f5abb6c212c308ede17424e0833c3678ae600221f730982dfcde7b1d36",
+    "install/checkpoint.sbatch": "bbb4bcbd187f8859ceecc1fb105e37cbc95a10dffd3cdf29efa1e4224ca6e914",
+    "install/link_client.sbatch": "a18bca6e5705dc3666cf3f2a0cddb5b8d946c9b5fb06a484185dc906b581c446",
+    "install/overlay_files.py": "715df7aa2168006fe03493ab765d15acc738a4e1b8af7511765062d28dcb0696",
+    "install/register_runtime.py": "0bf86c4ccd2ecbd5e8b52048e83368dc29ade8d0965cb2f86630fc445da021a3",
+    "install/runtime.sbatch": "a47fb51438687aec8f3a8f690155fc218748527e5d6a571bb7aab7c3fa9d5387",
+    "serve/RELEASE_MANIFEST.json": "98c28c736d441094cde49cbf5b559cbe006bcb4c6ab4187fd64ffa26cbf7f0b2"
+  }
+}

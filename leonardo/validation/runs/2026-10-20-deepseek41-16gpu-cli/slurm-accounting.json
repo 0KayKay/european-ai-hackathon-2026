@@ -1,0 +1,94 @@
+{
+  "steps": [
+    {
+      "job_id": "61574015",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:04:49",
+      "start": "2026-10-20T21:22:54",
+      "end": "2026-10-20T21:27:43"
+    },
+    {
+      "job_id": "61574015.batch",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:04:49",
+      "start": "2026-10-20T21:22:54",
+      "end": "2026-10-20T21:27:43"
+    },
+    {
+      "job_id": "61574015.extern",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:04:49",
+      "start": "2026-10-20T21:22:54",
+      "end": "2026-10-20T21:27:43"
+    },
+    {
+      "job_id": "61574228",
+      "state": "CANCELLED by operator",
+      "exit_code": "0:0",
+      "elapsed": "00:00:00",
+      "start": "None",
+      "end": "2026-10-20T21:40:14"
+    },
+    {
+      "job_id": "61574567",
+      "state": "CANCELLED by operator",
+      "exit_code": "0:0",
+      "elapsed": "00:30:07",
+      "start": "2026-10-20T21:32:21",
+      "end": "2026-10-20T22:02:28"
+    },
+    {
+      "job_id": "61574567.batch",
+      "state": "FAILED",
+      "exit_code": "15:0",
+      "elapsed": "00:30:07",
+      "start": "2026-10-20T21:32:21",
+      "end": "2026-10-20T22:02:28"
+    },
+    {
+      "job_id": "61574567.extern",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:30:07",
+      "start": "2026-10-20T21:32:21",
+      "end": "2026-10-20T22:02:28"
+    },
+    {
+      "job_id": "61574938",
+      "state": "CANCELLED by operator",
+      "exit_code": "0:0",
+      "elapsed": "00:19:35",
+      "start": "2026-10-20T21:42:10",
+      "end": "2026-10-20T22:01:45"
+    },
+    {
+      "job_id": "61574938.batch",
+      "state": "FAILED",
+      "exit_code": "15:0",
+      "elapsed": "00:19:47",
+      "start": "2026-10-20T21:42:10",
+      "end": "2026-10-20T22:01:57"
+    },
+    {
+      "job_id": "61574938.extern",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:19:55",
+      "start": "2026-10-20T21:42:10",
+      "end": "2026-10-20T22:02:05"
+    },
+    {
+      "job_id": "61574938.0",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:19:35",
+      "start": "2026-10-20T21:42:22",
+      "end": "2026-10-20T22:01:57"
+    }
+  ],
+  "all_steps_terminal": true,
+  "note": "Model and router were intentionally stopped by the CLI. Their batch steps recorded FAILED 15:0 after cancellation; all allocations and job steps ended."
+}

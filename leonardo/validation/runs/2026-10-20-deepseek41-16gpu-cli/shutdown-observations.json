@@ -1,0 +1,9 @@
+{
+  "intentional_cancel_timestamp": "2026-10-20T22:01:45.165",
+  "tracebacks_before_cancel_marker": 0,
+  "tracebacks_after_cancel_marker": 1,
+  "dist_network_error_mentions_before_cancel_marker": 0,
+  "dist_network_error_mentions_after_cancel_marker": 192,
+  "first_tcpstore_warning_after_cancel": "22:01:46.253576452",
+  "interpretation": "All API checks finished before operator cancellation. The pinned vLLM abort shutdown emitted an output-handler traceback and distributed TCPStore/DistNetworkError warnings after cancellation. Slurm allocations ended, both endpoints were withdrawn, the router no longer listed the model and the SSH forward closed; log-clean graceful teardown was not established."
+}

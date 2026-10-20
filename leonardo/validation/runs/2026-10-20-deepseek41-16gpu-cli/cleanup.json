@@ -1,0 +1,15 @@
+{
+  "model_cli_down_issued": true,
+  "model_job_ended": true,
+  "model_endpoint_withdrawn": true,
+  "model_removed_from_router": true,
+  "router_cli_down_issued": true,
+  "router_job_ended": true,
+  "router_endpoint_withdrawn": true,
+  "ssh_forward_stopped": true,
+  "local_port_closed": true,
+  "transient_keys_removed": true,
+  "local_token_removed": true,
+  "passed": true,
+  "all_slurm_steps_terminal": true
+}

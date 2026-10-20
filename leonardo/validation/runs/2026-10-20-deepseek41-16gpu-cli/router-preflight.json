@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-20",
+  "phase": "before_gpu_allocation",
+  "path": "laptop CLI forward -> CPU router",
+  "router_job_id": "61574567",
+  "checks": [
+    {
+      "path": "/health",
+      "authenticated": false,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "path": "/v1/models",
+      "authenticated": false,
+      "status": 401,
+      "passed": true
+    },
+    {
+      "path": "/v1/models",
+      "authenticated": true,
+      "status": 200,
+      "passed": true,
+      "model_count": 0
+    }
+  ],
+  "passed": true
+}

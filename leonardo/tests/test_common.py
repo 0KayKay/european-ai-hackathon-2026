@@ -250,6 +250,10 @@ class Framework(unittest.TestCase):
         self.assertEqual(inference.load(self.base / 'inference-site.json')['account'], 'TEST_PROJECT')
         (self.base / 'users/someone-else').mkdir()
         (self.base / 'users/someone-else/secret').write_text('x')
+        # A running install: a temporary root file system with links to system paths.
+        (self.base / 'staging/vllm-0.31.0/tmp/rootfs').mkdir(parents=True)
+        (self.base / 'staging/vllm-0.31.0/tmp/rootfs/lib').symlink_to('/usr/lib')
+        (self.base / 'logs/linked.out').symlink_to('/etc/hostname')
         self.command('setfacl', '#!/bin/bash\necho "$*" >> "$HOME/setfacl-calls"\n')
         user = getpass.getuser()
         self.team('share', user)
@@ -261,6 +265,9 @@ class Framework(unittest.TestCase):
         self.assertIn(str(self.base / 'checkpoints/qwen06b/config.json'), everything)
         self.assertIn(str(self.base / 'users') + ' ', ' '.join(access) + ' ')
         self.assertNotIn(str(self.base / 'users') + '/', everything)  # personal folders stay private
+        self.assertNotIn('staging/vllm-0.31.0', everything)
+        self.assertNotIn('linked.out', everything)
+        self.assertIn(str(self.base / 'staging') + ' ', ' '.join(defaults) + ' ')
         self.assertNotIn(' ' + str(self.base / 'users') + ' ', ' ' + ' '.join(defaults) + ' ')
         self.assertIn(b'No such user', self.team('share', 'no-such-login-xyz', check=False).stderr)
 

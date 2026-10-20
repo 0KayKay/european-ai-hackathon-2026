@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import stat
 import subprocess
 import sys
 
@@ -73,7 +74,13 @@ def init(args):
 
 def setfacl(arguments, targets):
     for start in range(0, len(targets), 500):
-        subprocess.check_call(['setfacl'] + arguments + targets[start:start + 500])
+        chunk = targets[start:start + 500]
+        if subprocess.call(['setfacl'] + arguments + chunk, stderr=subprocess.DEVNULL) == 0:
+            continue
+        # Files of a running job can disappear meanwhile; retry with what is still there, now with errors shown.
+        remaining = [path for path in chunk if os.path.lexists(path)]
+        if remaining:
+            subprocess.check_call(['setfacl'] + arguments + remaining)
 
 
 def share(args):
@@ -85,12 +92,21 @@ def share(args):
             pwd.getpwnam(name)
         except KeyError:
             raise ValueError('No such user on Leonardo: ' + name)
-    files, directories = [], []
+    files, directories, others = [], [], 0
     for root, dirnames, filenames in os.walk(str(base)):
-        directories.append(root)
-        files += [os.path.join(root, f) for f in filenames]
+        if Path(root) == base / 'staging':
+            dirnames[:], filenames = [], []  # temporary install areas; new ones inherit from staging/ itself
         if Path(root) == base / 'users':
             dirnames[:] = []  # users/<login> stays private to its owner
+        for path in [root] + [os.path.join(root, f) for f in filenames]:
+            # Only the owner may change a file's ACL, and a symlink's ACL is its target's.
+            mode = os.lstat(path)
+            if stat.S_ISLNK(mode.st_mode):
+                continue
+            if mode.st_uid != os.getuid():
+                others += 1
+                continue
+            (directories if path == root else files).append(path)
     inherited = [d for d in directories if Path(d) != base / 'users']
     if args.revoke:
         entries = ','.join('u:' + name for name in args.users)
@@ -108,6 +124,8 @@ def share(args):
             print('Note: {} belongs to someone else; the users also need to be able to enter it.'.format(parent))
             break
         setfacl(['-m', ','.join('u:{}:--x'.format(name) for name in args.users)], [str(parent)])
+    if others:
+        print('Skipped {} files and folders owned by others; they already inherit the access.'.format(others))
     print('Shared {} with: {}'.format(base, ', '.join(args.users)))
 
 

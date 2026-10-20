@@ -4,6 +4,71 @@
 secrets live outside Git. This page explains what happens between `prepare_run.sh` and a working API, and
 how the router connects those APIs to the cluster, so you can change things without breaking them.
 
+## Overview
+
+Leonardo is a Slurm cluster: you get GPUs by submitting jobs, every job ends at a time limit, GPU nodes
+have no internet, and only the CPU queue `lrd_all_serial` does. Everything is driven from your laptop
+with `leonardo/cli.py`, which logs in to Leonardo with your own account over SSH and runs the matching
+script there. The parts:
+
+| Part | What it is | Runs where |
+| --- | --- | --- |
+| **Team folder** (`$BASE`) | A folder in `$WORK` with the container images (*runtimes*), model weights (*checkpoints*) and settings, shared with your teammates. | Leonardo's shared file system |
+| **Install jobs** | Download runtimes and checkpoints into the team folder. | CPU queue (has internet) |
+| **Model server** | One vLLM instance in a Singularity container. It gets a fresh API key per run and is announced in the team folder's registry only after a set of API checks has passed. | GPU nodes, as a Slurm job |
+| **Router** | One entry point for all of *your* running model servers: it routes each request by its `model` field and swaps your router token for that server's key. Not to be confused with agentgateway, which is the app's gateway in Kubernetes. | CPU queue, as a Slurm job that renews itself |
+| **SSH port forward** (`cli.py forward`) | Makes the router reachable on your laptop: `ssh -L` from the laptop through the login node to the router's node and port. For testing and personal use. | Your laptop |
+| **Cluster link** (optional) | Lets agentgateway in GKE reach the router. The router job connects **out** to a [chisel](https://github.com/jpillora/chisel) server in the cluster, so nobody logs in to Leonardo from Kubernetes. Off until the organisers approve it. | Router job and GKE |
+
+In the diagram, an arrow points from the side that opens the connection to the side that accepts it:
+
+```mermaid
+flowchart TB
+  subgraph Laptop
+    CLI[cli.py]
+    FWD[cli.py forward]
+  end
+  subgraph Leonardo
+    LOGIN[login node]
+    subgraph CPU["CPU queue"]
+      INSTALL[install jobs]
+      ROUTER[router job]
+    end
+    subgraph GPU["GPU nodes"]
+      M1[model server qwen235b]
+      M2[model server qwen06b]
+    end
+    BASE[(team folder in $WORK)]
+  end
+  subgraph GKE
+    AGW[agentgateway]
+    LINK[cluster link server]
+  end
+  NET[Docker Hub, Hugging Face]
+  CLI -- "SSH: submits jobs" --> LOGIN
+  FWD -- "SSH port forward through the login node" --> ROUTER
+  INSTALL -- "download" --> NET
+  INSTALL -- "write" --> BASE
+  ROUTER -- "HTTP with each server's key" --> M1
+  ROUTER --> M2
+  ROUTER -. "cluster link, outbound" .-> LINK
+  AGW -- "HTTP with the router token, through the link" --> LINK
+```
+
+### Where things live
+
+| What | Where | Visible to |
+| --- | --- | --- |
+| Settings | `$BASE/inference-site.json` | everyone the folder is shared with |
+| Runtimes and checkpoints | `$BASE/runtimes/<runtime id>/`, `$BASE/checkpoints/<checkpoint>/` | shared |
+| Registry of ready servers (addresses only, never keys) | `$BASE/endpoints/` | shared |
+| Install logs, cluster link client | `$BASE/logs/`, `$BASE/tools/` | shared |
+| Your runs (code copy, API key, logs, check results), caches, router, diagnostic logs | `$BASE/users/<login>/` | only you (mode 700) |
+| Code uploaded by `cli.py` | `~/.leonardo-inference/releases/<hash>/` on Leonardo | only you |
+
+Your personal folder is private because it holds API keys and the router token; the rest of the team
+folder is shared with whoever you name. The rest of this page explains each step in detail.
+
 ## Three layers
 
 ```mermaid

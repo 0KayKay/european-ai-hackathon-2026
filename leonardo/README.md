@@ -24,69 +24,21 @@ at commit `298432c`.
 
 ## How does it work?
 
-Leonardo is a Slurm cluster: you get GPUs by submitting jobs, every job ends at a time limit, GPU nodes
-have no internet, and only the CPU queue `lrd_all_serial` does. Everything is driven from your laptop
-with `leonardo/cli.py`, which logs in to Leonardo with your own account over SSH and runs the matching
-script there. The parts:
+Leonardo is a Slurm cluster: GPUs come as time-limited jobs, and GPU nodes have no internet. You run
+`leonardo/cli.py` on your laptop; it logs in to Leonardo with your own account and submits everything as
+Slurm jobs:
 
-| Part | What it is | Runs where |
-| --- | --- | --- |
-| **Team folder** (`$BASE`) | A folder in `$WORK` with the container images (*runtimes*), model weights (*checkpoints*) and settings, shared with your teammates. | Leonardo's shared file system |
-| **Install jobs** | Download runtimes and checkpoints into the team folder. | CPU queue (has internet) |
-| **Model server** | One vLLM instance in a Singularity container. It gets a fresh API key per run and is announced in the team folder's registry only after a set of API checks has passed. | GPU nodes, as a Slurm job |
-| **Router** | One entry point for all of *your* running model servers: it routes each request by its `model` field and swaps your router token for that server's key. Not to be confused with agentgateway, which is the app's gateway in Kubernetes. | CPU queue, as a Slurm job that renews itself |
-| **SSH port forward** (`cli.py forward`) | Makes the router reachable on your laptop: `ssh -L` from the laptop through the login node to the router's node and port. For testing and personal use. | Your laptop |
-| **Cluster link** (optional) | Lets agentgateway in GKE reach the router. The router job connects **out** to a [chisel](https://github.com/jpillora/chisel) server in the cluster, so nobody logs in to Leonardo from Kubernetes. Off until the organisers approve it. | Router job and GKE |
+- **Install jobs** download container images and model weights into a **team folder** in `$WORK`, on a
+  CPU queue that has internet.
+- A **model server** job runs vLLM on GPU nodes. It gets a fresh API key and is announced to the team only
+  after a set of API checks has passed.
+- Your **router** job is a single entry point to all of your model servers. You reach it from your laptop
+  with `cli.py forward` (an SSH port forward); later, the app in Kubernetes reaches it through the
+  **cluster link**, an outbound connection from Leonardo to the cluster that stays off until approved.
 
-In the diagram, an arrow points from the side that opens the connection to the side that accepts it:
-
-```mermaid
-flowchart TB
-  subgraph Laptop
-    CLI[cli.py]
-    FWD[cli.py forward]
-  end
-  subgraph Leonardo
-    LOGIN[login node]
-    subgraph CPU["CPU queue"]
-      INSTALL[install jobs]
-      ROUTER[router job]
-    end
-    subgraph GPU["GPU nodes"]
-      M1[model server qwen235b]
-      M2[model server qwen06b]
-    end
-    BASE[(team folder in $WORK)]
-  end
-  subgraph GKE
-    AGW[agentgateway]
-    LINK[cluster link server]
-  end
-  NET[Docker Hub, Hugging Face]
-  CLI -- "SSH: submits jobs" --> LOGIN
-  FWD -- "SSH port forward through the login node" --> ROUTER
-  INSTALL -- "download" --> NET
-  INSTALL -- "write" --> BASE
-  ROUTER -- "HTTP with each server's key" --> M1
-  ROUTER --> M2
-  ROUTER -. "cluster link, outbound" .-> LINK
-  AGW -- "HTTP with the router token, through the link" --> LINK
-```
-
-### Where things live
-
-| What | Where | Visible to |
-| --- | --- | --- |
-| Settings | `$BASE/inference-site.json` | everyone the folder is shared with |
-| Runtimes and checkpoints | `$BASE/runtimes/<runtime id>/`, `$BASE/checkpoints/<checkpoint>/` | shared |
-| Registry of ready servers (addresses only, never keys) | `$BASE/endpoints/` | shared |
-| Install logs, cluster link client | `$BASE/logs/`, `$BASE/tools/` | shared |
-| Your runs (code copy, API key, logs, check results), caches, router, diagnostic logs | `$BASE/users/<login>/` | only you (mode 700) |
-| Code uploaded by `cli.py` | `~/.leonardo-inference/releases/<hash>/` on Leonardo | only you |
-
-Your personal folder is private because it holds API keys and the router token; the rest of the team
-folder is shared with whoever you name. [docs/how-it-works.md](docs/how-it-works.md) explains each step in
-detail.
+Keys and runs stay in your private folder `$BASE/users/<login>/`; the rest of the team folder is shared with
+the teammates you name. [docs/how-it-works.md](docs/how-it-works.md) has the full picture with a diagram,
+and every step in detail.
 
 ## Installation
 
@@ -94,35 +46,34 @@ detail.
 
 - **On your laptop:** an SSH client and Python 3.7 or newer. No packages, no virtual environment: the CLI
   and everything it runs on Leonardo use only the Python standard library.
-- **On Leonardo:** your own CINECA login (logins are personal and must not be shared), membership in the
-  project allocation (the Slurm *account*, e.g. `EUHPC_D30_031`), and a place for the team folder in
-  that project's `$WORK`. Ask your mentor or admin for the account name and where the team folder
-  should go. Nothing needs to be installed there; the CLI uses the system `python3`, Slurm and Singularity.
+- **On Leonardo:** your own CINECA login (logins are personal and must not be shared), membership in a
+  project allocation (the Slurm *account*), and a place for the team folder in that project's `$WORK`.
+  Ask your mentor or admin for the account name and where the team folder should go. Nothing needs to be
+  installed there; the CLI uses the system `python3`, Slurm and Singularity.
 
-### Set up the team folder
+### Configure the CLI
 
-All commands in this README run from the repository root on your laptop. Configure the CLI once per
-shell (or put it in `.envrc`):
+All commands in this README run from the repository root on your laptop. Set these once per shell (or put
+them in an `.envrc` that stays out of Git):
 
 ```bash
 export LEONARDO_USER=<your login>
-export LEONARDO_BASE='$WORK/<team folder>'   # single quotes: $WORK is expanded on Leonardo
+export LEONARDO_BASE='$WORK/<team folder>'          # single quotes: $WORK is expanded on Leonardo
+export LEONARDO_HOST=login02-ext.leonardo.cineca.it # the login node you use or were assigned
 ```
 
-Then, once per team:
+`LEONARDO_HOST` defaults to `login01-ext.leonardo.cineca.it`. The first command asks for your CINECA
+authentication; later commands reuse that SSH connection for 30 minutes.
+
+### Set up the team folder
+
+Once per team:
 
 ```bash
-./leonardo/cli.py init --account <project account>   # creates the folder and inference-site.json
-./leonardo/cli.py share <login> <login> ...         # give teammates access (POSIX ACLs per login)
-./leonardo/cli.py install qwen06b                   # runtime + weights for a profile; CPU-queue jobs
-./leonardo/cli.py status                            # shows installed runtimes/checkpoints and running installs
+./leonardo/cli.py init --account <Slurm account>   # creates the folder and its settings file
+./leonardo/cli.py share <login> <login> ...       # give teammates access
+./leonardo/cli.py status                          # "Installed: runtimes none; checkpoints none"
 ```
-
-`install` accepts several profiles (`install qwen06b qwen235b`) and skips what is already there. The
-runtime job pulls the image and registers it; the weights job waits for it. Expect minutes for `qwen06b`
-and hours for the large models (several hundred GB). A profile without a pinned model `revision` downloads
-the current one and prints `PIN_REVISION <sha>` in its log; put that into the profile. For gated models
-on Hugging Face, put `export HF_TOKEN=...` into your `~/.bashrc` on Leonardo before installing.
 
 `share` can be repeated whenever someone joins, and `share --revoke <login>` takes access away. Your
 teammates then set `LEONARDO_BASE` to the same folder and can use every command below; each of them gets
@@ -166,25 +117,42 @@ The backend then uses the "Served as" names from the table above as model names 
 
 ### Commands
 
-`./leonardo/cli.py --help` lists the commands; `./leonardo/cli.py <command> --help` shows each one's
-options and the files it runs on Leonardo. Every command runs `leonardo/serve/team.py <command>` there:
+`./leonardo/cli.py --help` lists the commands, and `./leonardo/cli.py <command> --help` shows a command's
+options and the scripts it runs on Leonardo. Each command uploads the code from your checkout first, if
+Leonardo does not have that exact version yet.
 
-| Command | Parameters | What it does | Files it runs on Leonardo |
-| --- | --- | --- | --- |
-| `init` | `--account`, optional `--partition`, `--qos`, `--cpu-partition`, `--force` | Create the team folder and settings | `serve/team.py`, template `serve/site.example.json` |
-| `share` | `LOGIN...`, `--revoke` | Grant or remove teammates' access | `serve/team.py` (`setfacl`) |
-| `install` | `PROFILE...`, `--link-client` | Download runtimes, weights, chisel client | `install/runtime.sbatch` (with `install/register_runtime.py`), `install/checkpoint.sbatch`, `install/link_client.sbatch` |
-| `up` | `PROFILE`, `--qos`, `--time`, `--reservation` | Start a model server | `serve/inference.py` (prepare, submit) → `serve/serve_model.sbatch` → `serve/node.py` (vLLM) and `serve/lifecycle.py` (checks in `serve/test_endpoint.py`, registry in `serve/registry.py`) |
-| `status` | | Installs, your servers and router, team registry | `serve/team.py` |
-| `logs` | `TARGET` (job id, profile, served name or `router`), `--lines`, `--follow` | Show a job's log | `serve/team.py` (`tail`) |
-| `down` | `TARGET` (profile, served name, job id or `router`) | Stop servers or the router | `serve/team.py` (`scancel`) |
-| `router` | `up` / `down` / `token`, `--hours`, `--restart`, `--token-file`, `--link-auth-file` | Manage your router | `serve/router.py` → `serve/router.sbatch` → `serve/router.py serve` |
-| `forward` | `--local-port` (default 18000) | SSH port forward to your router | only `ssh -L` on the laptop |
-| `diagnose` | `probe` / `reach` / `nccl`, `--target`, `--proxy`, `--link-url`, `--runtime` | Submit a check job | `diagnostics/probe.sbatch`, `reach.sbatch`, `nccl_check.sbatch` |
-| `sync` | | Only upload the code | nothing |
+| Command | Parameters | What it does |
+| --- | --- | --- |
+| `init` | `--account` (required); `--partition`, `--qos`, `--cpu-partition` to change the defaults; `--force` | Creates the team folder with its subfolders and the settings file `inference-site.json` (Slurm account, partitions, QoS, router and cluster link settings), plus your private personal folder. Run once per team; it never overwrites existing settings unless you add `--force`. |
+| `share` | `LOGIN...`, `--revoke` | Gives the named Leonardo users read and write access to the team folder, including everything created later, so they can install models and start their own servers. Personal folders stay private. `--revoke` takes the access away again. |
+| `install` | `PROFILE...`, `--link-client` | Submits CPU-queue jobs that download what the profiles need: the container image (runtime) and the model weights (checkpoint). Skips what is already installed; a weights job waits until its runtime job has finished. `--link-client` also downloads the chisel client for the cluster link. |
+| `up` | `PROFILE`; `--qos`, `--time`, `--reservation` | Checks that the profile's runtime and weights are installed, creates a private run folder with a new API key and submits the model server job. The job starts vLLM, runs the profile's API checks and announces the server only if they pass. `--qos boost_qos_dbg --time 00:30:00` makes a short test job that usually starts sooner. |
+| `status` | | Shows installed runtimes and checkpoints, running install jobs, your model servers (`starting`, or `READY` with node and port), your router, and every ready server in the team registry. |
+| `logs` | `TARGET`; `--lines`, `--follow` | Prints the end of a job's log. `TARGET` is a job id (any job: install, server, router, check), a profile or served model name (your newest run), or `router`. |
+| `down` | `TARGET` | Cancels your model servers for a profile, served model name or job id. `down router` stops your router, including its queued successor. |
+| `router` | `up`, `down` or `token`; `--hours`, `--restart`, `--token-file`, `--link-auth-file` | `up` starts your router job, which renews itself every 4 hours until `--hours` (default 12) have passed; `--restart` replaces a running router. `token` prints the bearer token that callers of the router need; it is created on first use, and `--token-file` installs a given one instead. `--link-auth-file` stores the cluster link password. |
+| `forward` | `--local-port` (default 18000) | Opens an SSH port forward from `127.0.0.1:<port>` on your laptop through the login node to your router, until you press Ctrl-C. |
+| `diagnose` | `probe`, `reach` or `nccl`; `--target`, `--proxy`, `--link-url`, `--runtime` | `probe`: a short GPU job that prints the node's network, InfiniBand and GPU setup and serves a test page. `reach`: a CPU-queue job that tests whether it reaches a GPU node (`--target` from a probe), the internet, a proxy (`--proxy`) and the cluster link server (`--link-url`). `nccl`: a two-node job that measures GPU communication over InfiniBand. |
+| `sync` | | Only uploads the code. |
 
-The first command asks for your CINECA authentication; later commands reuse that SSH connection for 30
-minutes. Each command uploads the code from your checkout if Leonardo does not have that exact version yet.
+### Install a model
+
+Before a model can run, its runtime and weights must be in the team folder. This runs on the CPU queue and
+can take a while:
+
+```bash
+./leonardo/cli.py install qwen06b       # submits two jobs; the weights job waits for the runtime job
+./leonardo/cli.py status                # lists the install jobs while they run
+./leonardo/cli.py logs <job id> -f      # job ids are printed by install and status
+```
+
+The runtime job pulls the container image and converts it (20-60 minutes for an 8 GB image; the
+`xattr` warnings in its log are harmless), and its log ends with `RUNTIME_READY`. The weights job ends with
+`CHECKPOINT_READY`; it takes minutes for `qwen06b` and hours for the large models (several hundred GB).
+A profile without a pinned model `revision` downloads the current one and prints `PIN_REVISION <sha>` in
+its log; put that sha into the profile. `install` accepts several profiles (`install qwen06b qwen235b`),
+skips what is already there, and installs a runtime only once for all profiles that use it. For gated
+models on Hugging Face, put `export HF_TOKEN=...` into your `~/.bashrc` on Leonardo before installing.
 
 ### Start and stop model servers
 
@@ -226,11 +194,21 @@ reaches only servers started with your login. Expect a short gap every four hour
 hands over to the next. With the cluster link enabled, the app calls the same model names through
 agentgateway instead.
 
-### Without the CLI
+### What runs on Leonardo
 
-On a login node, in a clone of the repository, `leonardo/serve/team.py <command> --base '$WORK/<team folder>'`
-takes the same commands, and `leonardo/serve/inference.py` prepares and submits a single run by hand
-(`--help` on both). `leonardo/serve/client.py` talks to one server directly with its own key.
+The CLI only orchestrates Slurm jobs; each is an ordinary batch script in this repository:
+
+| Job name | Script | Queue and resources | Submitted by | What it runs |
+| --- | --- | --- | --- | --- |
+| `install-runtime-<runtime>` | `install/runtime.sbatch <runtime>` | CPU queue, 4 CPUs, 2 h | `install` | `singularity pull` of the image in `serve/catalog.json`, `pip install` of pinned extra packages into a side folder, `install/register_runtime.py` |
+| `install-checkpoint-<checkpoint>` | `install/checkpoint.sbatch <profile>` | CPU queue, 4 CPUs, 4 h, after the runtime job | `install` | Hugging Face `snapshot_download` inside the runtime's container |
+| `install-link-client` | `install/link_client.sbatch` | CPU queue, 10 min | `install --link-client` | download and checksum of the chisel client |
+| `<profile>-common` | `serve/serve_model.sbatch` | GPU partition; nodes, GPUs, memory and time from the profile | `up` | `serve/node.py` once per node (vLLM in the container) and `serve/lifecycle.py` (API checks, registry) |
+| `leonardo-router` | `serve/router.sbatch` | CPU queue, 2 CPUs, 4 h, queues its own successor | `router up` | `serve/router.py` (and the chisel client when the cluster link is on) |
+| `probe`, `reach`, `nccl-check` | `diagnostics/*.sbatch` | GPU debug QoS, CPU queue, 2 GPU nodes on debug QoS | `diagnose` | shell checks; `diagnostics/nccl_check.py` on 8 GPUs |
+
+`serve/team.py` (on Leonardo) builds the `sbatch` commands; a model server and the router also need a
+private folder prepared before their job is submitted.
 
 ### Troubleshooting
 

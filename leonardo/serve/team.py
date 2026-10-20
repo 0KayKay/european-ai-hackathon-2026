@@ -289,7 +289,7 @@ def main():
         p.add_argument('--base', required=True, help="team folder, e.g. '$WORK/team_vllm'")
         return p
     p = command('init', 'create the team folder and inference-site.json')
-    p.add_argument('--account', required=True, help='Slurm project account, e.g. EUHPC_D30_031')
+    p.add_argument('--account', required=True, help='Slurm project account')
     p.add_argument('--partition', help='GPU partition (default boost_usr_prod)')
     p.add_argument('--qos', help='default GPU QoS (default boost_qos_lprod)')
     p.add_argument('--cpu-partition', help='CPU partition with internet (default lrd_all_serial)')

@@ -9,10 +9,10 @@ laptop or on Leonardo besides Python (3.7+ here, the system python3 there).
 Settings (environment variables or options before the command):
   LEONARDO_USER   your CINECA login (--user)
   LEONARDO_BASE   the team folder on Leonardo, e.g. '$WORK/team_vllm' in single quotes (--base)
-  LEONARDO_HOST   login node (--host, default login01-ext.leonardo.cineca.it)
+  LEONARDO_HOST   the login node you use or were assigned (--host, default login01-ext.leonardo.cineca.it)
 
 Typical first run, from the repository root:
-  ./leonardo/cli.py init --account EUHPC_D30_031
+  ./leonardo/cli.py init --account <Slurm project account>
   ./leonardo/cli.py install qwen06b
   ./leonardo/cli.py up qwen06b --qos boost_qos_dbg --time 00:30:00
   ./leonardo/cli.py router up && ./leonardo/cli.py forward
@@ -135,7 +135,7 @@ def parser():
     top = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     top.add_argument('--user', default=os.environ.get('LEONARDO_USER'), help='your CINECA login (LEONARDO_USER)')
     top.add_argument('--host', default=os.environ.get('LEONARDO_HOST', 'login01-ext.leonardo.cineca.it'),
-                     help='login node (LEONARDO_HOST)')
+                     help='login node you use or were assigned, e.g. login02-ext.leonardo.cineca.it (LEONARDO_HOST)')
     top.add_argument('--base', default=os.environ.get('LEONARDO_BASE'),
                      help="team folder on Leonardo, expanded there, e.g. '$WORK/team_vllm' (LEONARDO_BASE)")
     sub = top.add_subparsers(dest='command', metavar='COMMAND')
@@ -145,7 +145,7 @@ def parser():
         return sub.add_parser(name, help=summary, description=summary[0].upper() + summary[1:] + '.',
                               epilog='On Leonardo: ' + runs, formatter_class=argparse.RawDescriptionHelpFormatter)
     p = command('init')
-    p.add_argument('--account', required=True, help='Slurm project account, e.g. EUHPC_D30_031')
+    p.add_argument('--account', required=True, help='Slurm project account (ask your mentor or admin)')
     p.add_argument('--partition', help='GPU partition (default boost_usr_prod)')
     p.add_argument('--qos', help='default GPU QoS (default boost_qos_lprod, 2 h)')
     p.add_argument('--cpu-partition', help='CPU partition with internet, for installs and the router (default lrd_all_serial)')

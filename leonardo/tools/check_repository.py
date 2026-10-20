@@ -44,21 +44,27 @@ def main():
 
     record = json.loads((ROOT / 'validation/validated_code.json').read_text())
     for model, run in record['runs'].items():
+        evidence = ROOT / 'validation' / run['evidence']
+        if run.get('evidence_kind', '').startswith('job log'):
+            # Seven PASS lines and INFERENCE_READY, copied verbatim from the job log.
+            log = (evidence / 'job-log.txt').read_text()
+            assert 'INFERENCE_READY' in log and ' FAIL' not in log and log.count(' PASS\n') == 7, 'Incomplete evidence: ' + model
+            continue
         for suite in ('api-startup.json', 'api-client-1.json', 'api-client-2.json'):
-            checks = json.loads((ROOT / 'validation' / run['evidence'] / suite).read_text())
+            checks = json.loads((evidence / suite).read_text())
             assert len(checks) == 7 and all(c['passed'] for c in checks.values()), 'Incomplete evidence: ' + model + '/' + suite
-    drifted = [name for name, digest in sorted(record['validated_files_sha256'].items())
-               if sha256(ROOT / 'serve' / name) != digest]
-    unvalidated = sorted(set(manifest['files']) - set(record['validated_files_sha256']) - {'site.example.json'})
     print('PASS: syntax for {} scripts, manifest, agentgateway config, GPU evidence and local document links.'.format(checked))
-    if unvalidated:
-        print('NOTE: never run on GPUs: ' + ', '.join(unvalidated))
-    if drifted:
-        print('NOTE: serve/ differs from the GPU-validated code in: ' + ', '.join(drifted))
-        print('      Run a GPU validation on Leonardo, then record the new hashes in validation/validated_code.json.')
-    else:
-        print('serve/ matches the GPU-validated code byte for byte.')
-
+    # Each run validated the serve/ files it ran with: its own files_sha256, or the shared set of the first runs.
+    print('GPU-validated runs, compared with serve/ today:')
+    for model, run in sorted(record['runs'].items()):
+        files = run.get('files_sha256', record['validated_files_sha256'])
+        drifted = [name for name, digest in sorted(files.items()) if not (ROOT / 'serve' / name).exists()
+                   or sha256(ROOT / 'serve' / name) != digest]
+        added = sorted(set(manifest['files']) - set(files) - {'site.example.json'})
+        state = 'identical' if not (drifted or added) else '; '.join(filter(None, [
+            drifted and 'changed: ' + ', '.join(drifted), added and 'added since: ' + ', '.join(added)]))
+        print('  {:<11} job {} ({}): {}'.format(model, run['job_id'], run['date'], state))
+    print('A change is trusted once a GPU run on it is recorded here (validation/validated_code.json).')
 
 if __name__ == '__main__':
     main()

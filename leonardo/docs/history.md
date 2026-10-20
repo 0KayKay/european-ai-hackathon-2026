@@ -11,7 +11,8 @@
 | 18 Oct | Common framework: one launcher, model profiles, shared runtime. GLM (job 61299807) and DeepSeek-V4.1 (job 61300901) passed 7/7 API checks at startup and in 2 SSH-tunnel repeats. |
 | 19 Oct | Qwen3-235B moved onto the common runtime (job 61389137, 7/7 ×3). The API port base moved from 21000 to 31000 after it was found that API and master ports could collide for job suffixes 8000–8999. |
 | 20 Oct | Copied into this repository and consolidated (below). |
-| 20 Oct | Unified: `bringup/` folded into `serve/` (stock vLLM runtime, one-GPU profile, check suites) and `diagnostics/`; team registry, router job, laptop CLI for everything from `init` to `down`, opt-in cluster link to GKE. Not yet run on GPUs. |
+| 20 Oct | Unified: `bringup/` folded into `serve/` (stock vLLM runtime, one-GPU profile, check suites) and `diagnostics/`; team registry, router job, laptop CLI for everything from `init` to `down`, opt-in cluster link to GKE. |
+| 20 Oct | First runs of the unified launcher on Leonardo, from a fresh team folder: install of the stock runtime and Qwen3-0.6B, then `qwen06b` (job 61559851) with 7/7 checks and a streamed reply through the router. The first two attempts failed only the exact-`42` checks: the model answered `17 + 25 = 42`, so those checks now accept phrased answers. |
 
 Startup times to a healthy API (cold caches, excluding queue): Qwen 7.0 min, GLM 13.3 min, DeepSeek 25.8 min.
 

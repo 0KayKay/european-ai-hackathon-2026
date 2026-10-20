@@ -11,7 +11,7 @@
     "prepare_run.sh": "033bc136770dd19e1508894ab18b9c22c10a48a20071cb2a8588c839324b4ad5",
     "profiles/deepseek41.json": "a3519da4b8209410ae2b6e3cc7576e57e7de08ded4173784cd8ae0a1b198fbc0",
     "profiles/glm53.json": "dabd5597f725cd48928806e75b281e77ce669c777cc324ef121317a74d52b448",
-    "profiles/qwen06b.json": "8097d8653c6351582c1fafba5a1bff60e1c78d6c409950d8aa9175c2414493bf",
+    "profiles/qwen06b.json": "3fe650803522ffc370b30f6594f83327dacff75c03eb7ffd9e526c37f92a30c3",
     "profiles/qwen235b.json": "bd6731d40827ff3a95c6bff0529cdbd428ee54a0d585565c0f303d7a028a41e7",
     "registry.py": "6257e6fc606e28fd4fb252bfa8ae9bff70b6ae3f8dc162a11744b6a1e3e8519e",
     "router.py": "5d1f5f6140a39e6e159621ac16520776803fc976f1814453e45d4aff061ce957",

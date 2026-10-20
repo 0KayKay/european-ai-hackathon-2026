@@ -12,13 +12,14 @@ moderation classifiers. It is a reusable template: everything below starts from 
 | `qwen235b` | Qwen3-235B-A22B-FP8 | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | 7 min | GPU-validated |
 | `glm53` | GLM-5.3-Flash | `glm-5.3-flash-leonardo` | 2 nodes, 8 A100 | 13 min | GPU-validated |
 | `deepseek41` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-leonardo` | 2 nodes, 8 A100 | 26 min | GPU-validated |
-| `deepseek41-16gpu` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | 4 nodes, 16 A100 | 15 min | Earlier launcher/load-tested; unified CLI rerun pending |
+| `deepseek41-16gpu` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | 4 nodes, 16 A100 | 18.3 min | GPU-validated, current CLI and router |
 | `qwen06b` | Qwen3-0.6B | `qwen3-0.6b-leonardo` | 1 A100 | 1.5 min | GPU-validated, current launcher |
 
 The large models run with a 2,048-token context and 4 concurrent sequences (DeepSeek: 2) for up to two
 hours per job. The separate sixteen-GPU DeepSeek profile has 8 sequence slots and GPU-resident
-Engram; see [its guide and patch details](docs/deepseek16.md). The large models were validated with an earlier version of the launcher; see
-[Validation status](#validation-status).
+Engram; see [its guide and patch details](docs/deepseek16.md). The eight-GPU large-model profiles were
+validated with an earlier launcher; the sixteen-GPU profile passed the current CLI and router path.
+See [Validation status](#validation-status).
 
 The serving framework was built by Junghwa Lee ([@Jules0315](https://github.com/Jules0315)) on top of the
 team's starter kit, and copied from [Jules0315/Guardrails-vllm](https://github.com/Jules0315/Guardrails-vllm)
@@ -264,11 +265,14 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 `serve/` files it ran with, and `python3 leonardo/tools/check_repository.py` lists what has changed since
 each run. With the current launcher, `qwen06b` went through the whole path on Leonardo on 20 Oct: `init`,
 `install` (stock vLLM runtime and weights), `up` with all seven checks, and a streamed reply through the
-router and `cli.py forward`. The three large models passed with an earlier launcher: their profiles and the
-container command are unchanged, but `inference.py`, `lifecycle.py`, `node.py` and `test_endpoint.py`
-have changed since, so each needs one debug-queue run before the team relies on it. The backport runtime's
-install job and the cluster link have not run on Leonardo or GKE yet (the cluster link only on a
-workstation). All runs used one operator account; sustained load and unattended operation are untested.
+router and `cli.py forward`. The separate `deepseek41-16gpu` profile also passed the current path:
+installer job `61574015`, four-node/sixteen-GPU job `61574938` (debug QoS, 30 minutes), seven startup
+checks and two seven-check suites through laptop SSH forwarding and CPU router `61574567`. Model/router
+shutdown and endpoint withdrawal were verified. See [the fresh evidence](validation/runs/2026-10-20-deepseek41-16gpu-cli/README.md).
+This tested the backport installer's reuse of verified existing base assets; it did not repeat a fresh
+image/weights download. The `qwen235b`, `glm53` and eight-GPU `deepseek41` profiles still need a current
+launcher run. The cluster link has not run on Leonardo or GKE yet (only on a workstation). All runs used
+one operator account; sustained load and unattended operation are untested.
 
 ## Contributing and extending
 

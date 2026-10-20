@@ -29,6 +29,7 @@ import shlex
 import subprocess
 import sys
 import tarfile
+import time
 
 LEONARDO = Path(__file__).resolve().parent
 sys.path.insert(0, str(LEONARDO / 'tools'))
@@ -75,10 +76,35 @@ COMMANDS = {
 }
 
 
+CONTROL_PATH = os.path.expanduser('~/.ssh/leonardo-%C')  # one shared, authenticated connection
+
+
 def ssh_command(args):
-    control = os.path.expanduser('~/.ssh/leonardo-%C')
-    return ['ssh', '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + control, '-o', 'ControlPersist=30m',
+    return ['ssh', '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + CONTROL_PATH, '-o', 'ControlPersist=30m',
             '-o', 'ServerAliveInterval=30', args.user + '@' + args.host]
+
+
+def forward(args, spec):
+    """Add a port forward to the shared SSH connection until Ctrl-C, then remove it again.
+
+    Forwards added to a shared (ControlMaster) connection outlive the command that added them, so this
+    removes the forward explicitly, and fails instead of opening a second connection with a new login.
+    """
+    control, target = ssh_command(args)[:-1], ssh_command(args)[-1]
+    subprocess.run(control + ['-O', 'cancel', '-L', spec, target], stderr=subprocess.DEVNULL)  # a leftover of ours
+    if subprocess.run(control + ['-O', 'forward', '-L', spec, target]).returncode:
+        port = spec.split(':')[1]
+        raise SystemExit('Could not listen on 127.0.0.1:{0}. Another program uses it (see: lsof -iTCP:{0} -sTCP:LISTEN);\n'
+                         'pick another port with --local-port, or close the shared SSH connection, which drops its\n'
+                         'forwards: ssh -O exit -o ControlPath={1} {2}'.format(port, CONTROL_PATH, target))
+    try:
+        while subprocess.run(control + ['-O', 'check', target], stderr=subprocess.DEVNULL).returncode == 0:
+            time.sleep(5)
+        print('The SSH connection to Leonardo closed; run forward again.', file=sys.stderr)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        subprocess.run(control + ['-O', 'cancel', '-L', spec, target], stderr=subprocess.DEVNULL)
 
 
 def remote(args, command, data=None, capture=False):
@@ -245,9 +271,8 @@ def main():
         endpoint = (report.get('router') or {}).get('endpoint')
         if not endpoint:
             raise SystemExit('Your router is not listening yet; start it with: router up, then check status')
-        forward = '127.0.0.1:{}:{}:{}'.format(args.local_port, endpoint['host'], endpoint['port'])
         print('Router at http://127.0.0.1:{}/v1 (bearer token: cli.py router token). Ctrl-C to stop.'.format(args.local_port), flush=True)
-        os.execvp('ssh', ssh_command(args)[:-1] + ['-N', '-o', 'ExitOnForwardFailure=yes', '-L', forward, ssh_command(args)[-1]])
+        forward(args, '127.0.0.1:{}:{}:{}'.format(args.local_port, endpoint['host'], endpoint['port']))
 
 
 if __name__ == '__main__':

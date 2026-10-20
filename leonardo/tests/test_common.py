@@ -314,6 +314,26 @@ class Framework(unittest.TestCase):
         self.assertEqual(len(list((self.home / '.leonardo-inference/releases').iterdir())), 1)
         self.assertEqual(subprocess.run(cli[:2], env=self.env, stdout=subprocess.PIPE).returncode, 0)  # bare call: help
 
+    def test_forward_adds_and_removes_its_port_forward(self):
+        # Control commands (-O) are logged; anything else runs locally as the remote command.
+        self.command('ssh', '#!/bin/bash\nif [[ " $* " == *" -O "* ]]; then echo "$*" >> "$HOME/ssh-control"\n'
+                     '  [[ " $* " == *" -O forward "* ]] && exit "${FORWARD_RC:-0}"\n'
+                     '  [[ " $* " == *" -O check "* ]] && exit 1\n  exit 0; fi\n'
+                     'while [[ "$1" == -* ]]; do [[ "$1" == -[oL] ]] && shift; shift; done\nshift\nexec bash -c "$*"\n')
+        self.command('squeue', '#!/bin/bash\nprintf "900|leonardo-router|RUNNING|0:10|4:00:00|login08\\n"\n')
+        endpoint = self.base / 'users' / getpass.getuser() / 'router/.runtime/endpoint.json'
+        endpoint.parent.mkdir(parents=True)
+        inference.save(endpoint, {'job_id': '900', 'host': 'login08', 'port': 41900, 'cluster_link': False})
+        cli = [sys.executable, str(REPO / 'cli.py'), '--user', 'tester', '--base', str(self.base), 'forward', '--local-port', '18123']
+        result = subprocess.run(cli, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = [line.split(' -O ')[1].split()[0] for line in (self.home / 'ssh-control').read_text().splitlines()]
+        self.assertEqual(calls, ['cancel', 'forward', 'check', 'cancel'])
+        self.assertIn('-L 127.0.0.1:18123:login08:41900', (self.home / 'ssh-control').read_text())
+        busy = subprocess.run(cli, env=dict(self.env, FORWARD_RC='255'), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        self.assertNotEqual(busy.returncode, 0)
+        self.assertIn(b'Could not listen on 127.0.0.1:18123', busy.stderr)
+
     def test_failed_launcher_never_publishes_endpoint(self):
         self.command('srun', '#!/bin/bash\nexit 9\n')
         run = self.prepare('glm53')

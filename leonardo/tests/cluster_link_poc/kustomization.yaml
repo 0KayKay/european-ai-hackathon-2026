@@ -1,0 +1,82 @@
+# Proof of concept of the cluster link in any Kubernetes (k3s, kind, a GKE test namespace): the real base
+# manifests plus the real infrastructure/leonardo component, with stand-ins for what is not under test.
+# run.sh applies it and plays the Leonardo side. GKE-only objects (Ingress patch, BackendConfig) do not
+# apply outside GKE, so the chisel server is reached through a port-forward instead of the Ingress.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: leonardo-poc
+resources:
+  - namespace.yaml
+  - ../../../infrastructure/base
+components:
+  - ../../../infrastructure/leonardo
+images:
+  # auth and backend are replaced by stubs that implement only what agentgateway calls (stubs/stub.py)
+  - name: local/auth
+    newName: leonardo-poc/stubs
+    newTag: "1"
+  - name: local/backend
+    newName: leonardo-poc/stubs
+    newTag: "1"
+patches:
+  # Not on the path agentgateway -> cluster link -> Leonardo; BackendConfig is GKE-only.
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: postgres
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: postgres
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: postgres-data
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: phoenix
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: phoenix
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: frontend
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: frontend
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: deepteam
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: deepteam
+  - patch: |-
+      $patch: delete
+      apiVersion: cloud.google.com/v1
+      kind: BackendConfig
+      metadata:
+        name: leonardo-link

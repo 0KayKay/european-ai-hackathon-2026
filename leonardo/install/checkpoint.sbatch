@@ -3,6 +3,7 @@
 # $BASE/checkpoints/<checkpoint>, using huggingface_hub inside the profile's own runtime image.
 # Submitted by `cli.py install <profile>` on the CPU queue (internet, no GPU budget), after the
 # runtime job. A profile without a pinned revision gets the current one, printed as PIN_REVISION.
+# CONFIG_ONLY=1 fetches only the small configuration files (for `diagnose compat` before a big download).
 # Sizes: qwen235b ~239 GB, glm53 ~328 GB, deepseek41 48 shards, qwen06b ~1.5 GB. By hand, from the
 # repository root, after the runtime is installed:
 #   BASE=$WORK/<team folder> sbatch -A <account> leonardo/install/checkpoint.sbatch <profile>
@@ -31,6 +32,7 @@ mkdir -p "$BASE/checkpoints" "$BASE/staging/hf-cache"
 export SINGULARITYENV_MODEL_ID="$MODEL_ID"
 export SINGULARITYENV_MODEL_REVISION="${MODEL_REVISION:-}"
 export SINGULARITYENV_MODEL_DIR="$BASE/checkpoints/$CHECKPOINT"
+export SINGULARITYENV_CONFIG_ONLY="${CONFIG_ONLY:-0}"
 export SINGULARITYENV_HF_HOME="$BASE/staging/hf-cache"
 export SINGULARITYENV_HF_HUB_DOWNLOAD_TIMEOUT=120
 export SINGULARITYENV_HF_HUB_DISABLE_TELEMETRY=1
@@ -51,6 +53,10 @@ if not revision:
     print("PIN_REVISION", repo, revision, "- set this as \"revision\" in the profile", flush=True)
 metadata = HfApi().model_info(repo, revision=revision, files_metadata=True)
 assert metadata.sha == revision
+if os.environ["CONFIG_ONLY"] == "1":
+    snapshot_download(repo, revision=revision, local_dir=directory, allow_patterns=["*.json", "*.jinja", "*.py"])
+    print("CONFIG_READY", directory, "revision", revision, "(no weights)", flush=True)
+    raise SystemExit(0)
 weights = {f.rfilename: f for f in metadata.siblings if f.rfilename.endswith(".safetensors")}
 needed = sum(f.size for f in weights.values())
 existing = sum((directory / name).stat().st_size for name, f in weights.items() if (directory / name).is_file() and (directory / name).stat().st_size == f.size)

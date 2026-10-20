@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "id": "qwen235b-stock",
+  "model_id": "Qwen/Qwen3-235B-A22B-FP8",
+  "revision": "39eb2b067ea6b8e3e1dd97d3cd0c7ffeaf3e1a35",
+  "checkpoint": "qwen235b",
+  "expected_shards": 48,
+  "runtime": "vllm-0.31.0",
+  "served_model": "qwen3-235b-a22b-fp8-leonardo",
+  "resources": {
+    "nodes": 2,
+    "gpus_per_node": 4,
+    "cpus_per_task": 32,
+    "memory": "480GB",
+    "time": "02:00:00"
+  },
+  "parallelism": {
+    "tensor": 4,
+    "pipeline": 2
+  },
+  "engine_args": [
+    "--dtype",
+    "bfloat16",
+    "--quantization",
+    "fp8",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--max-model-len",
+    "2048",
+    "--max-num-seqs",
+    "4",
+    "--enforce-eager",
+    "--safetensors-load-strategy",
+    "eager"
+  ],
+  "environment": {},
+  "hooks": [],
+  "checks": "chat",
+  "client": {
+    "local_port": 18087,
+    "timeout_seconds": 300,
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "startup_timeout_seconds": 4800,
+  "validation": "The configuration Junghwa Lee ran first, on 8 Oct with the starter kit: stock vLLM 0.31.0, two nodes, TP4/PP2, Marlin FP8 weights, eager loading; inference inside the cluster and through an SSH tunnel, 401 without a key and four concurrent requests passed. Not yet run through serve/. No tool or reasoning parser was configured then, so it uses the chat checks; use qwen235b for tool calls. Shares served name and weights with qwen235b: only one of them can run at a time."
+}

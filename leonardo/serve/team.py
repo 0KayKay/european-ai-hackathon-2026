@@ -10,7 +10,7 @@ Every command takes --base, the team folder (e.g. '$WORK/team_vllm'; variables a
   logs      show the log of a job, a profile's newest run or the router
   down      cancel servers by profile, served name or job id, or the router
   router    start or stop your router, or print its token
-  diagnose  submit a probe, reachability or NCCL check job
+  diagnose  submit a probe, reachability, NCCL or runtime/model compatibility check job
 """
 import argparse
 import getpass
@@ -148,14 +148,16 @@ def install(args):
             runtime_jobs[runtime] = running.get(job_name) or script_job(
                 base, site, RELEASE / 'install/runtime.sbatch', [runtime], job_name, logs, cpu_partition(site))
         checkpoint = profile['checkpoint']
-        if (inference.checkpoint_dir(base, site, checkpoint) / 'download_manifest.json').exists():
-            print('checkpoint {}: installed'.format(checkpoint))
-        elif 'install-checkpoint-' + checkpoint in running:
-            print('checkpoint {}: job {} is already running'.format(checkpoint, running['install-checkpoint-' + checkpoint]))
+        folder = inference.checkpoint_dir(base, site, checkpoint)
+        job_name = ('install-config-' if args.config_only else 'install-checkpoint-') + checkpoint
+        if (folder / 'download_manifest.json').exists() or (args.config_only and (folder / 'config.json').exists()):
+            print('checkpoint {}: {} installed'.format(checkpoint, 'configuration' if args.config_only else 'weights'))
+        elif job_name in running:
+            print('checkpoint {}: job {} is already running'.format(checkpoint, running[job_name]))
         else:
             # The download runs inside the profile's own image, so it waits for that runtime.
-            script_job(base, site, RELEASE / 'install/checkpoint.sbatch', [name], 'install-checkpoint-' + checkpoint,
-                       logs, cpu_partition(site), dependency=runtime_jobs.get(runtime))
+            script_job(base, site, RELEASE / 'install/checkpoint.sbatch', [name], job_name, logs, cpu_partition(site),
+                       dependency=runtime_jobs.get(runtime), environment={'CONFIG_ONLY': '1'} if args.config_only else None)
     if args.link_client:
         tool = inference.catalog()['tools']['chisel']
         if (base / 'tools' / ('chisel-' + tool['version'])).exists():
@@ -283,7 +285,8 @@ def diagnose(args):
     base = site_base(args.base)
     site = load_site(base)
     output = inference.private_dir(inference.private_dir(user_dir(base)) / 'logs') / '%x-%j.out'
-    script = RELEASE / 'diagnostics' / {'probe': 'probe.sbatch', 'reach': 'reach.sbatch', 'nccl': 'nccl_check.sbatch'}[args.check]
+    script = RELEASE / 'diagnostics' / {'probe': 'probe.sbatch', 'reach': 'reach.sbatch', 'nccl': 'nccl_check.sbatch',
+                                        'compat': 'compat_check.sbatch'}[args.check]
     environment = {}
     if args.check == 'reach':
         environment = {k: v for k, v in (('TARGET', args.target), ('PROBE_PROXY', args.proxy), ('LINK_URL', args.link_url)) if v}
@@ -291,7 +294,12 @@ def diagnose(args):
         environment = {'PROBE_PROXY': args.proxy}
     elif args.check == 'nccl':
         environment = {'RUNTIME': args.runtime}
-    name = {'probe': 'probe', 'reach': 'reach', 'nccl': 'nccl-check'}[args.check]
+    elif args.check == 'compat':
+        if not args.profile:
+            raise ValueError('diagnose compat needs --profile, e.g. --profile glm53')
+        inference.profile_check(load(ROOT / 'profiles' / (identifier(args.profile) + '.json')))
+        environment = {'PROFILE': args.profile}
+    name = {'probe': 'probe', 'reach': 'reach', 'nccl': 'nccl-check', 'compat': 'compat-check'}[args.check]
     # reach tests what the router's CPU queue can see; probe and NCCL need GPUs (debug QoS, set in the scripts).
     partition = cpu_partition(site) if args.check == 'reach' else site['partition']
     script_job(base, site, script, [], name, output, partition, environment=environment)
@@ -318,6 +326,7 @@ def main():
     p = command('install', 'download runtimes and weights for profiles')
     p.add_argument('profiles', nargs='*', metavar='PROFILE')
     p.add_argument('--link-client', action='store_true', help='also the chisel client for the cluster link')
+    p.add_argument('--config-only', action='store_true', help="only the models' configuration files, not the weights")
     p = command('up', 'prepare and submit a model server')
     p.add_argument('profile')
     p.add_argument('--qos')
@@ -336,12 +345,13 @@ def main():
     p.add_argument('--hours', type=float, default=12)
     p.add_argument('--restart', action='store_true')
     p.add_argument('--set', action='store_true', help='token: replace it with the one on stdin')
-    p = command('diagnose', 'submit a probe, reachability or NCCL check job')
-    p.add_argument('check', choices=['probe', 'reach', 'nccl'])
+    p = command('diagnose', 'submit a probe, reachability, NCCL or compatibility check job')
+    p.add_argument('check', choices=['probe', 'reach', 'nccl', 'compat'])
     p.add_argument('--target', help='reach: host:port of a running probe')
     p.add_argument('--proxy', help='probe/reach: also try this HTTP proxy')
     p.add_argument('--link-url', help='reach: also check this cluster link URL')
     p.add_argument('--runtime', default='vllm-0.31.0', help='nccl: runtime image to use')
+    p.add_argument('--profile', help='compat: the profile whose runtime and model to check')
     args = parser.parse_args()
     if not args.command:
         parser.print_help()

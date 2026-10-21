@@ -1,0 +1,14 @@
+{
+  "job_id": "61591887",
+  "host": "[COMPUTE_NODE]",
+  "port": 32887,
+  "model": "qwen3-235b-a22b-fp8-leonardo",
+  "profile": "qwen235b",
+  "runtime": "vllm-backport-sm80-0.13.1",
+  "release": "inference/2026-10-20-unified",
+  "nodes": "[COMPUTE_NODE_LIST]",
+  "checks_passed": 7,
+  "ready_at": "2026-10-21T07:53:32.440053+02:00",
+  "slurm_expected_end": "2026-10-21T08:09:43",
+  "note": "Service stops about 90 seconds before allocation expiry."
+}

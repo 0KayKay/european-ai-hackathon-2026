@@ -24,18 +24,46 @@
   "scope": "One operator account; short functional API checks (7 per suite: 401 without key, model catalog, exact arithmetic, English answer, SSE streaming, forced tool-call JSON, 4 concurrent requests), once at startup and twice through an SSH tunnel. Not validated: other team accounts, sustained load, long context, unattended operation.",
   "runs": {
     "qwen235b": {
-      "date": "2026-10-19",
-      "job_id": "61389137",
+      "date": "2026-10-21",
+      "job_id": "61612274",
       "nodes": 2,
       "gpus": 8,
       "parallelism": {
         "tensor": 4,
         "pipeline": 2
       },
-      "health_after_seconds": 420.42,
+      "runtime": "vllm-backport-sm80-0.13.1",
       "qos": "boost_qos_dbg, 00:30:00 (profile default stays boost_qos_lprod, 02:00:00)",
-      "code": "Exactly validated_files_sha256.",
-      "evidence": "runs/2026-10-19-qwen235b"
+      "code": "Commit c472236 (the unified serve/), hashes in files_sha256. The same server answered through the router and cli.py forward, plain and streamed.",
+      "files_sha256": {
+        "catalog.json": "7d355d818684d41fef90e4392e2529e762614777b560f2740d84da22e10b16ec",
+        "client.py": "ad6770d5d47a8530a4a2901cfb7bcd4250af3ab43cd6dac0ff5817a7011cefbe",
+        "hooks/nccl_ep.py": "e2a51d455d1e4e040854b5b97fc7c448fcbebbf89f6c66cff5cd859f976f1630",
+        "hooks/warm_engram.py": "835074a2e39444c6970923bc882de291e4818af0947e05451bd6abcdfbdf9e89",
+        "inference.py": "2aea173b96644fb5016cbdddf981d4a193cda7f2f5f6b9ddc3caff3cc76d7497",
+        "lifecycle.py": "1485226c49db2dca8e88cc6e954a13d57865be3eaea0c594ee2a38bc101a65fe",
+        "node.py": "21e5fa9874932174cc3078af01b2d92b5dad26d122350b2cb227ed1546c4efe8",
+        "prepare_run.sh": "033bc136770dd19e1508894ab18b9c22c10a48a20071cb2a8588c839324b4ad5",
+        "profiles/deepseek41.json": "a3519da4b8209410ae2b6e3cc7576e57e7de08ded4173784cd8ae0a1b198fbc0",
+        "profiles/glm53.json": "dabd5597f725cd48928806e75b281e77ce669c777cc324ef121317a74d52b448",
+        "profiles/qwen06b.json": "3fe650803522ffc370b30f6594f83327dacff75c03eb7ffd9e526c37f92a30c3",
+        "profiles/qwen235b.json": "bd6731d40827ff3a95c6bff0529cdbd428ee54a0d585565c0f303d7a028a41e7",
+        "registry.py": "6257e6fc606e28fd4fb252bfa8ae9bff70b6ae3f8dc162a11744b6a1e3e8519e",
+        "router.py": "d62c45982a0c04ac30cf295252c8210e693e4906e943d4397bda5f18afb024f7",
+        "router.sbatch": "2ae1bf6695b6b126faa7c5723832fd6f0335e676c1896363c8b488c016c26810",
+        "serve_model.sbatch": "ed3c145e69dc5d6f958bad6c97104d8aafd91ab23c5d2b6a9c24eb32d5b7d7d6",
+        "submit_server.sh": "91f1f82e423e1aad97a1827a76a0874e2912130bb4d43d22dad7ed1162d006b9",
+        "team.py": "3eb526f40de4438f66a5f520c680c178e578aa5c6b0047f47afacf9e6f6fd325",
+        "test_endpoint.py": "a2609712000ce3a4ec1f65c8c6ac2f26a29141cf6dec998974935cb39ac56776"
+      },
+      "evidence": "runs/2026-10-21-qwen235b",
+      "evidence_kind": "job log: the seven check lines and INFERENCE_READY, verbatim; and a reply through the router",
+      "previous": {
+        "date": "2026-10-19",
+        "job_id": "61389137",
+        "code": "the earlier launcher (validated_files_sha256)",
+        "evidence": "runs/2026-10-19-qwen235b"
+      }
     },
     "glm53": {
       "date": "2026-10-18",

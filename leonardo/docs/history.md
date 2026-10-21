@@ -13,6 +13,7 @@
 | 20 Oct | Copied into this repository and consolidated (below). |
 | 20 Oct | Unified: `bringup/` folded into `serve/` (stock vLLM runtime, one-GPU profile, check suites) and `diagnostics/`; team registry, router job, laptop CLI for everything from `init` to `down`, opt-in cluster link to GKE. |
 | 20 Oct | First runs of the unified launcher on Leonardo, from a fresh team folder: install of the stock runtime and Qwen3-0.6B, then `qwen06b` (job 61559851) with 7/7 checks and a streamed reply through the router. The first two attempts failed only the exact-`42` checks: the model answered `17 + 25 = 42`, so those checks now accept phrased answers. |
+| 21 Oct | `qwen235b` on the unified launcher (job 61612274): backport runtime and weights installed from scratch by `cli.py install`, 7/7 checks on two nodes, and a reply through the router. |
 
 Startup times to a healthy API (cold caches, excluding queue): Qwen 7.0 min, GLM 13.3 min, DeepSeek 25.8 min.
 

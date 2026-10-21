@@ -9,14 +9,14 @@ moderation classifiers. It is a reusable template: everything below starts from 
 
 | Profile | Model | Served as | Hardware | Cold start | Status |
 | --- | --- | --- | --- | --- | --- |
-| `qwen235b` | Qwen3-235B-A22B-FP8 | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | 7 min | GPU-validated |
+| `qwen235b` | Qwen3-235B-A22B-FP8 | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | 7 min | GPU-validated, current launcher |
 | `glm53` | GLM-5.3-Flash | `glm-5.3-flash-leonardo` | 2 nodes, 8 A100 | 13 min | GPU-validated |
 | `deepseek41` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-leonardo` | 2 nodes, 8 A100 | 26 min | GPU-validated |
 | `qwen06b` | Qwen3-0.6B | `qwen3-0.6b-leonardo` | 1 A100 | 1.5 min | GPU-validated, current launcher |
 | `qwen235b-stock` | Qwen3-235B-A22B-FP8 on stock vLLM | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | | ran on 8 Oct, not with this launcher |
 
 The large models run with a 2,048-token context and 4 concurrent sequences (DeepSeek: 2) for up to two
-hours per job. The large models were validated with an earlier version of the launcher; see
+hours per job. GLM and DeepSeek were validated with an earlier version of the launcher; see
 [Validation status](#validation-status). `qwen235b-stock` is the configuration that first ran Qwen-235B on
 stock vLLM 0.31.0, a fallback that does not need the community SM80 runtime; it serves the same name as
 `qwen235b`, so run only one of the two. [docs/research.md](docs/research.md) explains what each model
@@ -267,11 +267,14 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 `serve/` files it ran with, and `python3 leonardo/tools/check_repository.py` lists what has changed since
 each run. With the current launcher, `qwen06b` went through the whole path on Leonardo on 20 Oct: `init`,
 `install` (stock vLLM runtime and weights), `up` with all seven checks, and a streamed reply through the
-router and `cli.py forward`. The three large models passed with an earlier launcher: their profiles and the
-container command are unchanged, but `inference.py`, `lifecycle.py`, `node.py` and `test_endpoint.py`
-have changed since, so each needs one debug-queue run before the team relies on it. The backport runtime's
-install job and the cluster link have not run on Leonardo or GKE yet; the cluster link has run end to end
-in a local Kubernetes cluster with the repository's manifests ([docs/cluster-link.md](docs/cluster-link.md)). All runs used one operator account; sustained load and unattended operation are untested.
+router and `cli.py forward`. On 21 Oct, `qwen235b` passed the same seven checks on two nodes with the
+backport runtime and the current launcher, and answered through the router. GLM and DeepSeek passed with an
+earlier launcher: their profiles and the container command are unchanged, but `inference.py`,
+`lifecycle.py`, `node.py` and `test_endpoint.py` have changed since, so each needs one debug-queue run
+before the team relies on it. Both runtimes were installed from scratch by `cli.py install`. The cluster
+link has not run on Leonardo or GKE yet; it has run end to end in a local Kubernetes cluster with the
+repository's manifests ([docs/cluster-link.md](docs/cluster-link.md)). All runs used one operator account;
+sustained load and unattended operation are untested.
 
 ## Contributing and extending
 

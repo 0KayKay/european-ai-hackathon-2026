@@ -14,6 +14,7 @@
 | 20 Oct | Unified: `bringup/` folded into `serve/` (stock vLLM runtime, one-GPU profile, check suites) and `diagnostics/`; team registry, router job, laptop CLI for everything from `init` to `down`, opt-in cluster link to GKE. |
 | 20 Oct | First runs of the unified launcher on Leonardo, from a fresh team folder: install of the stock runtime and Qwen3-0.6B, then `qwen06b` (job 61559851) with 7/7 checks and a streamed reply through the router. The first two attempts failed only the exact-`42` checks: the model answered `17 + 25 = 42`, so those checks now accept phrased answers. |
 | 21 Oct | `qwen235b` on the unified launcher (job 61612274): backport runtime and weights installed from scratch by `cli.py install`, 7/7 checks on two nodes, and a reply through the router. |
+| 21 Oct | First GPU run of `diagnose compat` (job 61615003, `qwen235b` on the backport runtime): A100 BF16 matmul, model import with pipeline parallelism, and the TileLang mHC kernel against vLLM's PyTorch reference (largest error 0.002), `COMPAT_OK`. The router on the current code serves `/health` with the link state on Leonardo's Python 3.6. |
 
 Startup times to a healthy API (cold caches, excluding queue): Qwen 7.0 min, GLM 13.3 min, DeepSeek 25.8 min.
 

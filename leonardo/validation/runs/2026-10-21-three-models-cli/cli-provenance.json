@@ -1,0 +1,56 @@
+{
+  "source_commit": "96f998e410a4c129c7be2c00a20d0374a740e968",
+  "cli_release_hash": "a4c0ab387e5527fe",
+  "cli_sha256": "b90ac1f5abb6c212c308ede17424e0833c3678ae600221f730982dfcde7b1d36",
+  "client_cpu_job_id": "61591819",
+  "model_up_arguments": {
+    "qwen235b": [
+      "up",
+      "qwen235b",
+      "--qos",
+      "boost_qos_dbg",
+      "--time",
+      "00:30:00"
+    ],
+    "glm53": [
+      "up",
+      "glm53",
+      "--qos",
+      "boost_qos_dbg",
+      "--time",
+      "00:30:00"
+    ],
+    "deepseek41": [
+      "up",
+      "deepseek41",
+      "--qos",
+      "boost_qos_dbg",
+      "--time",
+      "00:30:00"
+    ]
+  },
+  "router_up_arguments": [
+    "router",
+    "up",
+    "--hours",
+    "2"
+  ],
+  "laptop_forward_arguments": [
+    "forward",
+    "--local-port",
+    "18000"
+  ],
+  "client_suite_arguments": [
+    "test_endpoint.py",
+    "--base-url",
+    "<actual-router-url>",
+    "--api-key-file",
+    "<private-router-token-file>",
+    "--profile",
+    "<exact-run-profile>",
+    "--output",
+    "<suite-result.json>"
+  ],
+  "runtime_installation": "Verified existing runtime/checkpoints reused via site mappings; CLI install reported assets installed. No fresh download.",
+  "runtime_sif_sha256": "775d1d1acecb610301473c9b8ab74deb08bbec1766691fdf9e7c4fcea4957fa1"
+}

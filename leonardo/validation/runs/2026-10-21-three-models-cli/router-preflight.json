@@ -1,0 +1,24 @@
+{
+  "job_id": "61591661",
+  "checks": [
+    {
+      "path": "/health",
+      "authenticated": false,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "path": "/v1/models",
+      "authenticated": false,
+      "status": 401,
+      "passed": true
+    },
+    {
+      "path": "/v1/models",
+      "authenticated": true,
+      "status": 200,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

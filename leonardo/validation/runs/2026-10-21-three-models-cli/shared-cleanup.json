@@ -1,0 +1,12 @@
+{
+  "router_job_ended": true,
+  "router_endpoint_withdrawn": true,
+  "transient_model_keys_removed": true,
+  "router_token_removed": true,
+  "passed": true,
+  "controller_job_completed": true,
+  "all_recorded_model_router_controller_steps_ended": true,
+  "cli_forward_stopped": true,
+  "local_listener_closed": true,
+  "local_router_token_removed": true
+}

@@ -53,9 +53,11 @@ machine with the real router code and chisel client, and checks:
   the router's status shows the outage and the reconnect;
 - with the router stopped, agentgateway answers 503 at once instead of hanging.
 
-Not tested, because they need the real GKE and Leonardo: the GCE load balancer passing the WebSocket
-through the Ingress (the BackendConfig timeout is set for it), the managed certificate seen by the chisel
-client, and whether Leonardo's CPU queue may open an outbound HTTPS connection to the cluster at all. The
+Not tested, because they need the real GKE: the GCE load balancer passing the WebSocket through the
+Ingress (the BackendConfig timeout is set for it), and the managed certificate seen by the chisel client.
+Leonardo's CPU queue does reach `https://european-ai-hackathon-2026.codify.ch` directly, without a proxy
+(checked on 21 Oct, before the component was deployed); whether it may use that for the link is the
+organisers' decision. The
 local recovery time depended on how long the client's TCP dial to a Service without a ready pod hung; behind
 the load balancer, TCP connections are always accepted, and the client retries at least every 30 s.
 

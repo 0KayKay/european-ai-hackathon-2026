@@ -72,5 +72,5 @@ flowchart LR
 | Does that queue have outbound internet? | Yes: install jobs download there. |
 | Does the whole chain work (agentgateway, routes, guardrails, Services, chisel, router)? | Yes, in a local k3s cluster with this repository's manifests: [tests/cluster_link_poc](../tests/cluster_link_poc/run.sh). |
 | Does the GCE load balancer pass the WebSocket through the Ingress? | Not tested. Check with the `curl` in the cluster README (expects `101`). |
-| Can Leonardo's CPU queue reach that URL? | Not tested. `cli.py diagnose reach --link-url https://<app host>/leonardo-link` (expects `101`). |
+| Can Leonardo's CPU queue reach that URL? | Yes, directly, without a proxy (`diagnose reach`, job 61614655, 21 Oct: the app's frontend answered, since the link server is not deployed yet). Once it is, the same check should report `101`. |
 | Do the organisers allow it? | Open. The link stays off until they do. |

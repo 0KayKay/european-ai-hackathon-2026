@@ -1,0 +1,14 @@
+{
+  "job_id": "61591889",
+  "host": "[COMPUTE_NODE]",
+  "port": 32889,
+  "model": "glm-5.3-flash-leonardo",
+  "profile": "glm53",
+  "runtime": "vllm-backport-sm80-0.13.1",
+  "release": "inference/2026-10-20-unified",
+  "nodes": "[COMPUTE_NODE_LIST]",
+  "checks_passed": 7,
+  "ready_at": "2026-10-21T07:49:14.222031+02:00",
+  "slurm_expected_end": "2026-10-21T08:09:58",
+  "note": "Service stops about 90 seconds before allocation expiry."
+}

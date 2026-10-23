@@ -1,14 +1,18 @@
 import httpx
+from urllib.parse import unquote
 from fastapi import HTTPException, Request
 
 from hackathon.config import get_settings
 
 
 async def require_user(request: Request) -> str:
-    if get_settings().is_local:
+    settings = get_settings()
+    cookie = request.headers.get("cookie")
+    if settings.is_local and not cookie:
+        request.state.user_email = "local@codify.ch"
+        request.state.user_name = "Local user"
         return "local-user"
 
-    cookie = request.headers.get("cookie")
     if not cookie:
         raise HTTPException(status_code=401, detail="Sign in required")
 
@@ -29,4 +33,11 @@ async def require_user(request: Request) -> str:
     user_id = response.headers.get("x-auth-user")
     if not user_id:
         raise HTTPException(status_code=503, detail="Authentication unavailable")
-    return user_id
+    request.state.user_email = response.headers.get("x-auth-email", "")
+    request.state.user_name = unquote(response.headers.get("x-auth-name", "User"))
+    return "local-user" if settings.is_local else user_id
+
+
+def is_internal(request: Request) -> bool:
+    email = getattr(request.state, "user_email", "").lower()
+    return email.endswith("@lapiscode.com") or email.endswith("@codify.ch")

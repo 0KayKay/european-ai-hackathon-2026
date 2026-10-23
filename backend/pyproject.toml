@@ -6,6 +6,7 @@ dependencies = [
     "ag-ui-protocol>=1.0.0",
     "alembic>=1.20.0",
     "asyncpg>=0.32.0",
+    "emoji>=2.16.0",
     "fastapi",
     "httpx>=0.28.1",
     "logfire[fastapi]>=5.1.1",
@@ -13,6 +14,7 @@ dependencies = [
     "orjson>=3.13.0",
     "pydantic-ai>=2.55.0",
     "pydantic-settings>=2.15.0",
+    "silverspeak==2.2.0",
     "sqlalchemy>=2.1.4",
     "structlog>=26.1.0",
     "tenacity>=9.1.4",
@@ -21,6 +23,8 @@ dependencies = [
 
 [tool.uv]
 package = false
+# Legacy silverspeak pins a pandas release without Python 3.14 wheels.
+override-dependencies = ["pandas>=2.3.3,<3"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

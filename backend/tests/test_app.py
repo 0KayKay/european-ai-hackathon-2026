@@ -178,7 +178,7 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
         return Mock(), {
             "mailbox": "finance-fast-test@internal.com",
             "difficulty": "EASY",
-            "mode": "CHALLENGE_1",
+            "mode": "PLAYGROUND",
         }
 
     span = Mock()
@@ -323,3 +323,36 @@ def test_agent_uses_gateway_for_model_requests(monkeypatch) -> None:
     assert agent.model.model_name == "gemini-3.8-flash"
     assert str(agent.model.provider.base_url) == "http://agentgateway:3000/v1/"
     get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_local_signed_in_user_keeps_name_and_existing_local_identity(monkeypatch):
+    import hackathon.api.auth as auth_api
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        auth_api,
+        "get_settings",
+        lambda: Mock(is_local=True, AUTH_SERVICE_URL="http://auth"),
+    )
+    monkeypatch.setattr(
+        auth_api.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    204,
+                    headers={
+                        "x-auth-user": "github-user",
+                        "x-auth-name": "Alex%20Example",
+                        "x-auth-email": "alex@example.com",
+                    },
+                )
+            )
+        ),
+    )
+    request = Request(
+        {"type": "http", "headers": [(b"cookie", b"better-auth.session_token=signed")]}
+    )
+    assert await require_user(request) == "local-user"
+    assert request.state.user_name == "Alex Example"

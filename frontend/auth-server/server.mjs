@@ -46,7 +46,13 @@ createServer(async (req, res) => {
 				return;
 			}
 			if (req.url?.startsWith("/api/auth/authorize")) {
-				res.writeHead(204, { "x-auth-user": session.user.id }).end();
+				res
+					.writeHead(204, {
+						"x-auth-user": session.user.id,
+						"x-auth-email": session.user.email,
+						"x-auth-name": encodeURIComponent(session.user.name || "User"),
+					})
+					.end();
 				return;
 			}
 		} catch {

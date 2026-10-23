@@ -10,9 +10,17 @@ import {
 } from "@/components/ui/popover";
 
 export type Difficulty = "EASY" | "MEDIUM" | "HARD";
-export type ChatMode = "PLAYGROUND" | "CHALLENGE_1";
+export type ChatMode =
+	| "PLAYGROUND"
+	| "CHALLENGE_1"
+	| "CHALLENGE_2"
+	| "CHALLENGE_3";
+export type ChallengeSubmission =
+	| { kind: "email"; subject: string; body: string }
+	| { kind: "offer"; hiddenInstructions: string };
 export type ChatState = {
 	settings: { model_id: string; mode: ChatMode; difficulty: Difficulty };
+	submission?: ChallengeSubmission;
 };
 export const defaultModelId = "gemini-3.8-flash";
 

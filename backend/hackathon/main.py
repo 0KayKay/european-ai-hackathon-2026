@@ -5,8 +5,8 @@ import structlog
 import uvicorn
 from fastapi import FastAPI
 
-from hackathon.api.guardrails import router as guardrails_router
 from hackathon.api.router import router as ag_ui_router
+from hackathon.api.challenges import router as challenges_router
 from hackathon.config import get_settings
 from hackathon.extensions import (
     LogCorrelationIdMiddleware,
@@ -32,7 +32,7 @@ app = FastAPI(title=get_settings().APP_NAME, lifespan=lifespan)
 app.add_middleware(LogCorrelationIdMiddleware)
 app.add_exception_handler(Exception, global_exception_handler)
 app.include_router(ag_ui_router)
-app.include_router(guardrails_router)
+app.include_router(challenges_router)
 if settings.PHOENIX_OTLP_ENDPOINT:
     configure_tracing(app, settings.PHOENIX_OTLP_ENDPOINT)
 

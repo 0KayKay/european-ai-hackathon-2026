@@ -7,6 +7,7 @@ COPY index.html ./
 COPY tsconfig.app.json ./
 COPY vite.config.ts ./
 COPY src ./src
+COPY public ./public
 RUN pnpm build
 
 FROM caddy:2.11-alpine

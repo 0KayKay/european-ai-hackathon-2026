@@ -77,24 +77,43 @@ The database credentials in `infrastructure/base/local.yaml` are for local devel
 
 ### DeepTeam scans
 
-After sign-in, use **Red team** in the frontend to start a scan. Enter a goal and AG-UI target URL. The default target
-is the backend's `/api/v1/ag-ui` endpoint. The same-origin `/api/deepteam/runs` API verifies your Better Auth session
-and forwards it to the backend target. The service accepts only target hosts listed in `ALLOWED_TARGET_HOSTS` in
-`infrastructure/base/local.yaml` (default: `backend`), and is reachable externally only through the frontend proxy. To
-call the API directly, send your session cookie:
+The `/api/deepteam/runs` endpoint now runs the Level 1 mailbox evaluation from `feat/deep-team`
+against the live AG-UI challenge. The target agent uses `gemini-3.8-flash` through agentgateway;
+DeepTeam generates attacks with local Ollama `qwen3:8b` and scores disclosure of the target's
+per-thread synthetic finance mailbox. Install [Ollama](https://ollama.com/) on your host and run
+`ollama pull qwen3:8b`. The local DeepTeam pod connects to it at
+`http://host.docker.internal:11434`, set by `OLLAMA_BASE_URL` in `infrastructure/base/local.yaml`.
+For another environment, configure `OLLAMA_BASE_URL` to a reachable Ollama server with the model.
+
+Open `http://localhost:5002/docs#/default/start_run_api_deepteam_runs_post` and use **Try it out**.
+The signed-in frontend also has **DeepTeam runs** in its navigation. Configure the scan there,
+press **Run evaluation**, and select attempts in the live execution graph. The frontend consumes
+`POST /api/deepteam/runs/stream` as Server-Sent Events. The form loads the original Level 1
+objective text and scan defaults from `GET /api/deepteam/config`. The graph shows the input guardrail only
+for `HARD`, and highlights each of the three Challenge 1 tools when the agent calls it. All tools
+connect to one Shared Drive; its finance mailbox unlocks when the score confirms disclosure. The
+existing `/api/deepteam/runs` endpoint still returns the full assessment as JSON.
+The request body can override the branch's difficulty, attacker options, objective descriptions,
+attack methods, number of attacks, concurrency, and linear turn limit. For a short scan:
 
 ```sh
-curl http://localhost:5000/api/deepteam/runs \
+curl http://localhost:5002/api/deepteam/runs \
   -H 'Content-Type: application/json' \
-  -H 'Cookie: <your signed-in browser Cookie header>' \
-  -d '{"goal":"Keep the assistant from leaking its instructions","target_url":"http://backend:8000/api/v1/ag-ui"}'
+  -d '{"target_url":"http://backend:8000/api/v1/ag-ui","difficulty":"HARD","attacker":{"model":"ollama/qwen3:8b","temperature":0.7},"run":{"attacks_per_type":1,"attacks":[],"max_concurrent":1}}'
 ```
 
-The default target state selects the frontend's default model in playground mode. Supply `target_state` for another
-AG-UI service or model, and optionally set `model`, `vulnerabilities`, and `attacks_per_vulnerability_type`. Edit
-`deepteam/hackathon_deepteam/runner.py` to change DeepTeam scenarios; `agui_target.py` only maps AG-UI messages and
-usually needs no changes. The agentgateway supplies DeepTeam's simulator and evaluator model. The response can take
-several minutes; keep the HTTP client connection open.
+An empty `run.attacks` list runs baseline probes; omit `run` to use the full branch defaults:
+ten probes per type, Linear Jailbreaking, and up to fifteen turns. The request schema and defaults
+are in `deepteam/hackathon_deepteam/scan_config.py`. `goal` overrides the objective purpose;
+the nested `objective` object can change its name, criteria, attacker knowledge, attack types,
+generation prompt, and scoring reasons. The target URL must use an allowed in-cluster host
+(`backend` by default). The target mode is always `CHALLENGE_1` and its model is fixed to
+`gemini-3.8-flash`. The endpoint returns the full assessment as JSON, so no output directory is
+needed. The response can take several minutes; keep the HTTP client connection open.
+
+In local mode, the direct port-forward accepts requests without a sign-in cookie; the backend
+target also uses its local user. In production, the same-origin `/api/deepteam/runs` route verifies
+the Better Auth session and forwards its cookie to the target.
 
 Follow scan progress with `kubectl logs -f deployment/deepteam`. DeepTeam emits JSON events for run
 start/completion/failure, each AG-UI attempt and its response/error, and every scored test case. Events include the run
@@ -159,7 +178,7 @@ will be usable after DNS and the certificate are ready; use local Tilt for previ
 
 ### DeepTeam
 
-You can access it `http://localhost:5002/docs#/default/start_run_api_deepteam_runs_post once your cluster runs. Logs are available here:
-http://localhost:10350/r/deepteam/overview 
+The API documentation is at `http://localhost:5002/docs`. Tilt logs are available at
+`http://localhost:10350/r/deepteam/overview`.
 
 

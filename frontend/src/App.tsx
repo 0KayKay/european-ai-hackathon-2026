@@ -1,11 +1,13 @@
 import { useState } from "react";
 import AGUIPlayground from "./AGUIPlayground";
 import { Button } from "./components/ui/button";
+import DeepTeamWorkspace from "./DeepTeamWorkspace";
 import { authClient } from "./lib/auth-client";
 
 export default function App() {
 	const { data: session, isPending } = authClient.useSession();
 	const [error, setError] = useState("");
+	const [view, setView] = useState<"playground" | "deepteam">("playground");
 
 	if (isPending) {
 		return (
@@ -43,10 +45,16 @@ export default function App() {
 		);
 	}
 
-	return (
+	return view === "deepteam" ? (
+		<DeepTeamWorkspace
+			onBack={() => setView("playground")}
+			onSignOut={() => void authClient.signOut()}
+		/>
+	) : (
 		<AGUIPlayground
 			userName={session.user.name}
 			onSignOut={() => void authClient.signOut()}
+			onOpenDeepTeam={() => setView("deepteam")}
 		/>
 	);
 }

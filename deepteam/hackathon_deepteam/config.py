@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     ENV: Literal["local", "prod"] = "prod"
     AGENTGATEWAY_BASE_URL: str
     AGENTGATEWAY_API_KEY: str
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
     AUTH_SERVICE_URL: str = "http://localhost:3005"
     ALLOWED_TARGET_HOSTS: str = "backend"
     LOG_LEVEL: Literal["debug", "info", "warning", "error"] = "info"

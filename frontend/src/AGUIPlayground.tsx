@@ -18,6 +18,7 @@ import {
 	MinusIcon,
 	PlusIcon,
 	TargetIcon,
+	WorkflowIcon,
 	XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -120,9 +121,11 @@ function InitialAgentState({
 export default function AGUIPlayground({
 	userName,
 	onSignOut,
+	onOpenDeepTeam,
 }: {
 	userName?: string;
 	onSignOut?: () => void;
+	onOpenDeepTeam?: () => void;
 }) {
 	const [mode, setMode] = useState<ChatMode>("CHALLENGE_1");
 	const [difficulty, setDifficulty] = useState<Difficulty>("EASY");
@@ -291,6 +294,16 @@ export default function AGUIPlayground({
 							Explore
 						</p>
 						{sectionButtons}
+						{onOpenDeepTeam && (
+							<button
+								type="button"
+								onClick={onOpenDeepTeam}
+								className="flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+							>
+								<WorkflowIcon className="size-4" />
+								DeepTeam runs
+							</button>
+						)}
 					</nav>
 					<div className="flex flex-1 flex-col px-3 py-5">
 						<p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -350,6 +363,16 @@ export default function AGUIPlayground({
 							aria-label="Sections"
 						>
 							{sectionButtons}
+							{onOpenDeepTeam && (
+								<button
+									type="button"
+									onClick={onOpenDeepTeam}
+									className="flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium"
+								>
+									<WorkflowIcon className="size-4" />
+									DeepTeam
+								</button>
+							)}
 							<div className="ml-1 shrink-0 border-l pl-2">
 								<Button
 									type="button"

@@ -149,7 +149,7 @@ spec:
               valueFrom:
                 secretKeyRef: {name: github-oauth, key: auth_secret}
             - name: GITHUB_CLIENT_ID
-              value: Ov23liQaIDLiOcBbnFp0
+              value: Ov23li6AR2aW56THhsTJ
             - name: GITHUB_CLIENT_SECRET
               valueFrom:
                 secretKeyRef: {name: github-oauth, key: client_secret}
@@ -349,6 +349,8 @@ spec:
             - name: AGENTGATEWAY_API_KEY
               valueFrom:
                 secretKeyRef: {name: gateway-internal, key: key}
+            - name: OLLAMA_BASE_URL
+              value: http://host.docker.internal:11434
             - name: AUTH_SERVICE_URL
               value: http://auth:3000
             - name: ALLOWED_TARGET_HOSTS

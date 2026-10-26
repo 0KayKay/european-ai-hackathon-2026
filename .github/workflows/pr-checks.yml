@@ -47,8 +47,9 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
       - run: python3 tools/check_repository.py
       - run: python3 -m unittest discover -s tests -v
-      # Leonardo's login nodes run Python 3.6; the admin CLI needs 3.7 on the admin's machine.
-      - run: uvx vermin==1.9.2 --target=3.6- --no-tips --violations serve tools diagnostics install tests
+      # Leonardo's login nodes run Python 3.6; the admin CLI needs 3.7 on the admin's machine. Excluded: code
+      # that runs inside containers with a modern Python (the compatibility check, the cluster link PoC stubs).
+      - run: uvx vermin==1.9.2 --target=3.6- --no-tips --violations --exclude-regex 'compat_check\.py$|cluster_link_poc/' serve tools diagnostics install tests
       - run: uvx vermin==1.9.2 --target=3.7- --no-tips --violations cli.py
 
   frontend:

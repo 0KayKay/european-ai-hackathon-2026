@@ -15,7 +15,7 @@
     "profiles/qwen06b.json": "3fe650803522ffc370b30f6594f83327dacff75c03eb7ffd9e526c37f92a30c3",
     "profiles/qwen235b.json": "bd6731d40827ff3a95c6bff0529cdbd428ee54a0d585565c0f303d7a028a41e7",
     "registry.py": "6257e6fc606e28fd4fb252bfa8ae9bff70b6ae3f8dc162a11744b6a1e3e8519e",
-    "router.py": "d62c45982a0c04ac30cf295252c8210e693e4906e943d4397bda5f18afb024f7",
+    "router.py": "e429cd2644b922223cfcafa0b8f3f6d59aa6c5aedb056a6588d91c489da9061b",
     "router.sbatch": "2ae1bf6695b6b126faa7c5723832fd6f0335e676c1896363c8b488c016c26810",
     "runtime_patches/pp_kv_empty_groups/pp_kv_guard.py": "d87aba9acb44929dc2c3b6edd561ae713b8bc80d2e896bc5f3e5985d19e29aab",
     "runtime_patches/pp_kv_empty_groups/sitecustomize.py": "6e847d74dee3d59a11e5b9ccf1e5208de486744bb4f10d009ce5ca27003650b7",

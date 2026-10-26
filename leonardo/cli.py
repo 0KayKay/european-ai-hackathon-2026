@@ -51,6 +51,7 @@ COMMANDS = {
                 '  install/runtime.sbatch     image from serve/catalog.json, overlay packages, install/register_runtime.py\n'
                 '  install/checkpoint.sbatch  weights from Hugging Face, as pinned in serve/profiles/<profile>.json\n'
                 '  install/link_client.sbatch chisel client for the cluster link (--link-client)\n'
+                'With --config-only, the checkpoint job fetches only the configuration files.\n'
                 'Logs: <team folder>/logs/.'),
     'up': ('start a model server',
            'serve/team.py up -> serve/inference.py prepare (checks assets, creates a private run directory\n'
@@ -70,9 +71,10 @@ COMMANDS = {
     'forward': ('forward a port on this laptop to your router (an SSH port forward)',
                 'Only reads serve/team.py status. Then runs ssh -N -L 127.0.0.1:<port>:<router node>:<router port>\n'
                 'through the login node, so http://127.0.0.1:<port>/v1 on this laptop reaches your router.'),
-    'diagnose': ('submit a check job: probe (GPU node), reach (CPU queue -> GPU node, internet), nccl',
-                 'serve/team.py diagnose -> diagnostics/probe.sbatch, diagnostics/reach.sbatch or\n'
-                 'diagnostics/nccl_check.sbatch (with nccl_task.sh and nccl_check.py). Logs: users/<login>/logs/.'),
+    'diagnose': ('submit a check job: probe (GPU node), reach (CPU queue -> GPU node, internet), nccl, compat',
+                 'serve/team.py diagnose -> diagnostics/probe.sbatch, diagnostics/reach.sbatch,\n'
+                 'diagnostics/nccl_check.sbatch (with nccl_task.sh and nccl_check.py) or\n'
+                 'diagnostics/compat_check.sbatch (with compat_check.py). Logs: users/<login>/logs/.'),
     'sync': ('only upload this checkout to Leonardo', 'Nothing runs; prints where the release is.'),
 }
 
@@ -183,6 +185,8 @@ def parser():
     p = command('install')
     p.add_argument('profiles', nargs='*', metavar='PROFILE', help='profiles from leonardo/serve/profiles/, e.g. qwen06b')
     p.add_argument('--link-client', action='store_true', help='also the chisel client for the cluster link')
+    p.add_argument('--config-only', action='store_true',
+                   help="only the runtime and the models' configuration files, e.g. before diagnose compat")
     p = command('up')
     p.add_argument('profile', help='a profile from leonardo/serve/profiles/, e.g. qwen235b')
     p.add_argument('--qos', help='e.g. boost_qos_dbg: starts sooner, at most 30 minutes')
@@ -204,11 +208,12 @@ def parser():
     p = command('forward')
     p.add_argument('--local-port', type=int, default=18000, help='port on this laptop (default 18000)')
     p = command('diagnose')
-    p.add_argument('check', choices=['probe', 'reach', 'nccl'])
+    p.add_argument('check', choices=['probe', 'reach', 'nccl', 'compat'])
     p.add_argument('--target', help='reach: host:port printed by a running probe')
     p.add_argument('--proxy', help='probe/reach: also try this HTTP proxy, e.g. the hackathon proxy')
     p.add_argument('--link-url', help='reach: also check the cluster link server, e.g. https://<host>/leonardo-link')
     p.add_argument('--runtime', help='nccl: installed runtime to test (default vllm-0.31.0)')
+    p.add_argument('--profile', help='compat: profile whose runtime and model to check without weights, e.g. glm53')
     command('sync')
     return top
 
@@ -236,7 +241,8 @@ def main():
     elif args.command == 'share':
         team(args, release, 'share', *args.logins, *(['--revoke'] if args.revoke else []))
     elif args.command == 'install':
-        team(args, release, 'install', *args.profiles, *(['--link-client'] if args.link_client else []))
+        team(args, release, 'install', *args.profiles, *(['--link-client'] if args.link_client else []),
+             *(['--config-only'] if args.config_only else []))
     elif args.command == 'up':
         words = ['up', args.profile]
         for flag in ('qos', 'time', 'reservation'):
@@ -251,7 +257,7 @@ def main():
         team(args, release, 'down', args.target)
     elif args.command == 'diagnose':
         words = ['diagnose', args.check]
-        for flag in ('target', 'proxy', 'link_url', 'runtime'):
+        for flag in ('target', 'proxy', 'link_url', 'runtime', 'profile'):
             if getattr(args, flag):
                 words += ['--' + flag.replace('_', '-'), getattr(args, flag)]
         team(args, release, *words)

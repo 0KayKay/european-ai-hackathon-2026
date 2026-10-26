@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "id": "glm53-abliterated",
+  "model_id": "Subnet46/GLM-5.3-Flash-Uncensored-FP8",
+  "checkpoint": "glm53-abliterated",
+  "runtime": "vllm-backport-sm80-0.13.1",
+  "served_model": "glm-5.3-flash-uncensored-fp8-leonardo",
+  "resources": {
+    "nodes": 2,
+    "gpus_per_node": 4,
+    "cpus_per_task": 32,
+    "memory": "480GB",
+    "time": "02:00:00"
+  },
+  "parallelism": {
+    "tensor": 4,
+    "pipeline": 2
+  },
+  "engine_args": [
+    "--dtype",
+    "bfloat16",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--max-model-len",
+    "2048",
+    "--max-num-seqs",
+    "4",
+    "--max-num-batched-tokens",
+    "2048",
+    "--enforce-eager",
+    "--disable-custom-all-reduce",
+    "--limit-mm-per-prompt",
+    "{\"image\":0,\"video\":0}",
+    "--safetensors-load-strategy",
+    "eager",
+    "--attention-backend",
+    "TRITON_MLA_SPARSE",
+    "--reasoning-parser",
+    "glm45",
+    "--tool-call-parser",
+    "glm47",
+    "--enable-auto-tool-choice"
+  ],
+  "environment": {},
+  "hooks": [],
+  "client": {
+    "local_port": 18089,
+    "timeout_seconds": 300,
+    "chat_template_kwargs": {
+      "reasoning_effort": "low",
+      "clear_thinking": true
+    }
+  },
+  "startup_timeout_seconds": 4800,
+  "validation": "Not GPU-validated yet. Created by cli.py profiles add from glm53 on 2026-10-26.",
+  "revision": "a0443cf77a142f8173c80c6cb38f40c103d4cc19",
+  "derived_from": "glm53"
+}

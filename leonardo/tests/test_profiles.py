@@ -122,7 +122,7 @@ class Profiles(unittest.TestCase):
         self.assertIn('serve/profiles/qwen06b-tune.json', files.split())
         listing = self.cli().stdout
         self.assertRegex(listing, r'qwen06b-tune .* not validated yet, from qwen06b')
-        self.assertRegex(listing, r'qwen06b .* validated 2026-10-20')
+        self.assertRegex(listing, r'qwen06b .* validated \d{4}-\d\d-\d\d \(job \d+\)')  # its newest recorded run
         self.assertIn('already exists', self.cli('add', 'qwen06b-tune', '--from', 'qwen06b', '--model',
                                                  'team/qwen06b-tune').stderr)
 

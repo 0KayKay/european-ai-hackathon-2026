@@ -41,6 +41,14 @@ def main():
         raise SystemExit('FAIL: serve/RELEASE_MANIFEST.json is stale: run python3 tools/update_manifest.py')
     if render_agentgateway.OUTPUT.read_text() != render_agentgateway.render():
         raise SystemExit('FAIL: infrastructure/leonardo/agentgateway.yaml is stale: run python3 tools/render_agentgateway.py')
+    # client.local_port is the laptop port serve/client.py tunnels to; two profiles on one port collide.
+    ports = {}
+    for path in sorted((SERVE / 'profiles').glob('*.json')):
+        port = json.loads(path.read_text())['client']['local_port']
+        if port in ports:
+            raise SystemExit('FAIL: profiles {} and {} share client.local_port {}; give one a free port'.format(
+                ports[port], path.stem, port))
+        ports[port] = path.stem
 
     record = json.loads((ROOT / 'validation/validated_code.json').read_text())
     for model, run in record['runs'].items():

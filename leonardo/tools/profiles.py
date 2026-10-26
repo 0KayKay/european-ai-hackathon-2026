@@ -23,6 +23,8 @@ import urllib.parse
 import urllib.request
 
 LEONARDO = Path(__file__).resolve().parents[1]
+GPU_MEMORY = 64e9  # bytes per GPU: Leonardo's A100 64 GB
+FIT = 0.75  # weights above this share of the GPUs' memory leave too little for the KV cache
 PROFILES = LEONARDO / 'serve/profiles'
 sys.path.insert(0, str(LEONARDO / 'serve'))
 sys.path.insert(0, str(LEONARDO / 'tools'))
@@ -113,16 +115,21 @@ def add(name, base_name, repo, revision='main', served=None, force=False, today=
         message = 'architecture {} differs from {} ({}); its settings may not fit'.format(
             new['config'].get('architectures'), base_name, reference['config'].get('architectures'))
         if not force:
-            raise SystemExit('Refusing: ' + message + '. Pick a base profile with the same architecture, '
-                             'or write a profile by hand (README, "Add a model").')
+            raise SystemExit('Refusing: ' + message + '. Pick a base profile with the same architecture '
+                             '(README, "Choosing a fine-tune"), or write a profile by hand.')
         warnings.append(message)
     if quantization(new['config']) != quantization(reference['config']):
-        warnings.append('quantization {} differs from {} ({}); check engine_args such as --quantization'.format(
-            quantization(new['config']), base_name, quantization(reference['config'])))
-    sizes, base_sizes = list(new['weights'].values()), list(reference['weights'].values())
-    if None not in sizes + base_sizes and sum(sizes) > 1.15 * sum(base_sizes):
-        warnings.append('weights are {:.0f} GB against {:.0f} GB for {}; they may not fit its GPUs'.format(
-            sum(sizes) / 1e9, sum(base_sizes) / 1e9, base_name))
+        flags = [a for a in base['engine_args'] if a.split('=')[0] in ('--quantization', '--dtype', '--kv-cache-dtype')]
+        warnings.append('quantization {} differs from {} ({}). vLLM reads it from the model\'s config.json; the '
+                        'settings copied from {} include {}: remove what contradicts it, then test on the debug '
+                        'queue'.format(quantization(new['config']) or 'none', base_name,
+                                       quantization(reference['config']) or 'none', base_name, ', '.join(flags) or 'none of these'))
+    sizes = list(new['weights'].values())
+    gpus = base['resources']['nodes'] * base['resources']['gpus_per_node']
+    if None not in sizes and sum(sizes) > FIT * gpus * GPU_MEMORY:
+        warnings.append('weights are {:.0f} GB, more than {:.0%} of the {} GPUs of {} ({:.0f} GB); they will not '
+                        'leave room for the KV cache. Pick a base profile with more GPUs.'.format(
+                            sum(sizes) / 1e9, FIT, gpus, base_name, gpus * GPU_MEMORY / 1e9))
 
     # After the model checks, so a model that does not fit is refused for that reason first.
     if served in {p['served_model'] for p in others}:

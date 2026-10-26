@@ -26,7 +26,10 @@ MODELS = {
     'team/llama-tune': (TUNE_SHA, {'model.safetensors': 1, **dict.fromkeys(FULL)},
                         {'architectures': ['LlamaForCausalLM'], 'model_type': 'llama'}),
     'team/qwen06b-lora': (TUNE_SHA, {'adapter_config.json': 1, 'adapter_model.safetensors': 1}, None),
-    'team/qwen06b-big': (TUNE_SHA, {'model.safetensors': 9000000000, **dict.fromkeys(FULL)}, QWEN3),
+    'team/qwen3-8b-tune': (TUNE_SHA, {'model.safetensors': 16400000000, **dict.fromkeys(FULL)}, QWEN3),
+    'team/qwen3-too-big': (TUNE_SHA, {'model.safetensors': 60000000000, **dict.fromkeys(FULL)}, QWEN3),
+    'team/qwen3-awq': (TUNE_SHA, {'model.safetensors': 1, **dict.fromkeys(FULL)},
+                       dict(QWEN3, quantization_config={'quant_method': 'awq'})),
     'team/no-tokenizer': (TUNE_SHA, {'model.safetensors': 1, 'config.json': 1}, QWEN3),
     'team/nested': (TUNE_SHA, {'README.md': 1, 'draft/config.json': 1, 'draft/model.safetensors': 1}, None),
     # Derives the served name qwen3-0.6b-leonardo, which qwen06b already uses, and has another architecture.
@@ -140,7 +143,10 @@ class Profiles(unittest.TestCase):
         clash = self.cli('add', 'moe', '--from', 'qwen06b', '--model', 'other/Qwen3-0.6B').stderr
         self.assertIn('Qwen3MoeForCausalLM', clash)
         self.assertNotIn('taken', clash)
-        self.assertIn('may not fit', self.cli('add', 'big', '--from', 'qwen06b', '--model', 'team/qwen06b-big').stdout)
+        # Size against the base profile's GPUs (1 x 64 GB), not against the base's weights.
+        self.assertNotIn('WARNING', self.cli('add', 'eightb', '--from', 'qwen06b', '--model', 'team/qwen3-8b-tune').stdout)
+        self.assertIn('room for the KV cache', self.cli('add', 'big', '--from', 'qwen06b', '--model', 'team/qwen3-too-big').stdout)
+        self.assertIn('quantization awq differs', self.cli('add', 'awq', '--from', 'qwen06b', '--model', 'team/qwen3-awq').stdout)
         self.assertIn('taken', self.cli('add', 'other', '--from', 'qwen06b', '--model', 'team/qwen06b-tune',
                                         '--served-name', 'qwen3-0.6b-leonardo').stderr)
         self.assertIn('No base profile', self.cli('add', 'y', '--from', 'nope', '--model', 'team/qwen06b-tune').stderr)

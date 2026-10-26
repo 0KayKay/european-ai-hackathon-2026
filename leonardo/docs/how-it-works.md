@@ -195,6 +195,8 @@ extends and registers it (`install/runtime.sbatch`).
   `TMPDIR` or `VLLM_HOST_IP`.
 - `hooks` must come from the allowlist (`nccl_ep`, `warm_engram`).
 - `runtime` must be in `catalog.json`; `checks`, if set, must name a suite in `inference.CHECK_SUITES`.
+- `client.local_port` (the laptop port `serve/client.py` tunnels to) must differ between profiles;
+  `tools/check_repository.py` fails otherwise, and `cli.py profiles add` picks a free one.
 - `client.chat_template_kwargs` are sent with every test and client request. Qwen uses
   `enable_thinking: false`, so the tests see final answers instead of reasoning only.
 

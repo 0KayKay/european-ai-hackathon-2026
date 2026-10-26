@@ -338,6 +338,24 @@ The model is served as `<repo name>-leonardo` unless you pass `--served-name`. C
 other file changes, so pull requests that add different models do not conflict. `./leonardo/cli.py profiles`
 lists every profile with its validation status.
 
+#### Choosing a fine-tune
+
+Most fine-tunes on Hugging Face are packaged for other tools, and only some can be served here. Check the
+model page's **Files and versions** before you run `profiles add`:
+
+| Look for | Why |
+| --- | --- |
+| `config.json`, `tokenizer_config.json` and `*.safetensors` at the top level | the format vLLM loads; `profiles add` refuses repositories without them |
+| no `*.gguf` files, no `mlx` in the name | GGUF is for llama.cpp, Ollama and LM Studio, MLX for Apple laptops; most download counts come from those |
+| no `adapter_config.json` | a LoRA adapter, loaded on top of its base model; not supported |
+| not a draft model (EAGLE, MTP, DFlash) | speeds up its base model during decoding; not a model to serve on its own |
+| "fine-tuned from" or `config.json` → `architectures` matches a profile here | `--from` must be a profile with the same architecture: Qwen3 dense (`qwen06b`), Qwen3 MoE (`qwen235b`), GLM-5.3 (`glm53`), DeepSeek-V4.1 (`deepseek41`) |
+| total weight size well under the base profile's GPU memory (64 GB per GPU) | a BF16 fine-tune of the FP8 `qwen235b` is twice its size and does not fit its 8 GPUs; a Qwen3-8B fine-tune fits `qwen06b`'s one GPU |
+| no `quantization_config` in `config.json`, or the base model's method | AWQ and GPTQ usually work on A100s, but `profiles add` warns and the settings copied from the base may need a change |
+
+The easiest are full fine-tunes of a model that already has a profile, in the same size and precision.
+Whatever passes, `diagnose compat` and one debug-queue run show whether it really works.
+
 **A new architecture** needs a profile written by hand, usually after some research
 ([docs/research.md](docs/research.md) shows what that took for the current models):
 

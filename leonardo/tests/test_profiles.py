@@ -28,6 +28,10 @@ MODELS = {
     'team/qwen06b-lora': (TUNE_SHA, {'adapter_config.json': 1, 'adapter_model.safetensors': 1}, None),
     'team/qwen06b-big': (TUNE_SHA, {'model.safetensors': 9000000000, **dict.fromkeys(FULL)}, QWEN3),
     'team/no-tokenizer': (TUNE_SHA, {'model.safetensors': 1, 'config.json': 1}, QWEN3),
+    'team/nested': (TUNE_SHA, {'README.md': 1, 'draft/config.json': 1, 'draft/model.safetensors': 1}, None),
+    # Derives the served name qwen3-0.6b-leonardo, which qwen06b already uses, and has another architecture.
+    'other/Qwen3-0.6B': (TUNE_SHA, {'model.safetensors': 1, **dict.fromkeys(FULL)},
+                         {'architectures': ['Qwen3MoeForCausalLM'], 'model_type': 'qwen3_moe'}),
 }
 
 
@@ -129,6 +133,13 @@ class Profiles(unittest.TestCase):
         self.assertIn('WARNING: architecture', forced.stdout)
         self.assertIn('LoRA adapter', self.cli('add', 'lora', '--from', 'qwen06b', '--model', 'team/qwen06b-lora').stderr)
         self.assertIn('tokenizer_config.json', self.cli('add', 'x', '--from', 'qwen06b', '--model', 'team/no-tokenizer').stderr)
+        nested = self.cli('add', 'x', '--from', 'qwen06b', '--model', 'team/nested').stderr
+        self.assertIn('It holds: README.md. Folders: draft/.', nested)
+        self.assertIn('A config.json sits in draft/config.json', nested)
+        # The architecture is refused first, even when the derived served name is also taken.
+        clash = self.cli('add', 'moe', '--from', 'qwen06b', '--model', 'other/Qwen3-0.6B').stderr
+        self.assertIn('Qwen3MoeForCausalLM', clash)
+        self.assertNotIn('taken', clash)
         self.assertIn('may not fit', self.cli('add', 'big', '--from', 'qwen06b', '--model', 'team/qwen06b-big').stdout)
         self.assertIn('taken', self.cli('add', 'other', '--from', 'qwen06b', '--model', 'team/qwen06b-tune',
                                         '--served-name', 'qwen3-0.6b-leonardo').stderr)

@@ -61,12 +61,27 @@ def model(repo, revision):
                          'result, or ask for adapter support in the router.'.format(repo))
     for needed in ('config.json', 'tokenizer_config.json'):
         if needed not in files:
-            raise SystemExit('{} has no {}; a model server needs it'.format(repo, needed))
+            raise SystemExit('{} has no {} at its top level, which a model server needs. {}'.format(
+                repo, needed, contents(files)))
     weights = {name: size for name, size in files.items() if name.endswith('.safetensors')}
     if not weights:
         raise SystemExit('{} has no .safetensors weights; the install job downloads only those'.format(repo))
     config = hub('{}/resolve/{}/config.json'.format(repo, info['sha']))
     return {'sha': info['sha'], 'weights': weights, 'config': config}
+
+
+def contents(files):
+    """What a repository holds instead, so a refusal can be checked without opening the Hub."""
+    top = sorted(name for name in files if '/' not in name)
+    folders = sorted({name.split('/')[0] + '/' for name in files if '/' in name})
+    nested = sorted(name for name in files if name.endswith('/config.json'))
+    text = 'It holds: {}{}.'.format(', '.join(top[:12]) or 'no files', ' and {} more'.format(len(top) - 12) if len(top) > 12 else '')
+    if folders:
+        text += ' Folders: {}.'.format(', '.join(folders[:8]))
+    if nested:
+        text += ' A config.json sits in {}; profiles add handles models at the top level only.'.format(', '.join(nested[:4]))
+    return text + (' A draft model for speculative decoding or an adapter is used together with its base model,'
+                   ' not served on its own; profiles add does not set that up.')
 
 
 def quantization(config):
@@ -90,8 +105,6 @@ def add(name, base_name, repo, revision='main', served=None, force=False, today=
     base = load(base_path)
     others = [load(p) for p in PROFILES.glob('*.json')]
     served = served or served_name(repo)
-    if served in {p['served_model'] for p in others}:
-        raise SystemExit('Served name {} is taken; choose one with --served-name'.format(served))
 
     new = model(repo, revision)
     reference = model(base['model_id'], base.get('revision') or 'main')
@@ -111,6 +124,9 @@ def add(name, base_name, repo, revision='main', served=None, force=False, today=
         warnings.append('weights are {:.0f} GB against {:.0f} GB for {}; they may not fit its GPUs'.format(
             sum(sizes) / 1e9, sum(base_sizes) / 1e9, base_name))
 
+    # After the model checks, so a model that does not fit is refused for that reason first.
+    if served in {p['served_model'] for p in others}:
+        raise SystemExit('Served name {} is taken; choose one with --served-name'.format(served))
     profile = dict(base)
     profile.update(id=name, model_id=repo, revision=new['sha'], checkpoint=name, served_model=served)
     if 'expected_shards' in base:

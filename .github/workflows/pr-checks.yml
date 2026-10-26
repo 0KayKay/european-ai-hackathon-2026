@@ -37,6 +37,20 @@ jobs:
       - run: uv run --locked ruff format --check .
       - run: uv run --locked pytest -q
 
+  leonardo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: leonardo
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - run: python3 tools/check_repository.py
+      - run: python3 -m unittest discover -s tests -v
+      # Leonardo's login nodes run Python 3.6; the admin CLI needs 3.7 on the admin's machine.
+      - run: uvx vermin==1.9.2 --target=3.6- --no-tips --violations serve tools diagnostics install tests
+      - run: uvx vermin==1.9.2 --target=3.7- --no-tips --violations cli.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

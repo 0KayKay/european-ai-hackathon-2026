@@ -241,8 +241,7 @@ leonardo/
   validation/     evidence from GPU runs, hashes of the code that passed them
   docs/           how-it-works.md, history.md
   tools/          generators and the repository check
-  tests/          local tests with simulated Slurm, containers, SSH and HTTP;
-                  cluster_link_poc/ runs the cluster link end to end in a local Kubernetes cluster
+  tests/          local tests with simulated Slurm, containers, SSH and HTTP
 infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 ```
 

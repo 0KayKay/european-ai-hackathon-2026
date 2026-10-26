@@ -244,6 +244,7 @@ leonardo/
     client.py       direct client for one server
   install/        install job scripts (runtime, checkpoint, link client)
   diagnostics/    check job scripts (probe, reach, NCCL)
+  curiosity/      first-hour checks for NVIDIA's Curiosity v2 cluster (docs/curiosity.md)
   validation/     evidence from GPU runs, hashes of the code that passed them
   docs/           how-it-works.md, history.md
   tools/          generators and the repository check
@@ -258,6 +259,8 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
   solved, and what was consolidated from Junghwa's repository and the starter kit.
 - [docs/deepseek16.md](docs/deepseek16.md): optional four-node DeepSeek configuration, pinned PP KV
   cache patch, runtime installation, historical load evidence and remaining integration validation.
+- [docs/curiosity.md](docs/curiosity.md): moving to NVIDIA's Curiosity v2 cluster (DGX-B300) while Leonardo is
+  in maintenance: what carries over, what changes, and the scripts for the first hour there.
 - [The Kubernetes component](../infrastructure/leonardo/kustomization.yaml).
 
 ### Validation status

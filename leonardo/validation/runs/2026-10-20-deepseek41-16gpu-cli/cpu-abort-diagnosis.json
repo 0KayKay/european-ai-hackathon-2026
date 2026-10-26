@@ -1,0 +1,24 @@
+{
+  "runtime_source_sha256": "4093f1c040a5f3def599bb044b72109301b970f70a5e5b622fd03a450a11e36a",
+  "runtime_function": "vllm.v1.utils.shutdown",
+  "test_kind": "CPU-only execution of the exact pinned function with one owned leaf process",
+  "model_or_gpu_loaded": false,
+  "cases": [
+    {
+      "timeout_seconds": 0,
+      "force_kill_called": true,
+      "cleanup_completed": false,
+      "exit_code": -9,
+      "shutdown_elapsed_seconds": 0.0001
+    },
+    {
+      "timeout_seconds": 1,
+      "force_kill_called": false,
+      "cleanup_completed": true,
+      "exit_code": 0,
+      "shutdown_elapsed_seconds": 0.2151
+    }
+  ],
+  "passed": true,
+  "scope": "Demonstrates zero-timeout process termination semantics. Does not establish that a positive timeout alone makes Slurm multi-node shutdown graceful."
+}

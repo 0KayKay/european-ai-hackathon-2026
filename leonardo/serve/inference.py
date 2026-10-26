@@ -139,6 +139,10 @@ def preflight(cfg):
     required = [model / 'config.json', model / 'tokenizer_config.json', Path(cfg['sif'])]
     for name in catalog()['runtimes'][cfg['profile']['runtime']]['overlay_required']:
         required.append(Path(cfg['overlay']) / name)
+    for item in catalog()['runtimes'][cfg['profile']['runtime']].get('overlay_files', []):
+        path = Path(cfg['overlay']) / item['target']
+        if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
+            raise ValueError('Runtime patch checksum mismatch: ' + item['target'])
     for name in shards:
         if Path(name).is_absolute() or '..' in Path(name).parts:
             raise ValueError('Unsafe checkpoint shard path')

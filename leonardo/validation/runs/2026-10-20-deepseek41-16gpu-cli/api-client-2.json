@@ -1,0 +1,373 @@
+{
+  "unauthenticated_rejected": {
+    "passed": true,
+    "result": {
+      "status": 401
+    }
+  },
+  "model_catalog": {
+    "passed": true,
+    "result": {
+      "object": "list",
+      "data": [
+        {
+          "id": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+          "object": "model",
+          "owned_by": "leonardo"
+        }
+      ]
+    }
+  },
+  "arithmetic": {
+    "passed": true,
+    "result": {
+      "elapsed_seconds": 0.292,
+      "response": {
+        "id": "chatcmpl-b721ab87b80d09b4",
+        "object": "chat.completion",
+        "created": 1792526488,
+        "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "42",
+              "refusal": null,
+              "annotations": null,
+              "audio": null,
+              "function_call": null,
+              "reasoning": null
+            },
+            "logprobs": null,
+            "finish_reason": "stop",
+            "stop_reason": null,
+            "token_ids": null,
+            "routed_experts": null
+          }
+        ],
+        "service_tier": null,
+        "system_fingerprint": "vllm-0.13.1-tp8-pp2-ep-4c788f4a",
+        "usage": {
+          "prompt_tokens": 17,
+          "total_tokens": 19,
+          "completion_tokens": 2,
+          "prompt_tokens_details": null,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "prompt_logprobs": null,
+        "prompt_token_ids": null,
+        "prompt_text": null,
+        "kv_transfer_params": null,
+        "ec_transfer_params": null,
+        "metrics": null
+      }
+    }
+  },
+  "english_response": {
+    "passed": true,
+    "result": {
+      "elapsed_seconds": 2.033,
+      "response": {
+        "id": "chatcmpl-a7e1ab7925b1a870",
+        "object": "chat.completion",
+        "created": 1792526489,
+        "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "Hello! I'm an AI assistant running on a high-performance computing (HPC) system, here to help you with your questions and tasks.",
+              "refusal": null,
+              "annotations": null,
+              "audio": null,
+              "function_call": null,
+              "reasoning": null
+            },
+            "logprobs": null,
+            "finish_reason": "stop",
+            "stop_reason": null,
+            "token_ids": null,
+            "routed_experts": null
+          }
+        ],
+        "service_tier": null,
+        "system_fingerprint": "vllm-0.13.1-tp8-pp2-ep-4c788f4a",
+        "usage": {
+          "prompt_tokens": 28,
+          "total_tokens": 58,
+          "completion_tokens": 30,
+          "prompt_tokens_details": null,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "prompt_logprobs": null,
+        "prompt_token_ids": null,
+        "prompt_text": null,
+        "kv_transfer_params": null,
+        "ec_transfer_params": null,
+        "metrics": null
+      }
+    }
+  },
+  "sse_streaming": {
+    "passed": true,
+    "result": {
+      "first_content_seconds": 0.224,
+      "total_seconds": 0.343,
+      "events": 4,
+      "content": "Hello!",
+      "done": true
+    }
+  },
+  "forced_function_call": {
+    "passed": true,
+    "result": {
+      "elapsed_seconds": 3.498,
+      "response": {
+        "id": "chatcmpl-8d5d34799b8d4a92",
+        "object": "chat.completion",
+        "created": 1792526491,
+        "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "refusal": null,
+              "annotations": null,
+              "audio": null,
+              "function_call": null,
+              "tool_calls": [
+                {
+                  "id": "chatcmpl-tool-a651178e5f1fed00",
+                  "type": "function",
+                  "function": {
+                    "name": "sum_numbers",
+                    "arguments": "{\"a\": 17, \"b\": 25}"
+                  }
+                }
+              ],
+              "reasoning": null
+            },
+            "logprobs": null,
+            "finish_reason": "stop",
+            "stop_reason": null,
+            "token_ids": null,
+            "routed_experts": null
+          }
+        ],
+        "service_tier": null,
+        "system_fingerprint": "vllm-0.13.1-tp8-pp2-ep-4c788f4a",
+        "usage": {
+          "prompt_tokens": 289,
+          "total_tokens": 343,
+          "completion_tokens": 54,
+          "prompt_tokens_details": null,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "prompt_logprobs": null,
+        "prompt_token_ids": null,
+        "prompt_text": null,
+        "kv_transfer_params": null,
+        "ec_transfer_params": null,
+        "metrics": null
+      }
+    }
+  },
+  "four_concurrent_requests": {
+    "passed": true,
+    "result": {
+      "batch_seconds": 0.624,
+      "responses": [
+        {
+          "elapsed_seconds": 0.421,
+          "response": {
+            "id": "chatcmpl-8abc7fe3e836ed18",
+            "object": "chat.completion",
+            "created": 1792526495,
+            "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "42",
+                  "refusal": null,
+                  "annotations": null,
+                  "audio": null,
+                  "function_call": null,
+                  "reasoning": null
+                },
+                "logprobs": null,
+                "finish_reason": "stop",
+                "stop_reason": null,
+                "token_ids": null,
+                "routed_experts": null
+              }
+            ],
+            "service_tier": null,
+            "system_fingerprint": "vllm-0.13.1-tp8-pp2-ep-4c788f4a",
+            "usage": {
+              "prompt_tokens": 17,
+              "total_tokens": 19,
+              "completion_tokens": 2,
+              "prompt_tokens_details": null,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "prompt_logprobs": null,
+            "prompt_token_ids": null,
+            "prompt_text": null,
+            "kv_transfer_params": null,
+            "ec_transfer_params": null,
+            "metrics": null
+          }
+        },
+        {
+          "elapsed_seconds": 0.622,
+          "response": {
+            "id": "chatcmpl-991155ea7781665f",
+            "object": "chat.completion",
+            "created": 1792526495,
+            "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "42",
+                  "refusal": null,
+                  "annotations": null,
+                  "audio": null,
+                  "function_call": null,
+                  "reasoning": null
+                },
+                "logprobs": null,
+                "finish_reason": "stop",
+                "stop_reason": null,
+                "token_ids": null,
+                "routed_experts": null
+              }
+            ],
+            "service_tier": null,
+            "system_fingerprint": "vllm-0.13.1-tp8-pp2-ep-4c788f4a",
+            "usage": {
+              "prompt_tokens": 17,
+              "total_tokens": 19,
+              "completion_tokens": 2,
+              "prompt_tokens_details": null,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "prompt_logprobs": null,
+            "prompt_token_ids": null,
+            "prompt_text": null,
+            "kv_transfer_params": null,
+            "ec_transfer_params": null,
+            "metrics": null
+          }
+        },
+        {
+          "elapsed_seconds": 0.571,
+          "response": {
+            "id": "chatcmpl-897a37866a618303",
+            "object": "chat.completion",
+            "created": 1792526495,
+            "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "42",
+                  "refusal": null,
+                  "annotations": null,
+                  "audio": null,
+                  "function_call": null,
+                  "reasoning": null
+                },
+                "logprobs": null,
+                "finish_reason": "stop",
+                "stop_reason": null,
+                "token_ids": null,
+                "routed_experts": null
+              }
+            ],
+            "service_tier": null,
+            "system_fingerprint": "vllm-0.13.1-tp8-pp2-ep-4c788f4a",
+            "usage": {
+              "prompt_tokens": 17,
+              "total_tokens": 19,
+              "completion_tokens": 2,
+              "prompt_tokens_details": null,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "prompt_logprobs": null,
+            "prompt_token_ids": null,
+            "prompt_text": null,
+            "kv_transfer_params": null,
+            "ec_transfer_params": null,
+            "metrics": null
+          }
+        },
+        {
+          "elapsed_seconds": 0.571,
+          "response": {
+            "id": "chatcmpl-a59c503ab2e69a44",
+            "object": "chat.completion",
+            "created": 1792526495,
+            "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "42",
+                  "refusal": null,
+                  "annotations": null,
+                  "audio": null,
+                  "function_call": null,
+                  "reasoning": null
+                },
+                "logprobs": null,
+                "finish_reason": "stop",
+                "stop_reason": null,
+                "token_ids": null,
+                "routed_experts": null
+              }
+            ],
+            "service_tier": null,
+            "system_fingerprint": "vllm-0.13.1-tp8-pp2-ep-4c788f4a",
+            "usage": {
+              "prompt_tokens": 17,
+              "total_tokens": 19,
+              "completion_tokens": 2,
+              "prompt_tokens_details": null,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "prompt_logprobs": null,
+            "prompt_token_ids": null,
+            "prompt_text": null,
+            "kv_transfer_params": null,
+            "ec_transfer_params": null,
+            "metrics": null
+          }
+        }
+      ]
+    }
+  }
+}

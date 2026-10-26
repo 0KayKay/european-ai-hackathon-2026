@@ -1,0 +1,40 @@
+[
+  {
+    "log_file": "engram-prewarm-61591892-1.log",
+    "sha256": "7757274d6ff2b0907ac042c07d2293a09f827746a1af9abc638214fd04a7764b",
+    "warm_complete_count": 4,
+    "lines": [
+      "WARM_START [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.scale 1537073248",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.scale 1537073248 2.904 seconds",
+      "WARM_START [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.weight 49186343936",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.1.engram.embed.weight 17179869184",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.1.engram.embed.weight 34359738368",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.weight 49186343936 96.932 seconds",
+      "WARM_START [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.scale 1537115304",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.scale 1537115304 3.505 seconds",
+      "WARM_START [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.weight 49187689728",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.14.engram.embed.weight 17179869184",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.14.engram.embed.weight 34359738368",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.weight 49187689728 106.918 seconds"
+    ]
+  },
+  {
+    "log_file": "engram-prewarm-61591892-0.log",
+    "sha256": "9b9c92cf668cbb36a07340207410af644a0bc413c380177d8a285bbdfff71ad4",
+    "warm_complete_count": 4,
+    "lines": [
+      "WARM_START [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.scale 1537073248",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.scale 1537073248 2.987 seconds",
+      "WARM_START [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.weight 49186343936",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.1.engram.embed.weight 17179869184",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.1.engram.embed.weight 34359738368",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00047-of-00048.safetensors layers.1.engram.embed.weight 49186343936 101.793 seconds",
+      "WARM_START [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.scale 1537115304",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.scale 1537115304 4.051 seconds",
+      "WARM_START [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.weight 49187689728",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.14.engram.embed.weight 17179869184",
+      "WARM_PROGRESS [COMPUTE_NODE] layers.14.engram.embed.weight 34359738368",
+      "WARM_COMPLETE [COMPUTE_NODE] model-00048-of-00048.safetensors layers.14.engram.embed.weight 49187689728 113.203 seconds"
+    ]
+  }
+]

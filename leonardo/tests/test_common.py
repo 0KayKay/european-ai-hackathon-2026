@@ -68,11 +68,13 @@ class Framework(unittest.TestCase):
             for name in inference.catalog()['runtimes'][runtime_id]['overlay_required']:
                 (runtime / 'python-overlay' / name).parent.mkdir(parents=True, exist_ok=True)
                 (runtime / 'python-overlay' / name).write_text('# test fixture\n')
+            for item in inference.catalog()['runtimes'][runtime_id].get('overlay_files', []):
+                shutil.copyfile(str(RELEASE / item['source']), str(runtime / 'python-overlay' / item['target']))
             (runtime / 'image.sif').write_bytes(b'fake-sif')
             inference.save(runtime / 'runtime.json', {'id': runtime_id, 'sif': 'image.sif', 'sif_size': 8, 'overlay': 'python-overlay'})
         for model in MODELS:
             path = self.base / 'checkpoints' / inference.load(RELEASE / 'profiles' / (model + '.json'))['checkpoint']
-            path.mkdir(parents=True)
+            path.mkdir(parents=True, exist_ok=True)  # profiles can share a checkpoint
             for name in ('config.json', 'tokenizer_config.json'):
                 (path / name).write_text('{}')
             profile = inference.load(RELEASE / 'profiles' / (model + '.json'))
@@ -121,6 +123,25 @@ class Framework(unittest.TestCase):
             for name, digest in inference.load(run / 'RELEASE_MANIFEST.json')['files'].items():
                 self.assertEqual(hashlib.sha256((run / name).read_bytes()).hexdigest(), digest)
 
+    def test_deepseek16_preparation_checks_patch_and_keeps_the_old_identity(self):
+        old = inference.load(self.prepare('deepseek41') / 'RUN_CONFIG.json')
+        new = inference.load(self.prepare('deepseek41-16gpu') / 'RUN_CONFIG.json')
+        self.assertEqual(old['model_path'], new['model_path'])
+        self.assertNotEqual(old['runtime_path'], new['runtime_path'])
+        self.assertNotEqual(old['cache_path'], new['cache_path'])
+        self.assertNotEqual(old['profile']['served_model'], new['profile']['served_model'])
+        command = inference.submit_command(new)
+        self.assertIn('--nodes=4', command)
+        self.assertIn('--gres=gpu:4', command)
+        engine = node.engine_command(new, 0, 'head', 29001, 31001)
+        self.assertEqual(engine[engine.index('--tensor-parallel-size') + 1], '8')
+        self.assertEqual(engine[engine.index('--pipeline-parallel-size') + 1], '2')
+        self.assertEqual(engine[engine.index('--engram-config') + 1], '{"cpu_offload":false}')
+        (Path(new['overlay']) / 'pp_kv_guard.py').write_text('# tampered patch\n')
+        result = subprocess.run([sys.executable, str(RELEASE / 'inference.py'), 'prepare', 'deepseek41-16gpu', '--base', str(self.base)],
+                                env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'Runtime patch checksum mismatch', result.stderr)
     def test_reject_bad_profiles_and_missing_assets(self):
         p = inference.load(RELEASE / 'profiles/glm53.json')
         for edit in ({'id': '../escape'}, {'engine_args': ['--api-key=secret']}, {'hooks': ['arbitrary_script']}):

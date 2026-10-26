@@ -1,0 +1,60 @@
+[
+  {
+    "profile": "qwen235b",
+    "job_id": "61578112",
+    "qos": "boost_qos_dbg",
+    "time_limit": "00:30:00",
+    "reason": "Seven startup checks passed; debug allocation ended before router client verification.",
+    "startup_checks_passed": 7,
+    "router_client_checks_completed": 0,
+    "slurm_steps": "61578112|FAILED|15:0|00:28:05|2026-10-20T22:36:58|2026-10-20T23:05:03|2|64|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61578112.batch|FAILED|15:0|00:28:05|2026-10-20T22:36:58|2026-10-20T23:05:03|1|32||cpu=32,gres/gpu=4,mem=480G,node=1\n61578112.extern|COMPLETED|0:0|00:28:05|2026-10-20T22:36:58|2026-10-20T23:05:03|2|64||billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61578112.0|CANCELLED by operator|0:9|00:27:57|2026-10-20T22:37:06|2026-10-20T23:05:03|2|64||cpu=64,gres/gpu=8,mem=960G,node=2"
+  },
+  {
+    "profile": "glm53",
+    "job_id": "61578120",
+    "qos": "boost_qos_dbg",
+    "time_limit": "00:30:00",
+    "reason": "Seven startup checks passed; debug allocation ended before router client verification.",
+    "startup_checks_passed": 7,
+    "router_client_checks_completed": 0,
+    "slurm_steps": "61578120|FAILED|15:0|00:28:22|2026-10-20T22:37:40|2026-10-20T23:06:02|2|64|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61578120.batch|FAILED|15:0|00:28:22|2026-10-20T22:37:40|2026-10-20T23:06:02|1|32||cpu=32,gres/gpu=4,mem=480G,node=1\n61578120.extern|COMPLETED|0:0|00:28:22|2026-10-20T22:37:40|2026-10-20T23:06:02|2|64||billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61578120.0|CANCELLED by operator|0:9|00:28:16|2026-10-20T22:37:46|2026-10-20T23:06:02|2|64||cpu=64,gres/gpu=8,mem=960G,node=2"
+  },
+  {
+    "profile": "deepseek41",
+    "job_id": "61578086",
+    "qos": "boost_qos_lprod",
+    "time_limit": "01:00:00",
+    "reason": "Production Priority queue exceeded one hour; cancelled while pending.",
+    "accounting": "61578086|CANCELLED by operator|00:00:00|None|2026-10-20T23:35:17|"
+  },
+  {
+    "profile": "qwen235b",
+    "job_id": "61581023",
+    "qos": "boost_qos_dbg",
+    "time_limit": "00:30:00",
+    "reason": "Startup seven checks passed. Mac lid-close sleep interrupted local SSH/client validation; no full router pass claimed.",
+    "startup_checks_passed": 7,
+    "router_client_checks_completed": 0,
+    "slurm_steps": "61581023|FAILED|15:0|00:28:20|2026-10-20T23:34:09|2026-10-21T00:02:29|2|64|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61581023.batch|FAILED|15:0|00:28:20|2026-10-20T23:34:09|2026-10-21T00:02:29|1|32||cpu=32,gres/gpu=4,mem=480G,node=1\n61581023.extern|COMPLETED|0:0|00:28:20|2026-10-20T23:34:09|2026-10-21T00:02:29|2|64||billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61581023.0|CANCELLED by operator|0:9|00:28:14|2026-10-20T23:34:15|2026-10-21T00:02:29|2|64||cpu=64,gres/gpu=8,mem=960G,node=2"
+  },
+  {
+    "profile": "glm53",
+    "job_id": "61581043",
+    "qos": "boost_qos_dbg",
+    "time_limit": "00:30:00",
+    "reason": "Startup seven checks passed. Mac lid-close sleep interrupted local SSH/client validation; no full router pass claimed.",
+    "startup_checks_passed": 7,
+    "router_client_checks_completed": 0,
+    "slurm_steps": "61581043|FAILED|15:0|00:28:37|2026-10-20T23:34:54|2026-10-21T00:03:31|2|64|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61581043.batch|FAILED|15:0|00:28:37|2026-10-20T23:34:54|2026-10-21T00:03:31|1|32||cpu=32,gres/gpu=4,mem=480G,node=1\n61581043.extern|COMPLETED|0:0|00:28:37|2026-10-20T23:34:54|2026-10-21T00:03:31|2|64||billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61581043.0|CANCELLED by operator|0:9|00:28:28|2026-10-20T23:35:03|2026-10-21T00:03:31|2|64||cpu=64,gres/gpu=8,mem=960G,node=2"
+  },
+  {
+    "profile": "deepseek41",
+    "job_id": "61581061",
+    "qos": "boost_qos_dbg",
+    "time_limit": "00:30:00",
+    "reason": "Startup seven checks passed. Mac lid-close sleep interrupted local SSH/client validation; no full router pass claimed.",
+    "startup_checks_passed": 7,
+    "router_client_checks_completed": 0,
+    "slurm_steps": "61581061|FAILED|15:0|00:28:36|2026-10-21T00:02:45|2026-10-21T00:31:21|2|64|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2|billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61581061.batch|FAILED|15:0|00:28:36|2026-10-21T00:02:45|2026-10-21T00:31:21|1|32||cpu=32,gres/gpu=4,mem=480G,node=1\n61581061.extern|COMPLETED|0:0|00:28:36|2026-10-21T00:02:45|2026-10-21T00:31:21|2|64||billing=64,cpu=64,gres/gpu=8,mem=960G,node=2\n61581061.0|CANCELLED by operator|0:9|00:28:31|2026-10-21T00:02:50|2026-10-21T00:31:21|2|64||cpu=64,gres/gpu=8,mem=960G,node=2"
+  }
+]

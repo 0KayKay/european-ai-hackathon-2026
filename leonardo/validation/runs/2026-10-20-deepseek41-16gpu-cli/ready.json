@@ -1,0 +1,14 @@
+{
+  "job_id": "61574938",
+  "host": "[COMPUTE_NODE]",
+  "port": 35938,
+  "model": "deepseek-v4.1-flash-1017-16gpu-leonardo",
+  "profile": "deepseek41-16gpu",
+  "runtime": "vllm-backport-sm80-0.13.1-ppkv1",
+  "release": "inference/2026-10-20-unified",
+  "nodes": "[COMPUTE_NODE_LIST]",
+  "checks_passed": 7,
+  "ready_at": "2026-10-20T22:00:43.835142+02:00",
+  "slurm_expected_end": "2026-10-20T22:12:14",
+  "note": "Service stops about 90 seconds before allocation expiry."
+}

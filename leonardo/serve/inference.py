@@ -154,8 +154,11 @@ def preflight(cfg):
     runtime = load(Path(cfg['runtime_path']) / 'runtime.json')
     if runtime['id'] != cfg['profile']['runtime'] or Path(cfg['sif']).stat().st_size != runtime['sif_size']:
         raise ValueError('Runtime registration mismatch')
-    if not shutil.which(cfg['container_command']) or not shutil.which('sbatch'):
-        raise ValueError('Container runner and Slurm must be available on this host')
+    # The container runner is only needed inside the job: Curiosity's login node has none.
+    if os.environ.get('SLURM_JOB_ID') and not shutil.which(cfg['container_command']):
+        raise ValueError('Container runner must be available on this node: ' + cfg['container_command'])
+    if not shutil.which('sbatch'):
+        raise ValueError('Slurm must be available on this host')
     cache = Path(cfg['cache_path'])
     private_dir(cache.parent.parent)  # $BASE/users/<login>: holds keys, so never shared
     private_dir(cache.parent)

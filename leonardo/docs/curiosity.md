@@ -3,8 +3,62 @@
 Leonardo goes into maintenance on day 3 or 4 of the hackathon. The organisers offer NVIDIA's
 **Curiosity v2** cluster for that time. This page compares the two, lists what our Leonardo setup can
 take along and what has to change, and gives a plan for the first hour on the new cluster. It is based
-on NVIDIA's slide deck "Connecting to Curiosity v2" (last updated 8 Sept 2026) and on this folder's code.
-**Nothing here has run on Curiosity yet.**
+on NVIDIA's slide deck "Connecting to Curiosity v2" (last updated 8 Sept 2026), on this folder's code
+and on a first run of the [checks](#first-hour-on-curiosity) on 26 October
+([what it showed](#first-run-26-october)). **No model has run on Curiosity yet.**
+
+## Connecting
+
+The Axis portal ("Curiosity-v2-login", "Use a desktop SSH client") hands out a command like
+`ssh ssh.axisapps.io -l <key>`. The key is the SSH username. Uploading a private key in the portal's
+login dialog does not change that: Axis still hands out a key-style username. Put it into `~/.ssh/config`
+once, so that `ssh`, `scp` and `cli.py` share one logged-in connection:
+
+```
+Host curiosity
+    HostName ssh.axisapps.io
+    User <key from the portal>
+    ServerAliveInterval 30
+    ControlMaster auto
+    ControlPath ~/.ssh/curiosity-%C
+    ControlPersist 30m
+```
+
+Then `ssh curiosity` and `scp file curiosity:~`. For the CLI: `LEONARDO_HOST=curiosity` and
+`LEONARDO_USER=<key>`. When the key stops working, get a new one from the portal and replace `User`.
+The key is a credential: keep it out of the repository.
+
+## First run (26 October)
+
+`curiosity_login.sh` and `curiosity_node.sbatch` (job on `dgx01`) showed:
+
+| Question | Answer |
+| --- | --- |
+| Nodes | **20** DGX-B300 (`dgx[01-20]`, not 10 as in the deck), 8 B300, 256 CPUs, ~1.8 TB RAM each. `dgx02` reports 1 MB memory and is unusable. |
+| Slurm | 25.05.8. Partition **`hackathon`**, account **`eai-hackathon`**, QoS = our team's QoS (**`eai-team09`**, also the default). Default time 8 h, maximum 30 days. No GPU cap is set on the eai team QoS (other teams have 16 GPUs); be fair anyway. |
+| Node sharing | Yes: `select/cons_tres` with `CR_CORE_MEMORY`, and two jobs ran on one node. CPU-only jobs (installs, router) can run on `hackathon`, so no separate CPU queue is needed. |
+| Login node | Ubuntu 24.04, Python 3.12, `enroot`; **no `apptainer`/`singularity`**. |
+| Containers on nodes | **Apptainer 1.5.3** (`/usr/local/bin`, `singularity` alias too). Rootless Docker 29 starts (`module load rootless-docker`, data in `/raid/docker/...`, no cgroups). Pyxis is installed but **broken**: enroot cannot create `/run/user/<uid>` in a job. |
+| Internet on nodes | Yes, at least Docker Hub answers. **Docker Hub rejects anonymous pulls** (`toomanyrequests`): the whole cluster shares one address. |
+| Storage | `/home` NFS (50 GB per user per the deck): ~350 MB/s write, ~280 MB/s read for one stream. `/storage` NFS, 25 TB with 3.8 TB free: probably where team folders live (not confirmed). Node-local: `/` (with `/tmp`) 1.6 TB free, `/raid` 25 TB free but not writable for us, `/dev/shm` 1 TB. `/raid/$SLURM_JOB_ID` from the deck does not exist. |
+| InfiniBand | Present, `/dev/infiniband` exists, locked memory unlimited. |
+| Login node → node port | Works (`curl http://dgx01:<port>/`): the router can reach model servers. |
+
+Not answered yet: GPU driver version, Hugging Face download speed and SSH forwarding from the laptop
+through Axis.
+
+What follows from it:
+
+- **Settings:** `cli.py init --account eai-hackathon --partition hackathon --qos eai-team09 --cpu-partition hackathon`.
+- **Fixed:** `cli.py up` ran its asset preflight on the login node and required a container runner
+  there. It now requires one only inside the job ([inference.py](../serve/inference.py)).
+- **Docker Hub:** our runtimes are Docker Hub images. Log in with a (free) Docker Hub access token: put
+  `export APPTAINER_DOCKER_USERNAME=<user> APPTAINER_DOCKER_PASSWORD=<token>` into `~/.profile` on
+  Curiosity (not `~/.bashrc`, which stops early in non-interactive shells). `cli.py install` passes the
+  environment to its jobs, and `apptainer pull` uses it. NVIDIA's NGC vLLM image (`nvcr.io`) is the
+  alternative and is built for B300.
+- **Weights:** with ~280 MB/s from NFS, loading a 239 GB checkpoint takes about 15 minutes. Node-local
+  `/tmp` (1.6 TB) can hold a copy for the job's lifetime.
 
 ## Summary
 
@@ -26,13 +80,12 @@ on NVIDIA's slide deck "Connecting to Curiosity v2" (last updated 8 Sept 2026) a
   requires: Qwen3-235B-FP8 is about 239 GB and GLM-5.3 is 328 GB. Node-local `/tmp` and `/raid` are
   wiped when the job ends. Either the organisers give us more space, or weights are downloaded at the
   start of each job.
-- **There is no known CPU queue.** On Leonardo, installs and the router run on `lrd_all_serial`, a CPU
-  partition with internet. Curiosity has a CPU-only login node, where only Slurm commands are allowed,
-  and 10 GPU nodes. If GPU nodes can be shared and have internet, it is a settings change
-  (`init --cpu-partition <GPU partition>`). Otherwise we skip the router and forward to one server.
+- **No CPU queue is needed.** On Leonardo, installs and the router run on `lrd_all_serial`, a CPU
+  partition with internet. On Curiosity, GPU nodes are shared and have internet, so these jobs run on the
+  `hackathon` partition (`init --cpu-partition hackathon`).
 - **Access goes through Axis.** SSH runs via `ssh.axisapps.io` with a one-time key as the username.
-  `scp` works according to the deck. **Port forwarding (`ssh -L`), which `cli.py forward` uses, is not
-  confirmed.**
+  `scp` works. **Port forwarding from the laptop (`ssh -L`), which `cli.py forward` uses, is not
+  confirmed yet**; the login node does reach ports on GPU nodes.
 - **Two deck sections are missing.** The table of contents lists "Common scheduler commands" and
   "Containers (Apptainer, Rootless Docker, Enroot/Pyxis)", but the PDF skips those slides. The
   "Curiosity v2 Doc" app in the Axis portal probably has them. Read it first.
@@ -45,18 +98,18 @@ For a model that only needs the stock runtime, very little code changes.
 
 | | Leonardo Booster (CINECA) | Curiosity v2 (NVIDIA) |
 | --- | --- | --- |
-| GPU nodes | thousands, 4 × A100 64 GB each | **10 × DGX-B300**, 8 × B300 (~288 GB HBM3e) each |
+| GPU nodes | thousands, 4 × A100 64 GB each | **20 × DGX-B300** (the deck says 10), 8 × B300 (~288 GB HBM3e) each |
 | GPU architecture | Ampere, SM 8.0 | Blackwell Ultra, SM 10.3, native FP8/FP4 |
 | Host driver | 535: needs CUDA forward compatibility | new, probably ≥ 580 (check): forward compatibility not needed |
 | Scheduler | Slurm | Slurm 25.05 (`slurm/slurm/25.05` module) |
-| Partitions / QoS | `boost_usr_prod`, `boost_qos_lprod` (2 h), `boost_qos_dbg` (30 min), `lrd_all_serial` (CPU, internet) | **unknown**: see [first hour](#first-hour-on-curiosity) |
+| Partitions / QoS | `boost_usr_prod`, `boost_qos_lprod` (2 h), `boost_qos_dbg` (30 min), `lrd_all_serial` (CPU, internet) | partition `hackathon`, account `eai-hackathon`, QoS per team (`eai-team09`); 8 h default, 30 days max |
 | Login | `login0X-ext.leonardo.cineca.it`, personal CINECA login, 2FA | Axis portal → `ssh ssh.axisapps.io -l <one-time key>`, or web SSH |
-| Login node | may run light work (Python 3.6) | **Slurm commands only**: no container builds, no environment setup (Ubuntu 22.04, Python 3.10) |
-| Containers | Singularity | Apptainer, rootless Docker (`rootless-docker/1.75`), Enroot/Pyxis |
+| Login node | may run light work (Python 3.6) | **Slurm commands only**: no container builds, no environment setup (Ubuntu 24.04, Python 3.12, no Apptainer) |
+| Containers | Singularity | Apptainer 1.5.3 on the nodes, rootless Docker; Pyxis installed but broken |
 | Shared storage | Lustre `$WORK`, several TB | NFS, **300 GB per team**, **50 GB `$HOME` per user**, deleted at the end, no backup |
-| Node-local storage | – | `/tmp` and `/raid/$SLURM_JOB_ID`, deleted when the job ends |
-| Internet on compute nodes | no (CPU queue only) | **unknown** |
-| Size of the shared pool | large | 10 nodes for every team at the event: expect queues and limits |
+| Node-local storage | – | `/tmp` on a 1.6 TB disk, deleted when the job ends; `/raid` not writable |
+| Internet on compute nodes | no (CPU queue only) | yes; Docker Hub needs a login (rate limit) |
+| Size of the shared pool | large | 20 nodes for every team at the event: expect queues |
 
 ## What carries over
 
@@ -184,9 +237,10 @@ container pages that the PDF leaves out. Then:
 These are the changes for the paths above. They wait until the first hour has answered the questions,
 because each one depends on an answer.
 
+0. Done: the asset preflight no longer needs a container runner on the login node.
 1. Make `VLLM_ENABLE_CUDA_COMPATIBILITY` a setting in `inference-site.json`, off on Curiosity
    ([node.py](../serve/node.py), [nccl_task.sh](../diagnostics/nccl_task.sh)).
-2. Bind `/dev/infiniband` only if it exists ([node.py](../serve/node.py)).
+2. Bind `/dev/infiniband` only if it exists ([node.py](../serve/node.py)). Not urgent: Curiosity's nodes have it.
 3. Let the install scripts use `apptainer` when it is the only container tool, as `node.py` already does
    ([runtime.sbatch](../install/runtime.sbatch), [checkpoint.sbatch](../install/checkpoint.sbatch)).
 4. Make the checkpoint free-space reserve a setting.

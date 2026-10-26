@@ -16,6 +16,7 @@
 | 20 Oct | DeepSeek on four nodes (`deepseek41-16gpu`, job 61574938) through the CLI and router, with a separate runtime that carries a pinned fix for pipeline-parallel KV cache allocation ([deepseek16.md](deepseek16.md)). |
 | 21 Oct | `qwen235b`, `glm53` and `deepseek41` passed again through the current CLI and router (jobs 61591887, 61591889, 61591892; router 61591661). |
 | 21 Oct | `qwen235b` from a fresh team folder (job 61612274): backport runtime and weights installed from scratch by `cli.py install`, 7/7 checks, a reply through the router. First GPU run of `diagnose compat` (job 61615003): `COMPAT_OK`. |
+| 26 Oct | Profiles left the release manifest, and `cli.py profiles add` creates a fine-tune's profile from its Hugging Face id. `qwen06b` on that code (job 62361596): 7/7 checks. |
 
 Startup times to a healthy API (cold caches, excluding queue): Qwen 7.0 min, GLM 13.3 min, DeepSeek 25.8 min.
 

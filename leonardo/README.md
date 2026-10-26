@@ -21,7 +21,8 @@ hours per job. The separate sixteen-GPU DeepSeek profile has 8 sequence slots an
 Engram; see [its guide and patch details](docs/deepseek16.md). The eight-GPU large-model profiles were
 revalidated through the current CLI and router on 21 October; the sixteen-GPU profile passed on 20 October.
 Observed times exclude queue wait and can include reused private caches; they are not cold-start benchmarks.
-See [Validation status](#validation-status). `qwen235b-stock` is the configuration that first ran Qwen-235B on
+Fine-tunes added with [`cli.py profiles add`](#add-a-model) need no row here: `./leonardo/cli.py profiles`
+lists every profile and its status. See [Validation status](#validation-status). `qwen235b-stock` is the configuration that first ran Qwen-235B on
 stock vLLM 0.31.0, a fallback that does not need the community SM80 runtime; it serves the same name as
 `qwen235b`, so run only one of the two. [docs/research.md](docs/research.md) explains what each model
 needed on Leonardo's A100s.
@@ -142,6 +143,7 @@ Leonardo does not have that exact version yet.
 | `forward` | `--local-port` (default 18000) | Opens an SSH port forward from `127.0.0.1:<port>` on your laptop through the login node to your router, until you press Ctrl-C. |
 | `diagnose` | `probe`, `reach`, `nccl` or `compat`; `--target`, `--proxy`, `--link-url`, `--runtime`, `--profile` | `probe`: a short GPU job that prints the node's network, InfiniBand and GPU setup and serves a test page. `reach`: a CPU-queue job that tests whether it reaches a GPU node (`--target` from a probe), the internet, a proxy (`--proxy`) and the cluster link server (`--link-url`). `nccl`: a two-node job that measures GPU communication over InfiniBand. `compat`: a one-GPU job that checks a profile's runtime against its model (kernels and attention backends for an A100) without loading weights. |
 | `sync` | | Only uploads the code. |
+| `profiles` | `add NAME --from PROFILE --model ORG/REPO`; `--revision`, `--served-name` | Lists the profiles and their validation status, without connecting to Leonardo. `add` creates a profile for a fine-tune of an existing profile's model from its Hugging Face id; see [Add a model](#add-a-model). |
 
 ### Install a model
 
@@ -254,7 +256,7 @@ leonardo/
   diagnostics/    check job scripts (probe, reach, NCCL, compatibility)
   validation/     evidence from GPU runs, hashes of the code that passed them
   docs/           how-it-works.md, slurm-jobs.md, research.md, deepseek16.md, history.md
-  tools/          generators and the repository check
+  tools/          profiles add and listing, generators, the repository check
   tests/          local tests with simulated Slurm, containers, SSH and HTTP
 infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 ```
@@ -319,6 +321,26 @@ Conventions:
 
 ### Add a model
 
+**A fine-tune, or another checkpoint of a model that already has a profile:** one command on your laptop.
+
+```bash
+./leonardo/cli.py profiles add qwen235b-ourtune --from qwen235b --model our-org/our-qwen3-235b-finetune
+./leonardo/cli.py install qwen235b-ourtune
+./leonardo/cli.py up qwen235b-ourtune --qos boost_qos_dbg --time 00:30:00
+```
+
+`profiles add` looks the model up on Hugging Face (set `HF_TOKEN` for gated or private models), pins its
+current revision (or `--revision`), counts the weight files, and writes `leonardo/serve/profiles/<name>.json`
+with the base profile's runtime, hardware and vLLM settings, plus the model's route in
+`infrastructure/leonardo/agentgateway.yaml`. It refuses a different architecture than the base model's and
+LoRA adapters, and warns when the quantization differs or the weights are much larger than the base's.
+The model is served as `<repo name>-leonardo` unless you pass `--served-name`. Commit the two files; no
+other file changes, so pull requests that add different models do not conflict. `./leonardo/cli.py profiles`
+lists every profile with its validation status.
+
+**A new architecture** needs a profile written by hand, usually after some research
+([docs/research.md](docs/research.md) shows what that took for the current models):
+
 1. Copy a profile in `leonardo/serve/profiles/` (`qwen06b.json` for one GPU, `qwen235b.json` for two
    nodes). Set `model_id`, `revision`, `checkpoint`, `served_model`, resources, parallelism and the vLLM
    `engine_args`. [The profile rules](docs/how-it-works.md#profiles) are checked before each run.
@@ -332,8 +354,12 @@ Conventions:
    | `classify` | 401, catalog, `/classify` returns a label | `--runner pooling` classifiers |
 
    agentgateway handles chat-style APIs; classifiers on `/classify` are called through the router directly.
-3. Run `python3 leonardo/tools/update_manifest.py` and `python3 leonardo/tools/render_agentgateway.py`
-   (which adds the model's agentgateway route), then `./leonardo/cli.py install <profile>` and a debug run.
+3. Run `python3 leonardo/tools/render_agentgateway.py` (which adds the model's agentgateway route), then
+   `./leonardo/cli.py install <profile> --config-only` and `./leonardo/cli.py diagnose compat --profile
+   <profile>` to check the kernels on one GPU, then the full install and a debug run.
+
+Either way, once a debug run has passed its checks, record it in `leonardo/validation/` (the job log's check
+lines and `INFERENCE_READY`, see the existing runs) so the profile shows as validated.
 
 ### Add a runtime
 

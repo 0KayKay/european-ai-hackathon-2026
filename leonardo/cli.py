@@ -17,6 +17,9 @@ Typical first run, from the repository root:
   ./leonardo/cli.py up qwen06b --qos boost_qos_dbg --time 00:30:00
   ./leonardo/cli.py router up && ./leonardo/cli.py forward
 
+A fine-tune of a model that already has a profile is one command, which also works offline from Leonardo:
+  ./leonardo/cli.py profiles add qwen235b-ourtune --from qwen235b --model our-org/our-finetune
+
 Run ./leonardo/cli.py <command> --help for each command's options and the files it runs.
 leonardo/docs/slurm-jobs.md describes the Slurm jobs and how to submit them without this CLI.
 """
@@ -76,6 +79,9 @@ COMMANDS = {
                  'diagnostics/nccl_check.sbatch (with nccl_task.sh and nccl_check.py) or\n'
                  'diagnostics/compat_check.sbatch (with compat_check.py). Logs: users/<login>/logs/.'),
     'sync': ('only upload this checkout to Leonardo', 'Nothing runs; prints where the release is.'),
+    'profiles': ('list the model profiles, or add one for a fine-tune from Hugging Face',
+                 'Nothing; runs on this laptop (tools/profiles.py). "add" looks the model up on Hugging Face,\n'
+                 'writes serve/profiles/<name>.json from the base profile and updates the agentgateway routes.'),
 }
 
 
@@ -125,6 +131,7 @@ def release_files():
     if build(manifest['release'])['files'] != manifest['files']:
         raise SystemExit('leonardo/serve/RELEASE_MANIFEST.json is stale: run python3 leonardo/tools/update_manifest.py')
     names = ['serve/' + name for name in manifest['files']] + ['serve/RELEASE_MANIFEST.json']
+    names += ['serve/profiles/' + p.name for p in (LEONARDO / 'serve/profiles').glob('*.json')]
     for folder in ('install', 'diagnostics'):
         names += [p.relative_to(LEONARDO).as_posix() for p in (LEONARDO / folder).rglob('*')
                   if p.is_file() and '__pycache__' not in p.parts]
@@ -215,6 +222,15 @@ def parser():
     p.add_argument('--runtime', help='nccl: installed runtime to test (default vllm-0.31.0)')
     p.add_argument('--profile', help='compat: profile whose runtime and model to check without weights, e.g. glm53')
     command('sync')
+    p = command('profiles')
+    p.add_argument('action', nargs='?', choices=['add'], help='add: a new profile; without it, list the profiles')
+    p.add_argument('name', nargs='?', help='add: new profile name, e.g. qwen235b-ourtune')
+    p.add_argument('--from', dest='from_profile', metavar='PROFILE',
+                   help='add: existing profile with the same architecture, e.g. qwen235b')
+    p.add_argument('--model', help='add: Hugging Face model id, e.g. our-org/our-finetune (HF_TOKEN if gated)')
+    p.add_argument('--revision', default='main', help='add: branch, tag or commit to pin (default: main)')
+    p.add_argument('--served-name', help='add: model name for API callers (default: <repo name>-leonardo)')
+    p.add_argument('--force', action='store_true', help='add: allow a different architecture than the base')
     return top
 
 
@@ -223,6 +239,15 @@ def main():
     args = top.parse_args()
     if not args.command:
         top.print_help()
+        return
+    if args.command == 'profiles':
+        import profiles
+        if args.action == 'add':
+            if not (args.name and args.from_profile and args.model):
+                top.error('profiles add needs NAME, --from PROFILE and --model ORG/REPO')
+            profiles.add(args.name, args.from_profile, args.model, args.revision, args.served_name, args.force)
+        else:
+            profiles.listing()
         return
     if not args.user:
         top.error('set --user or LEONARDO_USER to your own CINECA login')

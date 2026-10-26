@@ -198,15 +198,23 @@ extends and registers it (`install/runtime.sbatch`).
 - `client.chat_template_kwargs` are sent with every test and client request. Qwen uses
   `enable_thinking: false`, so the tests see final answers instead of reasoning only.
 
+`tools/profiles.py` (`cli.py profiles add`) derives a profile for another checkpoint of the same architecture
+from an existing one: it keeps everything except `id`, `model_id`, `revision`, `checkpoint`,
+`served_model`, `expected_shards` and `client.local_port`, and records the base in `derived_from`.
+
 ## The release manifest
 
-`serve/RELEASE_MANIFEST.json` lists every file in `serve/` with its SHA-256. `prepare` refuses to run if
-anything differs, and copies exactly those files into the run directory. This protects a shared checkout
-on Leonardo from silent edits. After changing anything in `serve/`, run:
+`serve/RELEASE_MANIFEST.json` lists every code file in `serve/` with its SHA-256. `prepare` refuses to run
+if anything differs, and copies exactly those files, plus the run's own profile, into the run directory.
+This protects a shared checkout on Leonardo from silent edits. After changing code in `serve/`, run:
 
 ```bash
 python3 tools/update_manifest.py
 ```
+
+Profiles are not in the manifest: they are data, checked by the profile rules before every run and stored
+in full in each run's `RUN_CONFIG.json`. Adding a model therefore changes no generated file in `serve/`, and
+two branches that each add a profile do not conflict.
 
 `validation/validated_code.json` separately records the bytes that passed real GPU runs.
 `tools/check_repository.py` tells you when `serve/` has drifted from them.

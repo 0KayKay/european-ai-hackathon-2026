@@ -122,6 +122,9 @@ class Framework(unittest.TestCase):
                 self.assertEqual(path.stat().st_mode & 0o077, 0)
             for name, digest in inference.load(run / 'RELEASE_MANIFEST.json')['files'].items():
                 self.assertEqual(hashlib.sha256((run / name).read_bytes()).hexdigest(), digest)
+        for run, name in zip(runs, MODELS):  # profiles are not in the manifest; each run keeps its own
+            self.assertEqual((run / 'profiles' / (name + '.json')).read_bytes(), (RELEASE / 'profiles' / (name + '.json')).read_bytes())
+            self.assertEqual(sorted(p.name for p in (run / 'profiles').iterdir()), [name + '.json'])
 
     def test_deepseek16_preparation_checks_patch_and_keeps_the_old_identity(self):
         old = inference.load(self.prepare('deepseek41') / 'RUN_CONFIG.json')

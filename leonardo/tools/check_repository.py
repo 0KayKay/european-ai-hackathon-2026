@@ -41,6 +41,14 @@ def main():
         raise SystemExit('FAIL: serve/RELEASE_MANIFEST.json is stale: run python3 tools/update_manifest.py')
     if render_agentgateway.OUTPUT.read_text() != render_agentgateway.render():
         raise SystemExit('FAIL: infrastructure/leonardo/agentgateway.yaml is stale: run python3 tools/render_agentgateway.py')
+    # client.local_port is the laptop port serve/client.py tunnels to; two profiles on one port collide.
+    ports = {}
+    for path in sorted((SERVE / 'profiles').glob('*.json')):
+        port = json.loads(path.read_text())['client']['local_port']
+        if port in ports:
+            raise SystemExit('FAIL: profiles {} and {} share client.local_port {}; give one a free port'.format(
+                ports[port], path.stem, port))
+        ports[port] = path.stem
 
     record = json.loads((ROOT / 'validation/validated_code.json').read_text())
     for model, run in record['runs'].items():
@@ -55,9 +63,12 @@ def main():
             assert len(checks) == 7 and all(c['passed'] for c in checks.values()), 'Incomplete evidence: ' + model + '/' + suite
     print('PASS: syntax for {} scripts, manifest, agentgateway config, GPU evidence and local document links.'.format(checked))
     # Each run validated the serve/ files it ran with: its own files_sha256, or the shared set of the first runs.
+    # Of the profiles, only the run's own counts: other profiles changing or appearing does not affect it.
     print('GPU-validated runs, compared with serve/ today:')
     for model, run in sorted(record['runs'].items()):
-        files = run.get('files_sha256', record['validated_files_sha256'])
+        own = 'profiles/{}.json'.format(run.get('profile_id', model))
+        files = {name: digest for name, digest in run.get('files_sha256', record['validated_files_sha256']).items()
+                 if not name.startswith('profiles/') or name == own}
         drifted = [name for name, digest in sorted(files.items()) if not (ROOT / 'serve' / name).exists()
                    or sha256(ROOT / 'serve' / name) != digest]
         added = sorted(set(manifest['files']) - set(files) - {'site.example.json'})

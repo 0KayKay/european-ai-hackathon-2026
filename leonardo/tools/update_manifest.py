@@ -1,8 +1,11 @@
-"""Regenerate serve/RELEASE_MANIFEST.json after editing files in serve/.
+"""Regenerate serve/RELEASE_MANIFEST.json after editing code in serve/.
 
 inference.py refuses to prepare a run when a file differs from the manifest,
 so every change to serve/ needs this. The manifest also decides which files
-are copied into a private run directory. Python 3.6+, like the framework.
+are copied into a private run directory. Profiles (serve/profiles/) are left
+out: they are data, checked by inference.profile_check before every run and
+recorded in each run's RUN_CONFIG.json, so adding a model touches no shared
+generated file. Python 3.6+, like the framework.
 """
 import argparse
 import datetime
@@ -17,7 +20,8 @@ def build(release):
     files = {}
     for path in sorted(SERVE.rglob('*')):
         relative = path.relative_to(SERVE)
-        if not path.is_file() or path.name == 'RELEASE_MANIFEST.json' or '__pycache__' in relative.parts:
+        if (not path.is_file() or path.name == 'RELEASE_MANIFEST.json' or '__pycache__' in relative.parts
+                or relative.parts[0] == 'profiles'):
             continue
         files[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     return {'release': release, 'files': files}

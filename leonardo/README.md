@@ -14,13 +14,18 @@ moderation classifiers. It is a reusable template: everything below starts from 
 | `deepseek41` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-leonardo` | 2 nodes, 8 A100 | 24.5 min | GPU-validated, current CLI and router |
 | `deepseek41-16gpu` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | 4 nodes, 16 A100 | 18.3 min | GPU-validated, current CLI and router |
 | `qwen06b` | Qwen3-0.6B | `qwen3-0.6b-leonardo` | 1 A100 | 1.5 min | GPU-validated, current launcher |
+| `qwen235b-stock` | Qwen3-235B-A22B-FP8 on stock vLLM | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | | ran on 8 Oct, not with this launcher |
 
 The large models run with a 2,048-token context and 4 concurrent sequences (DeepSeek: 2) for up to two
 hours per job. The separate sixteen-GPU DeepSeek profile has 8 sequence slots and GPU-resident
 Engram; see [its guide and patch details](docs/deepseek16.md). The eight-GPU large-model profiles were
 revalidated through the current CLI and router on 21 October; the sixteen-GPU profile passed on 20 October.
 Observed times exclude queue wait and can include reused private caches; they are not cold-start benchmarks.
-See [Validation status](#validation-status).
+Fine-tunes added with [`cli.py profiles add`](#add-a-model) need no row here: `./leonardo/cli.py profiles`
+lists every profile and its status. See [Validation status](#validation-status). `qwen235b-stock` is the configuration that first ran Qwen-235B on
+stock vLLM 0.31.0, a fallback that does not need the community SM80 runtime; it serves the same name as
+`qwen235b`, so run only one of the two. [docs/research.md](docs/research.md) explains what each model
+needed on Leonardo's A100s.
 
 The serving framework was built by Junghwa Lee ([@Jules0315](https://github.com/Jules0315)) on top of the
 team's starter kit, and copied from [Jules0315/Guardrails-vllm](https://github.com/Jules0315/Guardrails-vllm)
@@ -129,15 +134,16 @@ Leonardo does not have that exact version yet.
 | --- | --- | --- |
 | `init` | `--account` (required); `--partition`, `--qos`, `--cpu-partition` to change the defaults; `--force` | Creates the team folder with its subfolders and the settings file `inference-site.json` (Slurm account, partitions, QoS, router and cluster link settings), plus your private personal folder. Run once per team; it never overwrites existing settings unless you add `--force`. |
 | `share` | `LOGIN...`, `--revoke` | Gives the named Leonardo users read and write access to the team folder, including everything created later, so they can install models and start their own servers. Personal folders stay private. `--revoke` takes the access away again. |
-| `install` | `PROFILE...`, `--link-client` | Submits CPU-queue jobs that download what the profiles need: the container image (runtime) and the model weights (checkpoint). Skips what is already installed; a weights job waits until its runtime job has finished. `--link-client` also downloads the chisel client for the cluster link. |
+| `install` | `PROFILE...`, `--config-only`, `--link-client` | Submits CPU-queue jobs that download what the profiles need: the container image (runtime) and the model weights (checkpoint). Skips what is already installed; a weights job waits until its runtime job has finished. `--config-only` downloads only the model's configuration and tokenizer files, enough for `diagnose compat`. `--link-client` also downloads the chisel client for the cluster link. |
 | `up` | `PROFILE`; `--qos`, `--time`, `--reservation` | Checks that the profile's runtime and weights are installed, creates a private run folder with a new API key and submits the model server job. The job starts vLLM, runs the profile's API checks and announces the server only if they pass. `--qos boost_qos_dbg --time 00:30:00` makes a short test job that usually starts sooner. |
 | `status` | | Shows installed runtimes and checkpoints, running install jobs, your model servers (`starting`, or `READY` with node and port), your router, and every ready server in the team registry. |
 | `logs` | `TARGET`; `--lines`, `--follow` | Prints the end of a job's log. `TARGET` is a job id (any job: install, server, router, check), a profile or served model name (your newest run), or `router`. |
 | `down` | `TARGET` | Cancels your model servers for a profile, served model name or job id. `down router` stops your router, including its queued successor. |
 | `router` | `up`, `down` or `token`; `--hours`, `--restart`, `--token-file`, `--link-auth-file` | `up` starts your router job, which renews itself every 4 hours until `--hours` (default 12) have passed; `--restart` replaces a running router. `token` prints the bearer token that callers of the router need; it is created on first use, and `--token-file` installs a given one instead. `--link-auth-file` stores the cluster link password. |
 | `forward` | `--local-port` (default 18000) | Opens an SSH port forward from `127.0.0.1:<port>` on your laptop through the login node to your router, until you press Ctrl-C. |
-| `diagnose` | `probe`, `reach` or `nccl`; `--target`, `--proxy`, `--link-url`, `--runtime` | `probe`: a short GPU job that prints the node's network, InfiniBand and GPU setup and serves a test page. `reach`: a CPU-queue job that tests whether it reaches a GPU node (`--target` from a probe), the internet, a proxy (`--proxy`) and the cluster link server (`--link-url`). `nccl`: a two-node job that measures GPU communication over InfiniBand. |
+| `diagnose` | `probe`, `reach`, `nccl` or `compat`; `--target`, `--proxy`, `--link-url`, `--runtime`, `--profile` | `probe`: a short GPU job that prints the node's network, InfiniBand and GPU setup and serves a test page. `reach`: a CPU-queue job that tests whether it reaches a GPU node (`--target` from a probe), the internet, a proxy (`--proxy`) and the cluster link server (`--link-url`). `nccl`: a two-node job that measures GPU communication over InfiniBand. `compat`: a one-GPU job that checks a profile's runtime against its model (kernels and attention backends for an A100) without loading weights. |
 | `sync` | | Only uploads the code. |
+| `profiles` | `add NAME --from PROFILE --model ORG/REPO`; `--revision`, `--served-name` | Lists the profiles and their validation status, without connecting to Leonardo. `add` creates a profile for a fine-tune of an existing profile's model from its Hugging Face id; see [Add a model](#add-a-model). |
 
 ### Install a model
 
@@ -209,7 +215,7 @@ The CLI only orchestrates Slurm jobs; each is an ordinary batch script in this r
 | `install-link-client` | `install/link_client.sbatch` | CPU queue, 10 min | `install --link-client` | download and checksum of the chisel client |
 | `<profile>-common` | `serve/serve_model.sbatch` | GPU partition; nodes, GPUs, memory and time from the profile | `up` | `serve/node.py` once per node (vLLM in the container) and `serve/lifecycle.py` (API checks, registry) |
 | `leonardo-router` | `serve/router.sbatch` | CPU queue, 2 CPUs, 4 h, queues its own successor | `router up` | `serve/router.py` (and the chisel client when the cluster link is on) |
-| `probe`, `reach`, `nccl-check` | `diagnostics/*.sbatch` | GPU debug QoS, CPU queue, 2 GPU nodes on debug QoS | `diagnose` | shell checks; `diagnostics/nccl_check.py` on 8 GPUs |
+| `probe`, `reach`, `nccl-check`, `compat-check` | `diagnostics/*.sbatch` | GPU debug QoS, CPU queue, 2 GPU nodes on debug QoS, 1 GPU on debug QoS | `diagnose` | shell checks; `diagnostics/nccl_check.py` on 8 GPUs; `diagnostics/compat_check.py` on 1 GPU |
 
 `serve/team.py` (on Leonardo) builds the `sbatch` commands. [docs/slurm-jobs.md](docs/slurm-jobs.md)
 describes each job in detail (inputs, resources, what it executes, what it writes) and how to submit it
@@ -226,6 +232,10 @@ with plain `sbatch`, without the CLI.
   checks from the router's CPU queue whether it reaches that GPU node, the internet, and the cluster link
   server. A router that answers `502 upstream_unreachable` means the first one failed.
 - `./leonardo/cli.py diagnose nccl` checks NCCL bandwidth over InfiniBand between two GPU nodes.
+- `./leonardo/cli.py diagnose compat --profile glm53` checks, on one GPU, whether the profile's runtime has
+  the kernels its model needs on an A100, before you spend two nodes on it. It needs the runtime and the
+  model's configuration (`install glm53 --config-only` is enough) and ends with `COMPAT_OK` or
+  `COMPAT_FAILED`, with a report of each check.
 
 ## Further information and project structure
 
@@ -243,10 +253,10 @@ leonardo/
     site.example.json   template for $BASE/inference-site.json
     client.py       direct client for one server
   install/        install job scripts (runtime, checkpoint, link client)
-  diagnostics/    check job scripts (probe, reach, NCCL)
+  diagnostics/    check job scripts (probe, reach, NCCL, compatibility)
   validation/     evidence from GPU runs, hashes of the code that passed them
-  docs/           how-it-works.md, history.md
-  tools/          generators and the repository check
+  docs/           how-it-works.md, slurm-jobs.md, research.md, deepseek16.md, history.md
+  tools/          profiles add and listing, generators, the repository check
   tests/          local tests with simulated Slurm, containers, SSH and HTTP
 infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 ```
@@ -254,6 +264,8 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 - [docs/slurm-jobs.md](docs/slurm-jobs.md): every Slurm job, and how to run it without the CLI.
 - [docs/how-it-works.md](docs/how-it-works.md): a server run step by step, the router, the registry,
   ports, profile rules and the release manifest. Read it before changing `serve/`.
+- [docs/research.md](docs/research.md): Junghwa's research behind the profiles: what failed on the A100s,
+  why, and how it was solved. Read it before adding a model or a runtime.
 - [docs/history.md](docs/history.md): how the models were brought up, which compatibility problems were
   solved, and what was consolidated from Junghwa's repository and the starter kit.
 - [docs/deepseek16.md](docs/deepseek16.md): optional four-node DeepSeek configuration, pinned PP KV
@@ -309,6 +321,44 @@ Conventions:
 
 ### Add a model
 
+**A fine-tune, or another checkpoint of a model that already has a profile:** one command on your laptop.
+
+```bash
+./leonardo/cli.py profiles add qwen235b-ourtune --from qwen235b --model our-org/our-qwen3-235b-finetune
+./leonardo/cli.py install qwen235b-ourtune
+./leonardo/cli.py up qwen235b-ourtune --qos boost_qos_dbg --time 00:30:00
+```
+
+`profiles add` looks the model up on Hugging Face (set `HF_TOKEN` for gated or private models), pins its
+current revision (or `--revision`), counts the weight files, and writes `leonardo/serve/profiles/<name>.json`
+with the base profile's runtime, hardware and vLLM settings, plus the model's route in
+`infrastructure/leonardo/agentgateway.yaml`. It refuses a different architecture than the base model's and
+LoRA adapters, and warns when the quantization differs or the weights are much larger than the base's.
+The model is served as `<repo name>-leonardo` unless you pass `--served-name`. Commit the two files; no
+other file changes, so pull requests that add different models do not conflict. `./leonardo/cli.py profiles`
+lists every profile with its validation status.
+
+#### Choosing a fine-tune
+
+Most fine-tunes on Hugging Face are packaged for other tools, and only some can be served here. Check the
+model page's **Files and versions** before you run `profiles add`:
+
+| Look for | Why |
+| --- | --- |
+| `config.json`, `tokenizer_config.json` and `*.safetensors` at the top level | the format vLLM loads; `profiles add` refuses repositories without them |
+| no `*.gguf` files, no `mlx` in the name | GGUF is for llama.cpp, Ollama and LM Studio, MLX for Apple laptops; most download counts come from those |
+| no `adapter_config.json` | a LoRA adapter, loaded on top of its base model; not supported |
+| not a draft model (EAGLE, MTP, DFlash) | speeds up its base model during decoding; not a model to serve on its own |
+| "fine-tuned from" or `config.json` → `architectures` matches a profile here | `--from` must be a profile with the same architecture: Qwen3 dense (`qwen06b`), Qwen3 MoE (`qwen235b`), GLM-5.3 (`glm53`), DeepSeek-V4.1 (`deepseek41`) |
+| total weight size well under the base profile's GPU memory (64 GB per GPU) | a BF16 fine-tune of the FP8 `qwen235b` is twice its size and does not fit its 8 GPUs; a Qwen3-8B fine-tune fits `qwen06b`'s one GPU |
+| no `quantization_config` in `config.json`, or the base model's method | AWQ and GPTQ usually work on A100s, but `profiles add` warns and the settings copied from the base may need a change |
+
+The easiest are full fine-tunes of a model that already has a profile, in the same size and precision.
+Whatever passes, `diagnose compat` and one debug-queue run show whether it really works.
+
+**A new architecture** needs a profile written by hand, usually after some research
+([docs/research.md](docs/research.md) shows what that took for the current models):
+
 1. Copy a profile in `leonardo/serve/profiles/` (`qwen06b.json` for one GPU, `qwen235b.json` for two
    nodes). Set `model_id`, `revision`, `checkpoint`, `served_model`, resources, parallelism and the vLLM
    `engine_args`. [The profile rules](docs/how-it-works.md#profiles) are checked before each run.
@@ -322,8 +372,12 @@ Conventions:
    | `classify` | 401, catalog, `/classify` returns a label | `--runner pooling` classifiers |
 
    agentgateway handles chat-style APIs; classifiers on `/classify` are called through the router directly.
-3. Run `python3 leonardo/tools/update_manifest.py` and `python3 leonardo/tools/render_agentgateway.py`
-   (which adds the model's agentgateway route), then `./leonardo/cli.py install <profile>` and a debug run.
+3. Run `python3 leonardo/tools/render_agentgateway.py` (which adds the model's agentgateway route), then
+   `./leonardo/cli.py install <profile> --config-only` and `./leonardo/cli.py diagnose compat --profile
+   <profile>` to check the kernels on one GPU, then the full install and a debug run.
+
+Either way, once a debug run has passed its checks, record it in `leonardo/validation/` (the job log's check
+lines and `INFERENCE_READY`, see the existing runs) so the profile shows as validated.
 
 ### Add a runtime
 

@@ -34,7 +34,8 @@ def render():
     lines = BASE.read_text().splitlines()
     if lines.count('  models:') != 1:
         raise SystemExit('Expected exactly one "  models:" line in ' + str(BASE))
-    models = sorted(json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json'))
+    # Profiles can share a served name (the same model on another runtime); one route each.
+    models = sorted({json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')})
     entries = []
     for model in models:
         entries += ['    - name: ' + model, '      provider: openAI', '      params:', '        baseUrl: ' + UPSTREAM,
@@ -58,7 +59,7 @@ def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(text)
     print('Wrote {} with routes for: {}'.format(OUTPUT, ', '.join(sorted(
-        json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')))))
+        {json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')}))))
 
 
 if __name__ == '__main__':

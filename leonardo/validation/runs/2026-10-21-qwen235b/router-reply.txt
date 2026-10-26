@@ -1,0 +1,6 @@
+# Through cli.py forward and the router (release on branch claude/leonardo-models-and-link), 21 Oct 2026.
+$ curl -s http://127.0.0.1:18000/v1/chat/completions -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3-235b-a22b-fp8-leonardo","messages":[{"role":"user","content":"What is 17 + 25?"}],"chat_template_kwargs":{"enable_thinking":false}}'
+{"id":"chatcmpl-9f638288fc84c9d6","object":"chat.completion","created":1792580111,"model":"qwen3-235b-a22b-fp8-leonardo","choices":[{"index":0,"message":{"role":"assistant","content":"17 + 25 = 42.","refusal":null,"annotations":null,"audio":null,"function_call":null,"reasoning":null},"logprobs":null,"finish_reason":"stop","stop_reason":null,"token_ids":null,"routed_experts":null}],"service_tier":null,"system_fingerprint":"vllm-0.13.1-tp4-pp2-ae6b55ce","usage":{"prompt_tokens":22,"total_tokens":34,"completion_tokens":12,"prompt_tokens_details":null,"completion_tokens_details":{"reasoning_tokens":0}},"prompt_logprobs":null,"prompt_token_ids":null,"prompt_text":null,"kv_transfer_params":null,"ec_transfer_params":null,"metrics":null}
+$ curl -sN ... "stream":true ... | tail -3
+data: [DONE]

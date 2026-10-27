@@ -22,9 +22,8 @@ def build_agent(
         model_id,
         settings=OpenAIChatModelSettings(
             thinking=False,
-            # Gateway 1.6 leaves Gemini on its default when effort is "none".
             **(
-                {"openai_reasoning_effort": "low"}
+                {"openai_reasoning_effort": "low", "max_tokens": 65536}
                 if model_id.startswith("gemini-3")
                 else {}
             ),

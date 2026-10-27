@@ -23,6 +23,15 @@ export type ChatState = {
 	submission?: ChallengeSubmission;
 };
 export const defaultModelId = "gemini-3.8-flash";
+const modelStorageKey = "hackathon.modelId";
+
+export function getSavedModelId() {
+	try {
+		return localStorage.getItem(modelStorageKey)?.trim() || defaultModelId;
+	} catch {
+		return defaultModelId;
+	}
+}
 
 export function AgUiSettings() {
 	const { t } = useTranslation();
@@ -48,15 +57,21 @@ export function AgUiSettings() {
 				<Input
 					id="agui-model"
 					value={state?.settings?.model_id ?? defaultModelId}
-					onChange={(event) =>
+					onChange={(event) => {
+						const modelId = event.target.value;
 						setState({
 							settings: {
-								model_id: event.target.value,
+								model_id: modelId,
 								mode: state?.settings?.mode ?? "CHALLENGE_1",
 								difficulty: state?.settings?.difficulty ?? "EASY",
 							},
-						})
-					}
+						});
+						try {
+							localStorage.setItem(modelStorageKey, modelId);
+						} catch {
+							// Keep the selection for this session when storage is unavailable.
+						}
+					}}
 				/>
 			</PopoverContent>
 		</Popover>

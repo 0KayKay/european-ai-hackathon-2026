@@ -37,6 +37,7 @@ import {
 	type ChatState,
 	type Difficulty,
 	defaultModelId,
+	getSavedModelId,
 } from "@/components/assistant-ui/agui-settings";
 import {
 	MessageQueue,
@@ -326,9 +327,9 @@ function InitialAgentState({
 	const setStateRef = useRef(setState);
 	const stateRef = useRef(state);
 	stateRef.current = state;
-	const modelIdRef = useRef(state?.settings?.model_id ?? defaultModelId);
+	const modelIdRef = useRef(state?.settings?.model_id ?? getSavedModelId());
 	setStateRef.current = setState;
-	modelIdRef.current = state?.settings?.model_id ?? defaultModelId;
+	modelIdRef.current = state?.settings?.model_id ?? modelIdRef.current;
 
 	useEffect(() => {
 		if (

@@ -21,6 +21,7 @@ function stubAgentFetch(fetchMock: ReturnType<typeof vi.fn>) {
 }
 
 beforeEach(() => {
+	localStorage.clear();
 	vi.stubGlobal(
 		"matchMedia",
 		vi.fn((query: string) => ({
@@ -33,6 +34,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
 
@@ -259,7 +261,7 @@ it.each(["Challenge 2", "Challenge 3"])(
 	},
 );
 
-it("sends a message to the local AG-UI endpoint", async () => {
+it("persists the selected model across reloads and sends it to the AG-UI endpoint", async () => {
 	const fetchMock = vi.fn(async (_url: string, options: RequestInit) => {
 		const input = JSON.parse(options.body as string);
 		return new Response(
@@ -268,7 +270,26 @@ it("sends a message to the local AG-UI endpoint", async () => {
 		);
 	});
 	stubAgentFetch(fetchMock);
+	const firstRender = render(<AGUIPlayground />);
+	fireEvent.click(screen.getByRole("button", { name: "Model settings" }));
+	expect(screen.getByRole("textbox", { name: "Model" })).toHaveValue(
+		"gemini-3.8-flash",
+	);
+	fireEvent.change(screen.getByRole("textbox", { name: "Model" }), {
+		target: { value: "gemini-3.1-pro-preview" },
+	});
+	expect(localStorage.getItem("hackathon.modelId")).toBe(
+		"gemini-3.1-pro-preview",
+	);
+	firstRender.unmount();
 	render(<AGUIPlayground />);
+	fireEvent.click(screen.getByRole("button", { name: "Model settings" }));
+	expect(screen.getByRole("textbox", { name: "Model" })).toHaveValue(
+		"gemini-3.1-pro-preview",
+	);
+	fireEvent.keyDown(screen.getByRole("textbox", { name: "Model" }), {
+		key: "Escape",
+	});
 
 	fireEvent.change(screen.getByRole("textbox", { name: "Message input" }), {
 		target: { value: "Test this prompt" },
@@ -282,6 +303,7 @@ it("sends a message to the local AG-UI endpoint", async () => {
 	expect(first.threadId).not.toBe("main");
 	expect(first.state.settings.difficulty).toBe("EASY");
 	expect(first.state.settings.mode).toBe("CHALLENGE_1");
+	expect(first.state.settings.model_id).toBe("gemini-3.1-pro-preview");
 	expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
 		"aria-pressed",
 		"true",
@@ -300,6 +322,7 @@ it("sends a message to the local AG-UI endpoint", async () => {
 	const second = JSON.parse(fetchMock.mock.calls[1][1].body as string);
 	expect(second.threadId).not.toBe(first.threadId);
 	expect(second.state.settings.difficulty).toBe("HARD");
+	expect(second.state.settings.model_id).toBe("gemini-3.1-pro-preview");
 
 	fireEvent.click(
 		within(
@@ -330,6 +353,23 @@ it("sends a message to the local AG-UI endpoint", async () => {
 	const third = JSON.parse(fetchMock.mock.calls[2][1].body as string);
 	expect(third.threadId).not.toBe(second.threadId);
 	expect(third.state.settings.mode).toBe("PLAYGROUND");
+	expect(third.state.settings.model_id).toBe("gemini-3.1-pro-preview");
+});
+
+it("keeps model settings usable when local storage is unavailable", () => {
+	for (const method of ["getItem", "setItem"] as const) {
+		vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+			throw new DOMException("Storage is disabled", "SecurityError");
+		});
+	}
+	render(<AGUIPlayground />);
+	fireEvent.click(screen.getByRole("button", { name: "Model settings" }));
+	const modelInput = screen.getByRole("textbox", { name: "Model" });
+	expect(modelInput).toHaveValue("gemini-3.8-flash");
+	fireEvent.change(modelInput, {
+		target: { value: "gemini-3.1-pro-preview" },
+	});
+	expect(modelInput).toHaveValue("gemini-3.1-pro-preview");
 });
 
 it("submits Challenge 2 inline and keeps the guardrail view", async () => {

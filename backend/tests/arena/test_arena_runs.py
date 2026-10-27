@@ -6,6 +6,7 @@ over an `httpx.MockTransport`.
 """
 
 import asyncio
+import json
 from typing import Any
 
 import httpx
@@ -30,7 +31,7 @@ from hackathon.arena.api import (
 from hackathon.arena.engine import EngineModels
 from hackathon.arena.registry.guardrails import GuardrailDecision
 from hackathon.arena.runs.orchestrator import Orchestrator
-from hackathon.arena.runs.red_team import DeepTeamClient
+from hackathon.arena.runs.red_team import DeepTeamClient, RedTeamError
 from hackathon.arena.runs.store import MemoryRunStore
 
 BASE = "http://test"
@@ -622,6 +623,70 @@ async def test_generated_inputs_and_live_case_are_visible_and_stop_keeps_complet
     assert again.json()["status"] == "stopped"
 
 
+class HoldingStore(MemoryRunStore):
+    """Holds the first save that matches `case` / `run` until the run task is cancelled (a slow database)."""
+
+    def __init__(self, *, case=None, run=None):
+        super().__init__()
+        self.match = {"case": case, "run": run}
+        self.held = asyncio.Event()
+
+    async def _hold(self, kind, record):
+        match = self.match[kind]
+        if match and match(record):
+            self.match[kind] = None
+            self.held.set()
+            await asyncio.sleep(0.2)
+
+    async def save_case(self, case):
+        await self._hold("case", case)
+        await super().save_case(case)
+
+    async def save_run(self, run):
+        await self._hold("run", run)
+        await super().save_run(run)
+
+
+@pytest.mark.asyncio
+async def test_stop_while_a_decided_case_is_saved_keeps_its_result():
+    store = HoldingStore(
+        case=lambda case: case["index"] == 1 and case["status"] == "done"
+    )
+    harness = Harness(store=store)
+    summary = await harness.start("email-review", "easy")
+    await asyncio.wait_for(store.held.wait(), 10)
+    await harness.http.post(f"/api/v1/arena/runs/{summary['id']}/stop")
+    run = await harness.get(f"/runs/{summary['id']}")
+    assert run["status"] == "stopped"
+    case = by_label(run["cases"])["01"]
+    assert (case["status"], case["outcome"]) == ("done", "succeeded")
+    assert run["counts"]["succeeded"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_second_stop_does_not_interrupt_saving_the_stopped_run():
+    gate = {"<body 2>": asyncio.Event()}
+    store = HoldingStore(run=lambda run: run["status"] == "stopped")
+    harness = Harness(models=engine_models(gate), store=store)
+    summary = await harness.start("email-review", "easy")
+    run_id = summary["id"]
+
+    async def blocked():
+        live = (await harness.get(f"/runs/{run_id}"))["live"] or {"events": []}
+        return any(event["kind"] == "tool_result" for event in live["events"])
+
+    await until(blocked)
+    first = asyncio.create_task(harness.http.post(f"/api/v1/arena/runs/{run_id}/stop"))
+    await asyncio.wait_for(store.held.wait(), 10)  # the first stop is saving the run
+    second = await harness.http.post(f"/api/v1/arena/runs/{run_id}/stop")
+    assert (await first).status_code == second.status_code == 200
+    assert (await store.get_run(run_id))["status"] == "stopped"
+    assert run_id not in harness.runs.active
+    run = await harness.get(f"/runs/{run_id}")
+    assert run["status"] == "stopped"
+    assert by_label(run["cases"])["02"]["status"] == "stopped"
+
+
 @pytest.mark.asyncio
 async def test_startup_marks_unfinished_runs_interrupted():
     store = MemoryRunStore()
@@ -721,6 +786,34 @@ async def test_internal_turn_callback_authentication():
 
 
 @pytest.mark.asyncio
+async def test_driver_failure_during_a_turn_waits_for_that_turn():
+    # The driver gives up (e.g. its callback request timed out) while the backend still runs the turn.
+    gate = {"<attack turn 1>": asyncio.Event()}
+    red = FakeRedTeam()
+    turns: list[asyncio.Task] = []
+
+    async def drive(callback):
+        turns.append(asyncio.create_task(callback.call("<attack turn 1>")))
+        await asyncio.sleep(0.05)  # the turn is waiting in the agent
+        asyncio.get_running_loop().call_later(0.1, gate["<attack turn 1>"].set)
+        raise RedTeamError("callback timed out")
+
+    red.drive_hook = drive
+    harness = Harness(red=red, models=engine_models(gate))
+    run = await harness.run("hidden-mailbox", "easy")
+    case = next(c for c in run["cases"] if c["attack_type"] == "linear_jailbreaking")
+    assert case["outcome"] == "error" and "callback timed out" in case["error"]
+    detail = await harness.get(f"/runs/{run['id']}/cases/{case['id']}")
+    kinds = [event["kind"] for event in detail["events"]]
+    # The case is decided after the turn, so its record holds the whole turn, then the driver error.
+    assert (
+        kinds.index("agent_reply") < kinds.index("success_check") < kinds.index("error")
+    )
+    assert detail["turns"] == 1 and detail["messages"] == ["<attack turn 1>"]
+    await asyncio.gather(*turns)
+
+
+@pytest.mark.asyncio
 async def test_multi_turn_case_stops_when_success_is_met():
     red = FakeRedTeam(turns=5)
 
@@ -766,6 +859,28 @@ async def test_unreachable_deepteam_errors_red_cases_and_green_still_runs():
     }
     assert results["errors"] == {"red": 15, "green": 0}
     assert results["rates"]["false_positive"]["denominator"] == 10
+
+
+@pytest.mark.asyncio
+async def test_unexpected_red_generation_failure_errors_red_cases_and_green_still_runs():
+    def malformed(request):
+        line = {"type": "case", "case": {"attack_type": ["prompt_injection"]}}
+        return httpx.Response(200, content=(json.dumps(line) + "\n").encode())
+
+    red = DeepTeamClient(
+        "http://deepteam:8080", "key", transport=httpx.MockTransport(malformed)
+    )
+    harness = Harness(red=red)
+    run = await harness.run("email-review", "easy")
+    assert run["status"] == "completed", run["error"]
+    assert run["generation"]["red"]["status"] == "failed"
+    assert run["generation"]["red"]["error"] == "Unexpected error (TypeError)."
+    red_cases = [c for c in run["cases"] if c["team"] == "red"]
+    assert len(red_cases) == 10 and all(c["outcome"] == "error" for c in red_cases)
+    assert red_cases[0]["error"] == (
+        "Red-team generation failed: Unexpected error (TypeError)."
+    )
+    assert run["counts"]["passed"] + run["counts"]["false_positive"] == 10
 
 
 @pytest.mark.asyncio

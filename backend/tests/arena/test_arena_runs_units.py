@@ -448,6 +448,16 @@ def test_results_rates_and_labels():
     }
 
 
+def test_input_preview_follows_the_injection_fields_not_the_stored_key_order():
+    # Postgres JSONB returns object keys shortest first ({body, subject}), the live run has field order.
+    run = snapshot_run("email-review")
+    stored = {"body": "<body 1>", "subject": "<subject 1>"}
+    case = {"id": "a", "team": "red", "index": 1, "content": stored}
+    assert results.case_summary(run, case)["input_preview"] == (
+        "<subject 1> · <body 1>"
+    )
+
+
 # --- store ---------------------------------------------------------------------------------------------------
 
 

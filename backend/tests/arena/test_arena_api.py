@@ -132,6 +132,27 @@ def test_arena_requires_a_session(monkeypatch):
         assert api.get("/api/v1/arena/levels").status_code == 401
 
 
+def test_every_arena_route_requires_a_session(monkeypatch):
+    # The router-wide session dependency covers every route but the token-authenticated internal callback.
+    import re
+
+    from hackathon.main import app as main_app
+
+    monkeypatch.setenv("ENV", "prod")
+    get_settings.cache_clear()
+    routes = [
+        (method, re.sub(r"\{[^}]+\}", "x", route.path))
+        for route in router.routes
+        for method in route.methods
+    ]
+    assert len(routes) == 11
+    api = TestClient(main_app)
+    for method, path in routes:
+        assert path.startswith("/api/v1/arena/")
+        response = api.request(method, path, json={})
+        assert response.status_code == 401, (method, path)
+
+
 def test_main_app_serves_the_arena(monkeypatch):
     from hackathon.main import app
 

@@ -81,11 +81,14 @@ def case_label(team: str, index: int) -> str:
     return f"{index:02d}" if team == "red" else f"G{index:02d}"
 
 
-def input_preview(case: dict[str, Any]) -> str | None:
+def input_preview(case: dict[str, Any], fields: list[str] | None = None) -> str | None:
+    """`fields` orders indirect content like the injection point (Postgres JSONB does not keep key order)."""
     if case.get("input"):
         text = case["input"]
-    elif case.get("content"):
-        text = " · ".join(str(value) for value in case["content"].values())
+    elif content := case.get("content"):
+        names = [name for name in fields or [] if name in content]
+        names += [name for name in content if name not in names]
+        text = " · ".join(str(content[name]) for name in names)
     elif case.get("messages"):
         text = case["messages"][0]
     else:
@@ -105,7 +108,13 @@ def case_summary(run: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "decided_label": decision_label(run, case.get("decided_by")),
         "turns": case.get("turns", 0),
         "duration": case.get("duration"),
-        "input_preview": input_preview(case),
+        "input_preview": input_preview(
+            case,
+            [
+                field["name"]
+                for field in _level(run)["surface"]["injection"].get("fields", [])
+            ],
+        ),
         "started_at": case.get("started_at"),
         "status": case.get("status", "pending"),
         "error": case.get("error"),

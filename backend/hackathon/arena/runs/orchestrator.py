@@ -97,8 +97,16 @@ class ActiveRun:
     datasets: dict[str, dict[str, Any] | None]
     cases: list[dict[str, Any]] = field(default_factory=list)
     live: dict[str, Any] | None = None
+    # The executing case, until its result is saved.
+    current: dict[str, Any] | None = None
     task: asyncio.Task | None = None
     cancel_status: str = "stopped"
+
+    def cancel(self, status: str) -> None:
+        """Cancel the run task once; a second cancel would interrupt it while it saves its final state."""
+        if self.task and not self.task.done() and not self.task.cancelling():
+            self.cancel_status = status
+            self.task.cancel()
 
 
 def _seconds_between(start: str, end: str | None) -> float:
@@ -152,9 +160,7 @@ class Orchestrator:
 
     async def shutdown(self) -> None:
         for active in list(self.active.values()):
-            active.cancel_status = "interrupted"
-            if active.task:
-                active.task.cancel()
+            active.cancel("interrupted")
         tasks = [active.task for active in self.active.values() if active.task]
         if tasks:
             await asyncio.wait(tasks, timeout=STOP_TIMEOUT_SECONDS)
@@ -296,8 +302,7 @@ class Orchestrator:
     async def stop_run(self, run_id: str) -> dict[str, Any]:
         active = self.active.get(run_id)
         if active and active.task and not active.task.done():
-            active.cancel_status = "stopped"
-            active.task.cancel()
+            active.cancel("stopped")
             await asyncio.wait({active.task}, timeout=STOP_TIMEOUT_SECONDS)
             return self.summary(active.run)
         run = await self._stored_run(run_id)
@@ -334,12 +339,6 @@ class Orchestrator:
             run["status"] = "completed"
         except asyncio.CancelledError:
             run["status"] = active.cancel_status
-            for case in active.cases:
-                if case["status"] == "running":
-                    case["status"] = "stopped"
-                    if active.live and active.live["case_id"] == case["id"]:
-                        case["events"] = active.live["events"]
-                    await self.store.save_case(case)
         except Exception as exc:
             logger.exception("Arena run failed", run_id=run["id"])
             while isinstance(exc, ExceptionGroup) and exc.exceptions:
@@ -348,6 +347,10 @@ class Orchestrator:
             run["error"] = f"The run failed ({type(exc).__name__})."
         finally:
             run["finished_at"] = now_iso()
+            try:
+                await self._settle_current(active)
+            except Exception:
+                logger.exception("Could not save the last arena case", run_id=run["id"])
             active.live = None
             try:
                 await self._save(active)
@@ -357,6 +360,21 @@ class Orchestrator:
                 )
             self.active.pop(run["id"], None)
             logger.info("Arena run finished", run_id=run["id"], status=run["status"])
+
+    async def _settle_current(self, active: ActiveRun) -> None:
+        """Save the case that was executing when the run ended (stop, shutdown, failure).
+
+        An undecided case becomes `stopped` with its events so far. A decided one is saved again, because the
+        run may have ended while its result was being saved.
+        """
+        case, active.current = active.current, None
+        if case is None:
+            return
+        if case["status"] == "running":
+            case["status"] = "stopped"
+            if active.live and active.live["case_id"] == case["id"]:
+                case["events"] = active.live["events"]
+        await self.store.save_case(case)
 
     def _new_case(
         self,
@@ -508,6 +526,9 @@ class Orchestrator:
                     "Red-team generation failed", run_id=run["id"], error=str(exc)
                 )
                 generation["error"] = str(exc)
+            except Exception as exc:
+                logger.exception("Red-team generation failed", run_id=run["id"])
+                generation["error"] = f"Unexpected error ({type(exc).__name__})."
             missing_reason = (
                 f"Red-team generation failed: {generation['error']}"
                 if generation["error"]
@@ -568,6 +589,7 @@ class Orchestrator:
 
     async def _execute_case(self, active: ActiveRun, case: dict[str, Any]) -> None:
         level = active.level
+        active.current = case
         case["status"] = "running"
         case["started_at"] = now_iso()
         live = {"case_id": case["id"], "events": []}
@@ -619,6 +641,7 @@ class Orchestrator:
         self._apply_result(case, result, time.monotonic() - start)
         active.live = None
         await self._save(active, case)
+        active.current = None
 
     @staticmethod
     def _apply_result(
@@ -648,9 +671,8 @@ class Orchestrator:
         level = active.level
         session = CaseSession(level, identity, **options)
         case["messages"] = []
-        self.turn_targets[case["id"]] = ActiveCase(
-            token=active.token, session=session, record=case
-        )
+        target = ActiveCase(token=active.token, session=session, record=case)
+        self.turn_targets[case["id"]] = target
         callback = TurnCallback(
             url=f"{self.callback_base_url}/api/v1/arena/internal/cases/{case['id']}/turn",
             token=active.token,
@@ -674,7 +696,9 @@ class Orchestrator:
             error = f"Red-team driver failed ({type(exc).__name__})."
         finally:
             self.turn_targets.pop(case["id"], None)
-        return await session.finish(error=error)
+        # The driver may give up while a turn it requested still runs; decide the case after that turn.
+        async with target.lock:
+            return await session.finish(error=error)
 
     async def internal_turn(
         self, case_id: str, token: str, message: str
@@ -686,7 +710,7 @@ class Orchestrator:
         if not hmac.compare_digest(token.encode(), target.token.encode()):
             raise HTTPException(403, "Invalid arena token")
         async with target.lock:
-            if target.session.stopped:
+            if target.session.stopped or target.session.finished:
                 return {"reply": "", "stop": True}
             target.record["messages"].append(message)
             result = await target.session.turn(message)

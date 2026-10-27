@@ -389,7 +389,9 @@ tables `arena_runs` (the config `snapshot` in its own column, written once), `ar
 `arena_datasets`. A store interface with a Postgres implementation and an in-memory implementation
 (tests; `ARENA_STORE=memory` for local runs without DB). Runs found `running`/`generating` at startup become
 `interrupted` (finished at their last update) and their running case `stopped`. `tests/arena/test_arena_store.py`
-runs the store tests against Postgres when `ARENA_TEST_DATABASE_URL` is set.
+runs the store tests against Postgres when `ARENA_TEST_DATABASE_URL` is set. JSONB cannot hold NUL characters or
+UTF-16 surrogates, so both stores save every string with these replaced by U+FFFD (a stored dataset holds the
+replaced text); JSONB also does not keep object key order, so views order injection content by its fields.
 
 The internal callback (`/api/v1/arena/internal/`) is answered with 404 by the frontend proxy (Caddy, Vite), and the
 backend refuses requests on it that carry forwarding headers (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`,

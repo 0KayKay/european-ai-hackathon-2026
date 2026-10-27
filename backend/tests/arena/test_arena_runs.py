@@ -30,7 +30,7 @@ from hackathon.arena.api import (
 from hackathon.arena.engine import EngineModels
 from hackathon.arena.registry.guardrails import GuardrailDecision
 from hackathon.arena.runs.orchestrator import Orchestrator
-from hackathon.arena.runs.red_team import DeepTeamClient
+from hackathon.arena.runs.red_team import DeepTeamClient, RedTeamError
 from hackathon.arena.runs.store import MemoryRunStore
 
 BASE = "http://test"
@@ -782,6 +782,34 @@ async def test_internal_turn_callback_authentication():
     export = (await harness.http.get(f"/api/v1/arena/runs/{run['id']}/export")).text
     assert seen["token"] not in export
     assert seen["token"] not in str(harness.store.runs) + str(harness.store.cases)
+
+
+@pytest.mark.asyncio
+async def test_driver_failure_during_a_turn_waits_for_that_turn():
+    # The driver gives up (e.g. its callback request timed out) while the backend still runs the turn.
+    gate = {"<attack turn 1>": asyncio.Event()}
+    red = FakeRedTeam()
+    turns: list[asyncio.Task] = []
+
+    async def drive(callback):
+        turns.append(asyncio.create_task(callback.call("<attack turn 1>")))
+        await asyncio.sleep(0.05)  # the turn is waiting in the agent
+        asyncio.get_running_loop().call_later(0.1, gate["<attack turn 1>"].set)
+        raise RedTeamError("callback timed out")
+
+    red.drive_hook = drive
+    harness = Harness(red=red, models=engine_models(gate))
+    run = await harness.run("hidden-mailbox", "easy")
+    case = next(c for c in run["cases"] if c["attack_type"] == "linear_jailbreaking")
+    assert case["outcome"] == "error" and "callback timed out" in case["error"]
+    detail = await harness.get(f"/runs/{run['id']}/cases/{case['id']}")
+    kinds = [event["kind"] for event in detail["events"]]
+    # The case is decided after the turn, so its record holds the whole turn, then the driver error.
+    assert (
+        kinds.index("agent_reply") < kinds.index("success_check") < kinds.index("error")
+    )
+    assert detail["turns"] == 1 and detail["messages"] == ["<attack turn 1>"]
+    await asyncio.gather(*turns)
 
 
 @pytest.mark.asyncio

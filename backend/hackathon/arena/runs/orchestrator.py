@@ -668,9 +668,8 @@ class Orchestrator:
         level = active.level
         session = CaseSession(level, identity, **options)
         case["messages"] = []
-        self.turn_targets[case["id"]] = ActiveCase(
-            token=active.token, session=session, record=case
-        )
+        target = ActiveCase(token=active.token, session=session, record=case)
+        self.turn_targets[case["id"]] = target
         callback = TurnCallback(
             url=f"{self.callback_base_url}/api/v1/arena/internal/cases/{case['id']}/turn",
             token=active.token,
@@ -694,7 +693,9 @@ class Orchestrator:
             error = f"Red-team driver failed ({type(exc).__name__})."
         finally:
             self.turn_targets.pop(case["id"], None)
-        return await session.finish(error=error)
+        # The driver may give up while a turn it requested still runs; decide the case after that turn.
+        async with target.lock:
+            return await session.finish(error=error)
 
     async def internal_turn(
         self, case_id: str, token: str, message: str
@@ -706,7 +707,7 @@ class Orchestrator:
         if not hmac.compare_digest(token.encode(), target.token.encode()):
             raise HTTPException(403, "Invalid arena token")
         async with target.lock:
-            if target.session.stopped:
+            if target.session.stopped or target.session.finished:
                 return {"reply": "", "stop": True}
             target.record["messages"].append(message)
             result = await target.session.turn(message)

@@ -218,6 +218,23 @@ target callback for multi-turn attacks.
 
 Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active. SSE is optional.
 
+**Details the frontend relies on (WP3, refines the shapes above; TypeScript in `frontend/src/arena/types.ts`):**
+
+- Graph node `kind` mirrors the id prefix: `attacker | user_task | injection | guardrails` (group
+  `guardrails:<position>`) `| guardrail` (member) `| agent | tools` (group) `| tool` (member) `| data | success |
+  output`. The UI falls back to the id prefix for an unknown `kind` and derives a missing group node from a member's
+  `group`. Edges may reference members (`tool:send_email`); the UI draws them on the member's group.
+- `details.prompts[].file` is optional (`null` for inline text, e.g. the attacker objective); `details.settings` values
+  are display strings. A guardrail member with `details.model` is shown as an LLM guardrail.
+- `models[].node` links a role to its graph node (several roles may share `attacker`); `null` for roles without a node
+  (green-team generator).
+- Level detail `red_team` summary: `{ attacks: [{ type, attempts, turns }], cases, max_turns, attacker?, simulator?,
+  evaluator? }`; `green_team`: `{ cases, generator? }` (ModelSpecs). All optional for the UI.
+- `source.files[0]` is `level.yaml`, followed by the files it references; each `path` is spelled as in `level.yaml`
+  (e.g. `prompts/input_judge.md`, `shared/prompts/judge_system.md`), so prompt `file` values match a tab.
+- Results `errors`: `{ red, green }` (counts). Case summary `outcome` and `decided_by` are `null` until the case is
+  decided; `duration` is seconds.
+
 ## 6. DeepTeam service (internal endpoints)
 
 Base `http://deepteam:8080`, prefix `/internal/arena`, authenticated with the shared `AGENTGATEWAY_API_KEY` as

@@ -19,6 +19,7 @@ import {
 	MessageCircleIcon,
 	MinusIcon,
 	PlusIcon,
+	ShieldIcon,
 	TargetIcon,
 	XIcon,
 } from "lucide-react";
@@ -676,6 +677,18 @@ export default function AGUIPlayground({
 			</button>
 		),
 	);
+	const arenaLink = (
+		<a
+			href="#/arena"
+			className="flex shrink-0 items-center gap-2 rounded-md border-l-2 border-transparent px-1.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-2 lg:text-sm"
+		>
+			<ShieldIcon
+				className="hidden size-4 shrink-0 lg:block"
+				aria-hidden="true"
+			/>
+			Arena
+		</a>
+	);
 
 	return (
 		<TooltipProvider>
@@ -700,6 +713,7 @@ export default function AGUIPlayground({
 							Explore
 						</p>
 						{sectionButtons}
+						{arenaLink}
 					</nav>
 					<div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-5">
 						<p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -770,6 +784,7 @@ export default function AGUIPlayground({
 							aria-label="Sections"
 						>
 							{sectionButtons}
+							{arenaLink}
 							<div className="ml-1 shrink-0 border-l pl-2">
 								<Button
 									type="button"

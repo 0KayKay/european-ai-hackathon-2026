@@ -1,11 +1,14 @@
 import { useState } from "react";
 import AGUIPlayground from "./AGUIPlayground";
+import { ArenaApp } from "./arena/ArenaApp";
+import { useArenaRoute } from "./arena/router";
 import { Button } from "./components/ui/button";
 import { authClient } from "./lib/auth-client";
 
 export default function App() {
 	const { data: session, isPending } = authClient.useSession();
 	const [error, setError] = useState("");
+	const arenaRoute = useArenaRoute();
 
 	if (isPending) {
 		return (
@@ -43,10 +46,16 @@ export default function App() {
 		);
 	}
 
+	// The playground stays mounted while the arena is open, so a running chat keeps its state.
 	return (
-		<AGUIPlayground
-			userName={session.user.name}
-			onSignOut={() => void authClient.signOut()}
-		/>
+		<>
+			{arenaRoute && <ArenaApp route={arenaRoute} />}
+			<div hidden={Boolean(arenaRoute)}>
+				<AGUIPlayground
+					userName={session.user.name}
+					onSignOut={() => void authClient.signOut()}
+				/>
+			</div>
+		</>
 	);
 }

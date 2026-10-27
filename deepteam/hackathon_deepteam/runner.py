@@ -97,6 +97,11 @@ def run_deepteam(
             model=request.model,
             base_url=settings.AGENTGATEWAY_BASE_URL,
             api_key=settings.AGENTGATEWAY_API_KEY,
+            default_headers={
+                "x-user-id": user_id,
+                "x-model": request.model,
+                "x-run-id": run_id,
+            },
             generation_kwargs={"response_format": {"type": "json_object"}},
         )
 

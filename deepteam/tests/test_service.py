@@ -2,7 +2,9 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from hackathon_deepteam.agui_target import AGUIResult
@@ -82,6 +84,11 @@ def test_run_passes_goal_target_and_session_to_deepteam(monkeypatch, caplog) -> 
     assert seen["target_purpose"] == "Protect the finance assistant"
     assert seen["simulator_model"]["base_url"] == "http://agentgateway:3000/v1"
     assert seen["simulator_model"]["api_key"] == "test-key"
+    assert seen["simulator_model"]["default_headers"] == {
+        "x-user-id": "user-1",
+        "x-model": "gemini-3.8-flash",
+        "x-run-id": response.json()["run_id"],
+    }
     assert seen["simulator_model"]["generation_kwargs"] == {
         "response_format": {"type": "json_object"}
     }
@@ -166,6 +173,41 @@ def test_run_requires_authentication() -> None:
         json={"goal": "Test", "target_url": "http://backend:8000/api/v1/ag-ui"},
     )
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("env", ["local", "prod"])
+@pytest.mark.parametrize("auth_status", [204, 401, 403])
+async def test_session_identity_is_verified_in_every_environment(
+    monkeypatch, env, auth_status
+) -> None:
+    import hackathon_deepteam.api.auth as auth_api
+
+    monkeypatch.setenv("ENV", env)
+    get_settings.cache_clear()
+    requests = []
+
+    def authorize(request):
+        requests.append(request)
+        return httpx.Response(auth_status, headers={"x-auth-user": "github-user"})
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        auth_api.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(transport=httpx.MockTransport(authorize)),
+    )
+    request = Request(
+        {"type": "http", "headers": [(b"cookie", b"better-auth.session_token=signed")]}
+    )
+    if auth_status == 204:
+        assert await require_user(request) == "github-user"
+    else:
+        with pytest.raises(HTTPException) as exc:
+            await require_user(request)
+        assert exc.value.status_code == 401
+    assert requests[0].url.path == "/api/auth/authorize"
+    assert requests[0].headers["cookie"] == "better-auth.session_token=signed"
 
 
 def test_openapi_example_runs_challenge_one_locally(monkeypatch) -> None:

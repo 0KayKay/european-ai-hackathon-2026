@@ -642,10 +642,18 @@ async def test_judge_accepts_fenced_json_explanations(monkeypatch):
             return None
 
     monkeypatch.setattr("hackathon.agent.guardrails.AsyncOpenAI", Client)
-    result = await judge("policy and sample")
+    from openinference.instrumentation import using_attributes
+
+    with using_attributes(user_id="judge-user", session_id="thread-1"):
+        result = await judge("policy and sample")
     assert result.decision == "UNSAFE" and result.rule == "Instruction override"
     assert client_options["max_retries"] == 0
     assert client_options["timeout"] == 30
+    assert client_options["default_headers"] == {
+        "x-model": "gemini-3.8-flash",
+        "x-user-id": "judge-user",
+        "x-thread-id": "thread-1",
+    }
     assert create.call_args.kwargs["reasoning_effort"] == "low"
     assert create.call_args.kwargs["max_completion_tokens"] == 2048
     response_format = create.call_args.kwargs["response_format"]

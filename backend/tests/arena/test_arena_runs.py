@@ -674,12 +674,24 @@ async def test_internal_turn_callback_authentication():
             json={"message": "<attack turn 1>"},
             headers={"x-arena-token": callback.token},
         )
+        # Through a proxy (Caddy, the load balancer, agentgateway) the callback does not exist.
+        proxied = [
+            (
+                await harness.http.post(
+                    path,
+                    json={"message": "<attack turn 1>"},
+                    headers={"x-arena-token": callback.token, header: "203.0.113.7"},
+                )
+            ).status_code
+            for header in ("X-Forwarded-For", "Forwarded", "X-Real-IP")
+        ]
         ok = await harness.http.post(
             path,
             json={"message": "<attack turn 1>"},
             headers={"x-arena-token": callback.token},
         )
         seen.update(
+            proxied=proxied,
             wrong=wrong.status_code,
             missing=missing.status_code,
             unknown=unknown.status_code,
@@ -691,6 +703,7 @@ async def test_internal_turn_callback_authentication():
     red.drive_hook = over_http
     run = await harness.run("hidden-mailbox", "easy")
     assert seen["wrong"] == 403 and seen["missing"] == 403 and seen["unknown"] == 404
+    assert seen["proxied"] == [404, 404, 404]
     assert seen["ok"] == (200, {"reply": "<reply>", "stop": False})
     # The internal router is not behind the session dependency, but a finished case takes no turns.
     after = await harness.http.post(

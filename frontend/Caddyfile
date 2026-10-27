@@ -7,6 +7,12 @@
         reverse_proxy deepteam:8080
     }
 
+    # Multi-turn callback of the deepteam service; it calls backend:8000 inside the cluster and is
+    # never served to browsers (the backend also refuses forwarded requests on this path).
+    handle /api/v1/arena/internal* {
+        respond 404
+    }
+
     handle /api/* {
         reverse_proxy agentgateway:3000
     }

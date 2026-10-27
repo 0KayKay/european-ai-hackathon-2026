@@ -6,6 +6,7 @@ over an `httpx.MockTransport`.
 """
 
 import asyncio
+import json
 from typing import Any
 
 import httpx
@@ -858,6 +859,28 @@ async def test_unreachable_deepteam_errors_red_cases_and_green_still_runs():
     }
     assert results["errors"] == {"red": 15, "green": 0}
     assert results["rates"]["false_positive"]["denominator"] == 10
+
+
+@pytest.mark.asyncio
+async def test_unexpected_red_generation_failure_errors_red_cases_and_green_still_runs():
+    def malformed(request):
+        line = {"type": "case", "case": {"attack_type": ["prompt_injection"]}}
+        return httpx.Response(200, content=(json.dumps(line) + "\n").encode())
+
+    red = DeepTeamClient(
+        "http://deepteam:8080", "key", transport=httpx.MockTransport(malformed)
+    )
+    harness = Harness(red=red)
+    run = await harness.run("email-review", "easy")
+    assert run["status"] == "completed", run["error"]
+    assert run["generation"]["red"]["status"] == "failed"
+    assert run["generation"]["red"]["error"] == "Unexpected error (TypeError)."
+    red_cases = [c for c in run["cases"] if c["team"] == "red"]
+    assert len(red_cases) == 10 and all(c["outcome"] == "error" for c in red_cases)
+    assert red_cases[0]["error"] == (
+        "Red-team generation failed: Unexpected error (TypeError)."
+    )
+    assert run["counts"]["passed"] + run["counts"]["false_positive"] == 10
 
 
 @pytest.mark.asyncio

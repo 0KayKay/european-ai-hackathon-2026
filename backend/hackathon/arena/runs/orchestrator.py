@@ -526,6 +526,9 @@ class Orchestrator:
                     "Red-team generation failed", run_id=run["id"], error=str(exc)
                 )
                 generation["error"] = str(exc)
+            except Exception as exc:
+                logger.exception("Red-team generation failed", run_id=run["id"])
+                generation["error"] = f"Unexpected error ({type(exc).__name__})."
             missing_reason = (
                 f"Red-team generation failed: {generation['error']}"
                 if generation["error"]

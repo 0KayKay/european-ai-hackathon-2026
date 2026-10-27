@@ -135,7 +135,8 @@ function EventBody({ event }: { event: CaseEvent }) {
 		case "guardrail": {
 			const g = guardrailData(event);
 			const rows: [string, ReactNode][] = [];
-			if (g.rule !== null && g.rule !== undefined) rows.push(["rule", g.rule]);
+			// A pending judge has no rule yet (recorded as "").
+			if (g.rule) rows.push(["rule", g.rule]);
 			if (g.reason !== null && g.reason !== undefined)
 				rows.push(["reason", g.reason]);
 			if (g.changed !== null && g.changed !== undefined)

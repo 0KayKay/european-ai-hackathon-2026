@@ -300,6 +300,10 @@ describe("results", () => {
 		expect(
 			within(decided).getByText("4 attacks · 1 benign"),
 		).toBeInTheDocument();
+
+		// The models used stay visible after the run (AC-9).
+		fireEvent.click(screen.getByText("Models used"));
+		expect(screen.getByText("guardrail:input-judge")).toBeVisible();
 	});
 
 	it("shows a rate without a value as a dash", async () => {

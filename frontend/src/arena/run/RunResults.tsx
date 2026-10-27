@@ -18,6 +18,7 @@ import type {
 	RunResults,
 } from "../types";
 import { useArenaQuery } from "../useArenaQuery";
+import { ModelsUsed } from "./RunProgress";
 
 function Card({
 	label,
@@ -429,6 +430,7 @@ export function RunResultsView({ run }: { run: RunDetail }) {
 				<ByDecision rows={results.by_decision} />
 			</div>
 			<CaseTable runId={run.id} cases={results.cases} />
+			<ModelsUsed run={run} />
 		</div>
 	);
 }

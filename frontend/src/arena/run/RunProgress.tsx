@@ -268,7 +268,8 @@ function LiveSample({ run }: { run: RunDetail }) {
 	);
 }
 
-function ModelsUsed({ run }: { run: RunDetail }) {
+/** The model and parameters of every LLM role, as recorded with the run (R-EXE-7, AC-9). */
+export function ModelsUsed({ run }: { run: RunDetail }) {
 	if (!run.models.length) return null;
 	return (
 		<details className="group rounded-xl border bg-white shadow-sm">

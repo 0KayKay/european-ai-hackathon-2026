@@ -97,6 +97,8 @@ class ActiveRun:
     datasets: dict[str, dict[str, Any] | None]
     cases: list[dict[str, Any]] = field(default_factory=list)
     live: dict[str, Any] | None = None
+    # The executing case, until its result is saved.
+    current: dict[str, Any] | None = None
     task: asyncio.Task | None = None
     cancel_status: str = "stopped"
 
@@ -334,12 +336,6 @@ class Orchestrator:
             run["status"] = "completed"
         except asyncio.CancelledError:
             run["status"] = active.cancel_status
-            for case in active.cases:
-                if case["status"] == "running":
-                    case["status"] = "stopped"
-                    if active.live and active.live["case_id"] == case["id"]:
-                        case["events"] = active.live["events"]
-                    await self.store.save_case(case)
         except Exception as exc:
             logger.exception("Arena run failed", run_id=run["id"])
             while isinstance(exc, ExceptionGroup) and exc.exceptions:
@@ -348,6 +344,10 @@ class Orchestrator:
             run["error"] = f"The run failed ({type(exc).__name__})."
         finally:
             run["finished_at"] = now_iso()
+            try:
+                await self._settle_current(active)
+            except Exception:
+                logger.exception("Could not save the last arena case", run_id=run["id"])
             active.live = None
             try:
                 await self._save(active)
@@ -357,6 +357,21 @@ class Orchestrator:
                 )
             self.active.pop(run["id"], None)
             logger.info("Arena run finished", run_id=run["id"], status=run["status"])
+
+    async def _settle_current(self, active: ActiveRun) -> None:
+        """Save the case that was executing when the run ended (stop, shutdown, failure).
+
+        An undecided case becomes `stopped` with its events so far. A decided one is saved again, because the
+        run may have ended while its result was being saved.
+        """
+        case, active.current = active.current, None
+        if case is None:
+            return
+        if case["status"] == "running":
+            case["status"] = "stopped"
+            if active.live and active.live["case_id"] == case["id"]:
+                case["events"] = active.live["events"]
+        await self.store.save_case(case)
 
     def _new_case(
         self,
@@ -568,6 +583,7 @@ class Orchestrator:
 
     async def _execute_case(self, active: ActiveRun, case: dict[str, Any]) -> None:
         level = active.level
+        active.current = case
         case["status"] = "running"
         case["started_at"] = now_iso()
         live = {"case_id": case["id"], "events": []}
@@ -619,6 +635,7 @@ class Orchestrator:
         self._apply_result(case, result, time.monotonic() - start)
         active.live = None
         await self._save(active, case)
+        active.current = None
 
     @staticmethod
     def _apply_result(

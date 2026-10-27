@@ -622,6 +622,46 @@ async def test_generated_inputs_and_live_case_are_visible_and_stop_keeps_complet
     assert again.json()["status"] == "stopped"
 
 
+class HoldingStore(MemoryRunStore):
+    """Holds the first save that matches `case` / `run` until the run task is cancelled (a slow database)."""
+
+    def __init__(self, *, case=None, run=None):
+        super().__init__()
+        self.match = {"case": case, "run": run}
+        self.held = asyncio.Event()
+
+    async def _hold(self, kind, record):
+        match = self.match[kind]
+        if match and match(record):
+            self.match[kind] = None
+            self.held.set()
+            await asyncio.sleep(0.2)
+
+    async def save_case(self, case):
+        await self._hold("case", case)
+        await super().save_case(case)
+
+    async def save_run(self, run):
+        await self._hold("run", run)
+        await super().save_run(run)
+
+
+@pytest.mark.asyncio
+async def test_stop_while_a_decided_case_is_saved_keeps_its_result():
+    store = HoldingStore(
+        case=lambda case: case["index"] == 1 and case["status"] == "done"
+    )
+    harness = Harness(store=store)
+    summary = await harness.start("email-review", "easy")
+    await asyncio.wait_for(store.held.wait(), 10)
+    await harness.http.post(f"/api/v1/arena/runs/{summary['id']}/stop")
+    run = await harness.get(f"/runs/{summary['id']}")
+    assert run["status"] == "stopped"
+    case = by_label(run["cases"])["01"]
+    assert (case["status"], case["outcome"]) == ("done", "succeeded")
+    assert run["counts"]["succeeded"] == 1
+
+
 @pytest.mark.asyncio
 async def test_startup_marks_unfinished_runs_interrupted():
     store = MemoryRunStore()

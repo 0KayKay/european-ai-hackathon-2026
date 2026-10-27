@@ -91,36 +91,30 @@ their own personal folder in `users/`.
 ### Optional: connect the GKE cluster
 
 Prepared, but **off until the organisers approve** the outbound connection, because the terms forbid
-working around security controls. First find out what the router's CPU queue can reach (see
-[Troubleshooting](#troubleshooting)): GPU-node ports, and the internet directly or through the hackathon
-proxy. Then:
+working around security controls. The cluster's maintainers enable the Kubernetes side with
+[infrastructure/leonardo/README.md](../infrastructure/leonardo/README.md); they need your router token
+(`./leonardo/cli.py router token`) and give you the link password and the server's fingerprint. Then:
 
-1. Create two secrets in GKE: the chisel server's key and the one user it accepts (which may open only
-   port 9000), and your router token.
+1. Check that the router's CPU queue reaches the link server; the log should say `101: REACHABLE`:
 
    ```bash
-   SERVER_KEY=$(docker run --rm jpillora/chisel:1.13.0 server --keygen -)
-   LINK_PASSWORD=$(openssl rand -hex 24)
-   kubectl create secret generic leonardo-link --from-literal=server.key="$SERVER_KEY" \
-     --from-literal=users.json="{\"leonardo:$LINK_PASSWORD\": [\"^R:0.0.0.0:9000\$\"]}"
-   ./leonardo/cli.py router token | kubectl create secret generic leonardo-router --from-file=token=/dev/stdin
+   ./leonardo/cli.py diagnose reach --link-url https://european-ai-hackathon-2026.codify.ch/leonardo-link
    ```
 
-2. Add `components: [../leonardo]` to `infrastructure/gke/kustomization.yaml` and deploy. This adds the
-   chisel server under `https://european-ai-hackathon-2026.codify.ch/leonardo-link`, the `leonardo-router`
-   Service and one agentgateway route per model. Read the server's fingerprint with
-   `kubectl logs deploy/leonardo-link | grep Fingerprint`.
-3. In `$BASE/inference-site.json`, set `cluster_link.enabled` to `true`, `server` to that URL,
-   `fingerprint`, and `proxy` if the route needs the hackathon proxy.
-4. Install the chisel client and restart your router with the link password:
+2. In `$BASE/inference-site.json`, set `cluster_link.enabled` to `true`, `server` to that URL, `fingerprint`,
+   and `proxy` only if the check needed one (`--proxy`).
+3. Install the chisel client and restart your router with the link password:
 
    ```bash
    ./leonardo/cli.py install --link-client
    printf 'leonardo:%s\n' "$LINK_PASSWORD" > /tmp/link_auth
    ./leonardo/cli.py router up --restart --link-auth-file /tmp/link_auth && rm /tmp/link_auth
+   ./leonardo/cli.py status     # "cluster link connected since ..."
    ```
 
 The backend then uses the "Served as" names from the table above as model names in its agentgateway calls.
+If `status` shows the link as `retrying`, its error says why; [docs/cluster-link.md](docs/cluster-link.md)
+lists the states.
 
 ## Usage
 
@@ -270,7 +264,9 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
   solved, and what was consolidated from Junghwa's repository and the starter kit.
 - [docs/deepseek16.md](docs/deepseek16.md): optional four-node DeepSeek configuration, pinned PP KV
   cache patch, runtime installation, historical load evidence and remaining integration validation.
-- [The Kubernetes component](../infrastructure/leonardo/kustomization.yaml).
+- [docs/cluster-link.md](docs/cluster-link.md): how the cluster reaches the router, and the alternatives.
+- [infrastructure/leonardo/README.md](../infrastructure/leonardo/README.md): the Kubernetes side of the
+  cluster link, for the cluster's maintainers.
 
 ### Validation status
 
@@ -296,8 +292,10 @@ Runtime/checkpoints and private compile caches were reused. Model/router shutdow
 and transient-key cleanup passed. The profiles' embedded `validation` strings describe earlier snapshots;
 `validated_code.json` and these run records track the current executed bytes without changing the tested profiles.
 
-The cluster link has not run on Leonardo or GKE yet (only on a workstation). All runs used one operator
-account and short functional prompts; sustained load, long context and multi-account operation are untested.
+The cluster link has not run on GKE yet: it ran end to end in a local Kubernetes cluster with the
+repository's manifests, and Leonardo's CPU queue reaches the app's host directly
+([docs/cluster-link.md](docs/cluster-link.md)). All runs used one operator account and short functional
+prompts; sustained load, long context and multi-account operation are untested.
 
 ## Contributing and extending
 

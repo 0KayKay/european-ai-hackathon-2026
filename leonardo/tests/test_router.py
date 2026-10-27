@@ -126,7 +126,7 @@ class Router(unittest.TestCase):
             connection.close()
 
     def test_authentication_and_catalog(self):
-        self.assertEqual(self.json_call('GET', '/health', token=None), (200, {'status': 'ok'}))
+        self.assertEqual(self.json_call('GET', '/health', token=None), (200, {'status': 'ok', 'cluster_link': 'off'}))
         self.assertEqual(self.json_call('GET', '/v1/models', token=None)[0], 401)
         self.assertEqual(self.json_call('GET', '/v1/models', token='wrong')[0], 401)
         self.assertEqual(self.json_call('POST', '/v1/chat/completions', {'model': 'model-a'}, token='wrong')[0], 401)
@@ -250,6 +250,78 @@ class RouterJobs(unittest.TestCase):
         (self.base / 'tools/chisel-1.13.0').write_bytes(b'not the pinned binary')
         self.assertIn(b'does not match catalog.json', self.team('router', 'up').stderr)
         self.assertFalse((self.home / 'sbatch-calls').exists())
+
+
+FAKE_CHISEL = """import sys, time
+# Prints what chisel 1.13 prints (recorded from the real client), then exits or keeps running.
+for line in sys.argv[1].split('|'):
+    print('2026/10/20 21:45:38 client: ' + line, flush=True)
+    time.sleep(0.05)
+if sys.argv[2] == 'stay':
+    time.sleep(60)
+sys.exit(3)
+"""
+
+
+class LinkSupervisor(unittest.TestCase):
+    """The router's view of its chisel client: state from the log, restart when the client exits."""
+
+    def setUp(self):
+        sys.path.insert(0, str(RELEASE))
+        import router
+        self.router = router
+        self.temp = tempfile.TemporaryDirectory()
+        self.script = Path(self.temp.name) / 'chisel.py'
+        self.script.write_text(FAKE_CHISEL)
+        self.seen = []
+
+    def tearDown(self):
+        self.temp.cleanup()
+        sys.path.remove(str(RELEASE))
+
+    def link(self, lines, then):
+        link = self.router.Link([sys.executable, str(self.script), lines, then], dict(os.environ),
+                                on_change=lambda status: self.seen.append(status))
+        link.RESTART_DELAYS = (0.2,)
+        return link
+
+    def wait_for(self, link, state):
+        until = time.monotonic() + 10
+        while link.status()['state'] != state:
+            self.assertLess(time.monotonic(), until, 'link stayed {}'.format(link.status()))
+            time.sleep(0.02)
+
+    def test_states_follow_the_client_log(self):
+        link = self.link('Connecting to ws://x|Fingerprint abc|Connected (Latency 1ms)|Disconnected|'
+                         'Connection error: dial tcp 1.2.3.4:443: connect: connection refused (Attempt: 1/unlimited)|'
+                         'Retrying in 1s...|Connected (Latency 2ms)', 'stay')
+        link.start()
+        try:
+            self.wait_for(link, 'connected')
+            time.sleep(0.5)
+            self.assertEqual([s['state'] for s in self.seen], ['connected', 'retrying', 'retrying', 'connected'])
+            self.assertEqual(self.seen[2]['error'], 'dial tcp 1.2.3.4:443: connect: connection refused')
+            self.assertEqual(self.seen[2]['since'], self.seen[1]['since'])
+        finally:
+            link.stop()
+        self.assertIsNotNone(link.process.poll())
+
+    def test_client_is_restarted_when_it_exits(self):
+        link = self.link('Connection error: ssh: handshake failed: Invalid fingerprint (xyz)', 'exit')
+        link.start()
+        try:
+            until = time.monotonic() + 10
+            while [s['state'] for s in self.seen].count('restarting') < 2:
+                self.assertLess(time.monotonic(), until, self.seen)
+                time.sleep(0.02)
+        finally:
+            link.stop()
+        restarting = [s for s in self.seen if s['state'] == 'restarting'][0]
+        self.assertIn('exited with code 3', restarting['error'])
+        self.assertIn({'state': 'retrying', 'error': 'ssh: handshake failed: Invalid fingerprint (xyz)'},
+                      [{'state': s['state'], 'error': s['error']} for s in self.seen])
+        self.assertIn('restarting since', self.router.describe_link(restarting))
+        self.assertEqual(self.router.describe_link(None), 'off')
 
 
 if __name__ == '__main__':

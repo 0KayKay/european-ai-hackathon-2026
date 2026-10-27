@@ -168,7 +168,8 @@ PROFILE=glm53 sbatch leonardo/diagnostics/compat_check.sbatch
 - **probe:** prints the GPU node's identity, network interfaces, routes, InfiniBand devices, GPU topology
   and outbound internet, then serves a test page with `python3 -m http.server` for 15 minutes.
 - **reach:** from the CPU queue, `curl`s the probe's page (`TARGET`), the internet directly and through
-  `PROBE_PROXY`, and the cluster link server's `/health` (`LINK_URL`).
+  `PROBE_PROXY`, and the cluster link server (`LINK_URL`) with the WebSocket handshake its client uses
+  (`101` means reachable).
 - **nccl_check:** 8 tasks on 2 nodes, each running `diagnostics/nccl_check.py` in the runtime's image through
   `nccl_task.sh`: an all-reduce correctness check, then bandwidth within a node and across nodes, and a
   summary of the transport NCCL chose (`NET/IB` is InfiniBand; `NET/Socket` means TCP fallback).

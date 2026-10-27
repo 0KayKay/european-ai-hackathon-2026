@@ -14,7 +14,7 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
-            - name: google-credentials
+            - mountPath: /var/run/google  # volumeMounts merge on mountPath, not name
               $patch: delete
       volumes:
         - name: google-credentials

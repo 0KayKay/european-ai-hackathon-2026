@@ -1,9 +1,7 @@
 # Opt-in: connects agentgateway to the models on CINECA Leonardo through the cluster link. Not
-# enabled yet: the router's outbound connection needs the organisers' approval. To enable on GKE,
-# add to gke/kustomization.yaml:
-#   components:
-#     - ../leonardo
-# and create the secrets leonardo-link and leonardo-router (leonardo/README.md, "Connect the cluster").
+# enabled yet: the router's outbound connection needs the organisers' approval. How to enable it on GKE
+# (create the secrets leonardo-link and leonardo-router first, then add ../leonardo to the components of
+# gke/kustomization.yaml), what it changes and how it was tested: README.md in this folder.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 resources:

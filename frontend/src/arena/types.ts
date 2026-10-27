@@ -329,6 +329,10 @@ export interface GuardrailEventData {
 }
 
 export interface RunDetail extends RunSummary {
+	/** Level title at run time (WP5 addition; the UI falls back to the level id). */
+	title?: string | null;
+	/** Level graph at run time, for the live sample (WP5 addition; the UI falls back to the level graph). */
+	graph?: ArenaGraph | null;
 	models: RoleModel[];
 	datasets: { red?: string | null; green?: string | null };
 	cases: CaseSummary[];
@@ -336,7 +340,7 @@ export interface RunDetail extends RunSummary {
 }
 
 export interface Rate {
-	/** `null` when the denominator is 0. */
+	/** Fraction 0…1 (`numerator / denominator`); `null` when the denominator is 0. */
 	value: number | null;
 	numerator: number;
 	denominator: number;

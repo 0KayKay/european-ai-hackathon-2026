@@ -218,10 +218,10 @@ describe("level view", () => {
 		renderAt("#/arena/levels/hidden-mailbox/hard");
 		await screen.findByText("Direct · multi-turn");
 
-		fireEvent.click(await within(graph()).findByText("Onboarding assistant"));
+		fireEvent.click(await within(graph()).findByText("hidden-mailbox"));
 		const panel = inspector();
 		expect(
-			within(panel).getByRole("heading", { name: "Onboarding assistant" }),
+			within(panel).getByRole("heading", { name: "hidden-mailbox" }),
 		).toBeInTheDocument();
 		expect(within(panel).getByText("System prompt")).toBeInTheDocument();
 		expect(within(panel).getByText("gemini-3.8-flash")).toBeInTheDocument();
@@ -238,10 +238,12 @@ describe("level view", () => {
 
 		// Prompt file links open the file in the config source.
 		fireEvent.click(
-			within(panel).getByRole("button", { name: "prompts/system.md" }),
+			within(panel).getByRole("button", {
+				name: "hidden-mailbox/prompts/system.md",
+			}),
 		);
 		expect(
-			screen.getByRole("tab", { name: "prompts/system.md" }),
+			screen.getByRole("tab", { name: "hidden-mailbox/prompts/system.md" }),
 		).toHaveAttribute("aria-selected", "true");
 
 		// Selecting a guardrail shows its model, policy and same-position guardrails.
@@ -280,9 +282,7 @@ describe("level view", () => {
 		);
 		// Without guardrails the agent is selected.
 		expect(
-			within(inspector()).getByRole("heading", {
-				name: "Onboarding assistant",
-			}),
+			within(inspector()).getByRole("heading", { name: "hidden-mailbox" }),
 		).toBeInTheDocument();
 	});
 
@@ -292,13 +292,17 @@ describe("level view", () => {
 			await screen.findByText("Indirect · single-turn"),
 		).toBeInTheDocument();
 		expect(screen.getByText("attacker never sees a reply")).toBeInTheDocument();
-		const attackerEmail = await within(graph()).findByText("Attacker email");
+		const [injection] = await within(graph()).findAllByText("Injection point");
 		expect(screen.queryByText(/next turn/)).toBeNull();
 
-		fireEvent.click(attackerEmail);
+		fireEvent.click(injection);
 		const panel = inspector();
-		expect(within(panel).getByText("Enters via")).toBeInTheDocument();
-		expect(within(panel).getByText("≤ 300 chars")).toBeInTheDocument();
+		expect(within(panel).getByText("Delivered by")).toBeInTheDocument();
+		expect(
+			within(panel).getByText(
+				"≤ 300 characters · Subject of the planted email.",
+			),
+		).toBeInTheDocument();
 	});
 
 	it("shows an error with retry when the level cannot be loaded", async () => {

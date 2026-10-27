@@ -78,6 +78,28 @@ function CaseNav({
 	);
 }
 
+/** The generated input of a case that has no events (e.g. an invalid generated case). */
+function CaseInput({ detail }: { detail: CaseDetail }) {
+	const fields: [string, string][] = detail.content
+		? Object.entries(detail.content)
+		: detail.input
+			? [["input", detail.input]]
+			: (detail.messages ?? []).map((m, i) => [`turn ${i + 1}`, m]);
+	if (!fields.length) return null;
+	return (
+		<dl className="flex flex-col gap-2">
+			{fields.map(([name, value]) => (
+				<div key={name} className="flex flex-col gap-1">
+					<dt className="text-xs">{name}</dt>
+					<dd className="rounded-lg border bg-slate-50 px-3 py-2 break-words whitespace-pre-wrap text-slate-800">
+						{value}
+					</dd>
+				</div>
+			))}
+		</dl>
+	);
+}
+
 function ReplayBody({ detail }: { detail: CaseDetail }) {
 	const events = detail.events;
 	const playback = usePlayback(events);
@@ -134,6 +156,14 @@ function ReplayBody({ detail }: { detail: CaseDetail }) {
 						during the run · ←/→ step, space plays
 					</span>
 				</div>
+				{detail.error && (
+					<p
+						role="note"
+						className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800"
+					>
+						{detail.error}
+					</p>
+				)}
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					{events.length ? (
 						<EventLog
@@ -144,9 +174,10 @@ function ReplayBody({ detail }: { detail: CaseDetail }) {
 							onSelect={playback.seek}
 						/>
 					) : (
-						<p className="p-4 text-sm text-slate-500">
-							No events were recorded for this case.
-						</p>
+						<div className="flex flex-col gap-3 p-4 text-sm text-slate-500">
+							<p>No events were recorded for this case.</p>
+							<CaseInput detail={detail} />
+						</div>
 					)}
 				</div>
 			</aside>

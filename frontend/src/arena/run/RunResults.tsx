@@ -174,6 +174,7 @@ const DECISION_DOTS: Record<string, string> = {
 	guardrail: "bg-emerald-500",
 	agent: "bg-blue-500",
 	turn_limit: "bg-slate-400",
+	limit: "bg-slate-400",
 	success_check: "bg-red-500",
 	error: "bg-slate-300",
 };
@@ -184,7 +185,7 @@ function ByDecision({ rows }: { rows: RunResults["by_decision"] }) {
 			<ul className="flex flex-col divide-y rounded-lg border">
 				{rows.map((row) => (
 					<li
-						key={`${row.decided_by.kind}:${"guardrail_id" in row.decided_by ? row.decided_by.guardrail_id : ""}`}
+						key={JSON.stringify(row.decided_by)}
 						className="flex items-center gap-2.5 px-3 py-2 text-[13px]"
 					>
 						<span
@@ -311,11 +312,21 @@ function CaseTable({ runId, cases }: { runId: string; cases: CaseSummary[] }) {
 									{item.outcome ? (
 										<OutcomeBadge outcome={item.outcome} />
 									) : (
-										<span className="text-xs text-slate-400">not run</span>
+										<span className="text-xs text-slate-400">
+											{item.status === "stopped" ? "stopped" : "not run"}
+										</span>
 									)}
 								</td>
 								<td className="px-2 py-2 text-slate-700">
 									{decidedLabel(item)}
+									{item.error && (
+										<span
+											className="block max-w-md truncate text-xs text-red-600"
+											title={item.error}
+										>
+											{item.error}
+										</span>
+									)}
 								</td>
 								<td className="px-2 py-2 text-right font-mono tabular-nums">
 									{item.turns}

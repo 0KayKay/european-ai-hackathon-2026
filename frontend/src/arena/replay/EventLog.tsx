@@ -105,17 +105,15 @@ function rest(data: Record<string, unknown>, known: string[]) {
 function EventBody({ event }: { event: CaseEvent }) {
 	const data = event.data;
 	switch (event.kind) {
-		case "attacker_message": {
-			const text = data.message ?? data.text;
+		case "attacker_message":
 			return (
 				<>
-					{text !== undefined && (
-						<TextBox tone="attacker">{asText(text)}</TextBox>
+					{data.text !== undefined && (
+						<TextBox tone="attacker">{asText(data.text)}</TextBox>
 					)}
-					<Fields rows={rest(data, ["message", "text"])} />
+					<Fields rows={rest(data, ["text", "team"])} />
 				</>
 			);
-		}
 		case "injection":
 			return (
 				<div className="flex flex-col gap-2">
@@ -195,8 +193,23 @@ function EventBody({ event }: { event: CaseEvent }) {
 					<Fields rows={rest(data, ["text"])} />
 				</>
 			);
-		case "success_check":
-			return <Fields rows={rest(data, ["met"])} />;
+		case "success_check": {
+			const detail =
+				data.detail && typeof data.detail === "object"
+					? (data.detail as Record<string, unknown>)
+					: {};
+			return (
+				<Fields
+					rows={[
+						...(data.kind !== undefined
+							? [["check", asText(data.kind)] as [string, ReactNode]]
+							: []),
+						...rest(detail, []),
+						...rest(data, ["met", "kind", "detail"]),
+					]}
+				/>
+			);
+		}
 		default:
 			return <Fields rows={rest(data, [])} />;
 	}
@@ -207,7 +220,7 @@ export function eventSummary(event: CaseEvent): string {
 	const data = event.data;
 	switch (event.kind) {
 		case "attacker_message":
-			return asText(data.message ?? data.text ?? "");
+			return asText(data.text ?? "");
 		case "injection":
 			return Object.values(data).map(asText).join(" · ");
 		case "user_task":
@@ -225,8 +238,13 @@ export function eventSummary(event: CaseEvent): string {
 			return asText(data.result ?? "");
 		case "model_call":
 			return data.n !== undefined ? `request ${asText(data.n)}` : "";
-		case "success_check":
-			return asText(data.detail ?? "");
+		case "success_check": {
+			const detail =
+				data.detail && typeof data.detail === "object"
+					? Object.entries(data.detail).map(([k, v]) => `${k} ${asText(v)}`)
+					: [];
+			return [asText(data.kind ?? ""), ...detail].filter(Boolean).join(" · ");
+		}
 		default:
 			return asText(data.message ?? data);
 	}

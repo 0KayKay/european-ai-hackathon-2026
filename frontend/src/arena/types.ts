@@ -54,9 +54,26 @@ export interface GraphSurface {
 }
 
 /**
- * Node kinds. The backend sends them as `kind`; they mirror the stable id prefixes
- * (`guardrails:<position>` → `guardrails`, `guardrail:<id>` → `guardrail`, `tool:<name>` → `tool`,
- * `data:<id>` → `data`).
+ * Node kinds as the backend sends them (`hackathon/arena/graph.py`). Group nodes are
+ * `guardrail_group` (`guardrails:<position>`) and `tool_group` (`tools`).
+ */
+export type WireNodeKind =
+	| "attacker"
+	| "user_task"
+	| "injection"
+	| "guardrail_group"
+	| "guardrail"
+	| "agent"
+	| "tool_group"
+	| "tool"
+	| "data"
+	| "success"
+	| "output";
+
+/**
+ * Node kinds inside the UI. They mirror the stable id prefixes (`guardrails:<position>` →
+ * `guardrails`, `guardrail:<id>` → `guardrail`, `tool:<name>` → `tool`, `data:<id>` → `data`);
+ * `nodeKind()` maps the wire kinds onto them and falls back to the id prefix.
  */
 export type NodeKind =
 	| "attacker"
@@ -91,7 +108,7 @@ export interface NodeDetails {
 
 export interface GraphNode {
 	id: string;
-	kind: NodeKind | (string & {});
+	kind: WireNodeKind | NodeKind | (string & {});
 	label: string;
 	subtitle?: string | null;
 	/** Id of the group node this node is a member of (`guardrails:<position>` or `tools`). */
@@ -134,15 +151,23 @@ export interface LevelSummary {
 }
 
 export interface SourceFile {
-	/** Path relative to the levels directory root of this level, e.g. `level.yaml`, `prompts/system.md`. */
+	/** Path relative to `backend/levels/`, e.g. `hidden-mailbox/level.yaml`, `shared/prompts/refusal.md`. */
 	path: string;
 	content: string;
 }
 
 export interface AttackSummary {
 	type: string;
+	/** Display name of the attack type, e.g. "Prompt injection". */
+	title?: string;
 	attempts: number;
 	turns?: Turns;
+}
+
+export interface AttackerObjective {
+	purpose: string;
+	criteria: string;
+	attacker_knowledge: string;
 }
 
 export interface RedTeamSummary {
@@ -153,20 +178,40 @@ export interface RedTeamSummary {
 	attacker?: ModelSpec;
 	simulator?: ModelSpec;
 	evaluator?: ModelSpec;
-	[key: string]: unknown;
+	objective?: AttackerObjective;
 }
 
 export interface GreenTeamSummary {
 	cases?: number;
 	generator?: ModelSpec;
-	[key: string]: unknown;
+	guidance?: { file: string | null; text: string };
+}
+
+export interface InjectionField {
+	name: string;
+	max_length: number;
+	description?: string;
+}
+
+/** The level's attack surface (`attack_surface` of the config, resolved). */
+export interface LevelSurface extends GraphSurface {
+	injection?: {
+		point: "user_message" | "tool_output" | (string & {});
+		tool?: string | null;
+		description?: string;
+		fields?: InjectionField[];
+	};
+	/** Fixed user task of an indirect level. */
+	user_task?: string | null;
 }
 
 export interface LevelDetail {
 	level: string;
 	difficulty: Difficulty;
+	difficulties?: Difficulty[];
 	title: string;
-	surface: GraphSurface;
+	description?: string;
+	surface: LevelSurface;
 	graph: ArenaGraph;
 	models: RoleModel[];
 	source: { files: SourceFile[] };
@@ -185,6 +230,10 @@ export interface DatasetSummary {
 	created_at: string;
 	size: number;
 	run_id: string | null;
+	/** Difficulty of the run that generated it; reusable on every difficulty of the level. */
+	difficulty: Difficulty;
+	/** Generator roles used (`red_team.*` or `green_team.generator`). */
+	models: RoleModel[];
 }
 
 export interface DatasetCase {
@@ -219,7 +268,7 @@ export const ACTIVE_RUN_STATUSES: readonly RunStatus[] = [
 
 export interface DatasetSource {
 	source: "generate" | "dataset";
-	dataset_id?: string;
+	dataset_id?: string | null;
 }
 
 export interface CreateRunRequest {
@@ -255,7 +304,12 @@ export type DecidedBy =
 	| { kind: "success_check" }
 	| { kind: "agent" }
 	| { kind: "turn_limit" }
+	/** `run.model_requests`, `run.tool_calls`, `conversation.model_requests`, `conversation.tool_calls`. */
+	| { kind: "limit"; limit: string }
 	| { kind: "error" };
+
+/** `stopped`: interrupted by a stop request before it was decided. */
+export type CaseStatus = "pending" | "running" | "done" | "stopped";
 
 export interface CaseSummary {
 	id: string;
@@ -267,12 +321,28 @@ export interface CaseSummary {
 	/** `null` while the case is generated but not yet decided. */
 	outcome: CaseOutcome | null;
 	decided_by: DecidedBy | null;
+	/** Display text of the deciding step, e.g. "Input judge · UNSAFE". */
 	decided_label?: string | null;
 	turns: number;
 	/** Seconds. */
 	duration?: number | null;
 	input_preview?: string | null;
-	started_at?: string | null;
+	started_at: string | null;
+	status: CaseStatus;
+	/** Why the case is an error (generation failure, invalid generated input, model failure …). */
+	error: string | null;
+}
+
+export type GenerationStatus =
+	| "pending"
+	| "generating"
+	| "done"
+	| "failed"
+	| "dataset";
+
+export interface Generation {
+	status: GenerationStatus;
+	error: string | null;
 }
 
 export interface RunSummary {
@@ -286,6 +356,10 @@ export interface RunSummary {
 	elapsed: number;
 	progress: { red: Progress; green: Progress };
 	counts: OutcomeCounts;
+	/** Run-level failure text (status `failed`). */
+	error: string | null;
+	/** Case generation per team; `failed` e.g. when DeepTeam is unreachable. */
+	generation: { red: Generation; green: Generation };
 }
 
 export interface CaseEvent {
@@ -316,25 +390,46 @@ export type CaseEventKind =
 
 export type GuardrailStatus = "pending" | "passed" | "blocked" | "sanitized";
 
+/** `data` of an `attacker_message` event (red attack or green benign message). */
+export interface AttackerMessageData {
+	text: string;
+	team: Team;
+}
+
 /** `data` of a `guardrail` event. */
 export interface GuardrailEventData {
 	guardrail_id: string;
 	guardrail_kind: string;
+	guardrail_name?: string;
 	position: GuardrailPosition;
 	status: GuardrailStatus;
 	rule?: string | null;
 	reason?: string | null;
 	changed?: boolean | null;
 	model?: string | null;
+	/** Shared by the pending and the final event of one check. */
+	check_id?: string;
+	/** The judge timed out or failed (its `on_error` decided). */
+	failed?: boolean;
+}
+
+/** `data` of a `success_check` event; same shape as `CaseDetail.success`. */
+export interface SuccessCheckData {
+	met: boolean;
+	/** Success-check kind, e.g. `secret_in_output`. */
+	kind: string;
+	detail: Record<string, unknown>;
 }
 
 export interface RunDetail extends RunSummary {
-	/** Level title at run time (WP5 addition; the UI falls back to the level id). */
+	/** Level title at run time; the UI falls back to the level id. */
 	title?: string | null;
-	/** Level graph at run time, for the live sample (WP5 addition; the UI falls back to the level graph). */
+	/** Level graph at run time, for the live sample; the UI falls back to the level graph. */
 	graph?: ArenaGraph | null;
 	models: RoleModel[];
 	datasets: { red?: string | null; green?: string | null };
+	/** Where the cases come from, as requested. */
+	sources: { red: DatasetSource; green: DatasetSource };
 	cases: CaseSummary[];
 	live?: { case_id: string; events: CaseEvent[] } | null;
 }
@@ -346,6 +441,23 @@ export interface Rate {
 	denominator: number;
 }
 
+export interface AttackTypeResult {
+	type: string;
+	title: string;
+	turns: Turns | null;
+	attempts: number;
+	succeeded: number;
+	defended: number;
+	errors: number;
+}
+
+export interface DecisionResult {
+	decided_by: DecidedBy;
+	label: string;
+	red: number;
+	green: number;
+}
+
 export interface RunResults {
 	rates: { attack_success: Rate; false_positive: Rate };
 	matrix: {
@@ -353,24 +465,28 @@ export interface RunResults {
 		green: { blocked: number; passed: number };
 	};
 	errors: { red: number; green: number };
-	by_attack_type: {
-		type: string;
-		attempts: number;
-		succeeded: number;
-		errors: number;
-	}[];
-	by_decision: {
-		decided_by: DecidedBy;
-		label: string;
-		red: number;
-		green: number;
-	}[];
+	/** Outcome counts of the decided cases. */
+	counts: OutcomeCounts;
+	by_attack_type: AttackTypeResult[];
+	by_decision: DecisionResult[];
 	cases: CaseSummary[];
 }
 
+export interface CaseUsage {
+	model_requests: number;
+	tool_calls: number;
+	input_tokens: number;
+	output_tokens: number;
+}
+
 export interface CaseDetail extends CaseSummary {
+	/** Single-turn direct input; `null` for multi-turn cases (see `messages`) and indirect cases. */
 	input?: string | null;
 	content?: Record<string, string> | null;
+	/** Multi-turn: the attacker messages so far. */
+	messages: string[] | null;
+	success: SuccessCheckData | null;
+	usage: CaseUsage | null;
 	events: CaseEvent[];
 	/** Level graph at run time. */
 	graph: ArenaGraph;
@@ -379,7 +495,8 @@ export interface CaseDetail extends CaseSummary {
 export interface RunExport {
 	run: RunDetail;
 	models: RoleModel[];
-	datasets: Record<string, unknown>;
-	cases: CaseDetail[];
-	[key: string]: unknown;
+	datasets: { red: DatasetDetail | null; green: DatasetDetail | null };
+	snapshot: { level: Record<string, unknown>; graph: ArenaGraph };
+	results: RunResults;
+	cases: Omit<CaseDetail, "graph">[];
 }

@@ -16,7 +16,8 @@ describe("highlightAt", () => {
 			"guardrail:input-sanitizer": "visited",
 			"guardrail:input-judge": "current",
 		});
-		expect(h.edges).toEqual({ "attacker->guardrails:user->agent": "current" });
+		// Guardrail events carry no edge (the engine records only their node).
+		expect(h.edges).toEqual({ "attacker->guardrails:user->agent": "visited" });
 		expect(h.annotations).toEqual({
 			attacker: "0.00s",
 			"guardrail:input-sanitizer": "no changes",
@@ -70,13 +71,13 @@ describe("event text", () => {
 		);
 		expect(eventHeading(userTask, "red").title).toBe("User task");
 		const auth = emailReviewCase03.events.find(
-			(e) => e.node === "guardrail:send-email-auth",
+			(e) => e.node === "guardrail:send-email-judge",
 		);
 		expect(
 			auth && eventHeading(auth, "red", emailReviewCase03.graph).title,
-		).toBe("Send-email auth · passed");
+		).toBe("Send email judge · passed");
 		expect(auth && eventHeading(auth, "red").title).toBe(
-			"send-email-auth · passed",
+			"send-email-judge · passed",
 		);
 	});
 

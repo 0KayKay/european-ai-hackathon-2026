@@ -44,7 +44,7 @@ describe("ArenaGraph", () => {
 		// Members are rows, not nodes of their own.
 		expect(flowNode("guardrail:input-judge")).toBeNull();
 		expect(screen.getByText("Attacker agent")).toBeInTheDocument();
-		expect(screen.getByText("Onboarding assistant")).toBeInTheDocument();
+		expect(screen.getByText("hidden-mailbox")).toBeInTheDocument();
 		const tools = flowNode("tools")!;
 		for (const tool of [
 			"list_folders",
@@ -97,7 +97,7 @@ describe("ArenaGraph", () => {
 
 	it("shows the reply loop back to the attacker on a direct multi-turn level", () => {
 		render(<ArenaGraph graph={hiddenMailboxHard.graph} />);
-		expect(flowEdge("agent->attacker")).not.toBeNull();
+		expect(flowEdge("output->attacker")).not.toBeNull();
 		expect(screen.getByText("next turn · ≤ 15")).toBeInTheDocument();
 	});
 
@@ -114,7 +114,7 @@ describe("ArenaGraph", () => {
 		// Guardrails around a tool get their own group.
 		expect(
 			within(flowNode("guardrails:around:send_email")!).getByText(
-				"Send-email auth",
+				"Send email judge",
 			),
 		).toBeInTheDocument();
 	});
@@ -125,7 +125,7 @@ describe("ArenaGraph", () => {
 
 		fireEvent.click(screen.getByText("Input judge"));
 		expect(onSelect).toHaveBeenLastCalledWith("guardrail:input-judge");
-		fireEvent.click(screen.getByText("Onboarding assistant"));
+		fireEvent.click(screen.getByText("hidden-mailbox"));
 		expect(onSelect).toHaveBeenLastCalledWith("agent");
 		fireEvent.click(screen.getByText("get_file_content"));
 		expect(onSelect).toHaveBeenLastCalledWith("tool:get_file_content");

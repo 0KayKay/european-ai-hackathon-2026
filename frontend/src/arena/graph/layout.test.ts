@@ -99,12 +99,12 @@ describe("buildFlow", () => {
 		expect(calls).toHaveLength(1);
 		expect(calls[0].data?.graphEdgeIds).toEqual(["agent->tool:get_emails"]);
 		expect(flow.edge("guardrails:around:send_email", "tools")).toHaveLength(1);
-		expect(flow.edge("tools", "success")[0].data?.kind).toBe("success");
+		expect(flow.edge("data:outbox", "success")[0].data?.kind).toBe("success");
 	});
 
 	it("adds the reply loop only for the direct multi-turn level", () => {
 		const direct = byId(hiddenMailboxHard.graph);
-		const loop = direct.edge("agent", "attacker");
+		const loop = direct.edge("output", "attacker");
 		expect(loop).toHaveLength(1);
 		expect(loop[0].label).toBe("next turn · ≤ 15");
 		expect(loop[0]).toMatchObject({

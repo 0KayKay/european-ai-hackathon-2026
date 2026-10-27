@@ -41,6 +41,7 @@ export function ArenaApp({ route }: { route: ArenaRoute }) {
 					key={route.level}
 					level={route.level}
 					difficulty={route.difficulty}
+					start={route.start}
 				/>
 			);
 		case "run":

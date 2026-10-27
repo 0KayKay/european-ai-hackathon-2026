@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     CHALLENGE_END: datetime | None = None
     CHALLENGE_CLOSED: bool = False
 
+    # Arena runs (docs/spec/config-driven-arena/IMPLEMENTATION.md §6, §7)
+    ARENA_STORE: Literal["postgres", "memory"] = "postgres"
+    DEEPTEAM_URL: str = "http://deepteam:8080"
+    # Base URL under which the deepteam service reaches this backend for multi-turn callbacks.
+    ARENA_CALLBACK_URL: str = "http://backend:8000"
+
     PRETTY_DOMAIN: str
 
     DB_HOST: str = "localhost"

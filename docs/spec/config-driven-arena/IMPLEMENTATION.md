@@ -171,7 +171,41 @@ id). Output: `CaseResult { outcome, decided_by, turns, events[], usage, error? }
 - Success check is evaluated on every case (after each turn for direct). Red: `succeeded | defended | error`.
   Green: `passed | false_positive` (any guardrail `blocked`) `| error`.
 - `decided_by`: `{ kind: guardrail, guardrail_id } | { kind: success_check } | { kind: agent }` (passed all guardrails,
-  success check not met) `| { kind: turn_limit } | { kind: error }`.
+  success check not met) `| { kind: turn_limit } | { kind: limit, limit } | { kind: error }`.
+
+**Engine details (WP4, `hackathon/arena/engine/`):**
+
+- API: `CaseSession(level, Case(id, team, attack_type), user_id=, user_email=, secret=None, models=EngineModels(agent=,
+  judge=), listener=)`; direct: `await session.turn(message) -> TurnResult { turn, reply, stop, success, blocked,
+  limit, error }`; indirect: `await session.run_indirect(content)` (once); then `await session.finish(error=None) ->
+  CaseResult { case_id, team, attack_type, outcome, decided_by, turns, success: {met, kind, detail}, events, usage:
+  {model_requests, tool_calls, input_tokens, output_tokens}, models: [{role, node, model, endpoint, params}], error }`.
+  `run_case(level, CaseInput(case, messages | content), **session_options)` runs a case with known input. The
+  optional `listener` is an async callback per recorded event (live sample).
+- `stop` is true once the success check is met, any limit is hit (run or conversation limits, `max_turns`), the
+  single run of an indirect case is done, or the case failed. A hit limit ends the case (legacy would let a human
+  continue the thread after a failed run).
+- Outcome priority — red: success met → `succeeded`; error → `error`; otherwise `defended`. Green: error →
+  `error`; any guardrail `blocked` → `false_positive`; otherwise `passed`. `decided_by` of a non-success, non-error
+  case is the **first** guardrail that blocked, else `{kind: limit, limit}` for `run.model_requests`,
+  `run.tool_calls`, `conversation.model_requests`, `conversation.tool_calls`, else `{kind: turn_limit}` (multi-turn
+  case used all turns), else `{kind: agent}`. A run timeout and a driver-reported failure are errors.
+- Success checks that observe the agent output run on every model response after the output guardrails; once met,
+  the response is cut to its text so the run ends (legacy levels 1 and 3). Outbox checks run after every tool call.
+  The `success_check` event is emitted after every run (turn).
+- `around:<tool>` tool authorization renders `user_context` as the level's `user_task` (indirect) or the current
+  turn's (sanitized) user message (direct). An `llm_judge` at `tool->agent` that blocks replaces the tool result
+  with its `blocked_message` or "Tool result blocked by security guardrail.". After a judge blocks, later guardrails
+  at the same position do not run. `on_error: allow` lets the action pass with rule "Check unavailable".
+- Event `node`/`edge` per kind: `attacker_message` → `attacker`, first edge towards the agent; `injection` →
+  `injection`, `attacker->injection`; `user_task` → `user_task`, first edge towards the agent; `guardrail` →
+  `guardrail:<id>` (no edge); `model_call` → `agent` (edge into the agent on the first call of a run); `tool_call` /
+  `tool_result` → `tool:<name>`, last edge into the tool / back into the agent; `agent_reply` → `output`;
+  `success_check` → `success`, `output->success` or `data:<outbox>->success`; `limit` → `agent` (`output` for
+  `max_turns`); `error` → no node.
+- Guardrail event `data`: `guardrail_id, guardrail_kind, guardrail_name, position, status, rule, reason, changed`
+  (sanitizer) `, model, check_id` (shared by the pending and the final event of one check) `, failed` (judge timeout
+  or failure). `tool_result.data.blocked_by` names an `around:`/`tool->agent` guardrail that replaced the result.
 
 ### CaseEvent (recorded, persisted, used for replay)
 

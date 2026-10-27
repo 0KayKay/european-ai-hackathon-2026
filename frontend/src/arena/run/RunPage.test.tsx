@@ -213,6 +213,54 @@ describe("run in progress", () => {
 		expect(screen.getByText(/Cases are being generated/)).toBeInTheDocument();
 	});
 
+	it("keeps the stopped state when an older poll answers after the stop", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const stoppedRun: RunDetail = {
+			...hiddenMailboxRunRunning,
+			status: "stopped",
+			live: null,
+		};
+		let stopped = false;
+		let answerPoll: (() => void) | undefined;
+		window.location.hash = "#/arena/runs/run-hm-1";
+		const fetch = mockArenaFetch({
+			...baseRoutes,
+			[`${API}/runs/run-hm-1/stop`]: () => {
+				stopped = true;
+				return stoppedRun;
+			},
+		});
+		const answer = fetch.getMockImplementation() as typeof globalThis.fetch;
+		let gets = 0;
+		fetch.mockImplementation((input, init) => {
+			if (String(input) !== `${API}/runs/run-hm-1`) return answer(input, init);
+			gets++;
+			const body = stopped ? stoppedRun : hiddenMailboxRunRunning;
+			const response = () =>
+				new Response(JSON.stringify(body), { status: 200 });
+			// The second poll is still in flight while the run is stopped.
+			if (gets === 2)
+				return new Promise<Response>((resolve) => {
+					answerPoll = () => resolve(response());
+				});
+			return Promise.resolve(response());
+		});
+		render(<App />);
+
+		await screen.findByRole("button", { name: "Stop run" });
+		await tick();
+		expect(answerPoll).toBeDefined();
+		fireEvent.click(screen.getByRole("button", { name: "Stop run" }));
+		await waitFor(() =>
+			expect(screen.getByRole("status")).toHaveTextContent("Stopped"),
+		);
+
+		// The poll sent before the stop answers with the run as it was then.
+		await act(async () => answerPoll?.());
+		expect(screen.getByRole("status")).toHaveTextContent("Stopped");
+		expect(screen.queryByRole("button", { name: "Stop run" })).toBeNull();
+	});
+
 	it("stops the run with the stop button", async () => {
 		let stopped = false;
 		const stoppedCases = hiddenMailboxRunRunning.cases.map((item) =>

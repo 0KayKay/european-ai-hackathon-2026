@@ -63,6 +63,8 @@ function SourceChoice({
 	const name = useId();
 	const selectId = useId();
 	const none = !loading && datasets.length === 0;
+	// Not selectable before the list is there: with no dataset to pick, the run would generate.
+	const unavailable = loading || none;
 	const option = (value: Source, label: string, hint: string) => (
 		<label
 			className={cn(
@@ -70,7 +72,7 @@ function SourceChoice({
 				source === value
 					? "border-blue-500 bg-blue-50/50"
 					: "hover:border-slate-300",
-				value === "dataset" && none && "cursor-not-allowed opacity-60",
+				value === "dataset" && unavailable && "cursor-not-allowed opacity-60",
 			)}
 		>
 			<input
@@ -78,7 +80,7 @@ function SourceChoice({
 				name={name}
 				value={value}
 				checked={source === value}
-				disabled={value === "dataset" && none}
+				disabled={value === "dataset" && unavailable}
 				onChange={() => onSource(value)}
 				className="mt-0.5 accent-blue-600"
 			/>

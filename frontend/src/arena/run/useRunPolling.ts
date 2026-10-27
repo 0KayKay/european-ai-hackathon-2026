@@ -58,15 +58,16 @@ export function useRunPolling(runId: string): RunPolling {
 	}, [runId, attempt]);
 
 	const reload = useCallback(() => setAttempt((n) => n + 1), []);
-	const merge = useCallback(
-		(summary: RunSummary) =>
-			setRun((current) =>
-				current && current.id === summary.id
-					? { ...current, ...summary }
-					: current,
-			),
-		[],
-	);
+	const merge = useCallback((summary: RunSummary) => {
+		setRun((current) =>
+			current && current.id === summary.id
+				? { ...current, ...summary }
+				: current,
+		);
+		// Restart polling: a request sent before `summary` would otherwise overwrite it with the
+		// older state (e.g. a stopped run flipping back to running).
+		setAttempt((n) => n + 1);
+	}, []);
 	return {
 		run: run?.id === runId ? run : undefined,
 		error,

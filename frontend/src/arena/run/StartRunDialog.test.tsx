@@ -142,6 +142,44 @@ describe("start run", () => {
 		]);
 	});
 
+	it("offers stored datasets only once they are loaded", async () => {
+		window.location.hash = "#/arena/levels/email-review/hard";
+		let answerDatasets: (() => void) | undefined;
+		const fetch = mockArenaFetch({
+			...baseRoutes,
+			[`${API}/runs`]: newRunSummary,
+		});
+		const answer = fetch.getMockImplementation() as typeof globalThis.fetch;
+		fetch.mockImplementation((input, init) =>
+			String(input) === `${API}/levels/email-review/datasets`
+				? new Promise<Response>((resolve) => {
+						answerDatasets = () => resolve(new Response("[]", { status: 200 }));
+					})
+				: answer(input, init),
+		);
+		render(<App />);
+		await screen.findByText("Indirect · single-turn");
+		fireEvent.click(screen.getByRole("button", { name: /Run evaluation/ }));
+		const dialog = await screen.findByRole("dialog");
+		const red = within(dialog).getByRole("region", {
+			name: "Red team · attacks",
+		});
+		const stored = within(red).getByRole("radio", {
+			name: /Use stored dataset/,
+		});
+		// Choosing a stored dataset before the list is there would silently generate instead.
+		expect(stored).toBeDisabled();
+		await waitFor(() => expect(answerDatasets).toBeDefined());
+		answerDatasets?.();
+		expect(
+			await within(red).findByText(/No stored red datasets/),
+		).toBeInTheDocument();
+		expect(stored).not.toBeChecked();
+		expect(
+			within(red).getByRole("radio", { name: /Generate new/ }),
+		).toBeChecked();
+	});
+
 	it("shows why a run could not be started", async () => {
 		renderAt("#/arena/levels/email-review/hard", {
 			[`${API}/runs`]: () =>

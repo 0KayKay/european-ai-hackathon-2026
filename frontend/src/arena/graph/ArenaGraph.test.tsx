@@ -131,6 +131,14 @@ describe("ArenaGraph", () => {
 		expect(onSelect).toHaveBeenLastCalledWith("tool:get_file_content");
 	});
 
+	it("lets nodes receive mouse clicks although they are neither selectable nor draggable", () => {
+		render(<ArenaGraph graph={hiddenMailboxHard.graph} />);
+
+		// React Flow would set `pointer-events: none`, so a real mouse click would hit the pane instead.
+		for (const id of ["attacker", "agent", "guardrails:user->agent", "tools"])
+			expect(flowNode(id)?.style.pointerEvents, id).toBe("all");
+	});
+
 	it("marks highlighted nodes for replay", () => {
 		render(
 			<ArenaGraph

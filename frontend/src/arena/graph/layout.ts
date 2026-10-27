@@ -434,6 +434,10 @@ export function buildFlow(graph: ArenaGraph): {
 			connectable: false,
 			selectable: false,
 			focusable: false,
+			// React Flow gives nodes that are neither selectable nor draggable `pointer-events: none`,
+			// which would swallow every mouse click on a node or a group member (the inspector selects on
+			// click). The inline style wins over React Flow's own.
+			style: { pointerEvents: "all" },
 		};
 	});
 

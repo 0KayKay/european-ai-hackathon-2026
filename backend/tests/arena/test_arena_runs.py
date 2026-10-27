@@ -663,6 +663,30 @@ async def test_stop_while_a_decided_case_is_saved_keeps_its_result():
 
 
 @pytest.mark.asyncio
+async def test_a_second_stop_does_not_interrupt_saving_the_stopped_run():
+    gate = {"<body 2>": asyncio.Event()}
+    store = HoldingStore(run=lambda run: run["status"] == "stopped")
+    harness = Harness(models=engine_models(gate), store=store)
+    summary = await harness.start("email-review", "easy")
+    run_id = summary["id"]
+
+    async def blocked():
+        live = (await harness.get(f"/runs/{run_id}"))["live"] or {"events": []}
+        return any(event["kind"] == "tool_result" for event in live["events"])
+
+    await until(blocked)
+    first = asyncio.create_task(harness.http.post(f"/api/v1/arena/runs/{run_id}/stop"))
+    await asyncio.wait_for(store.held.wait(), 10)  # the first stop is saving the run
+    second = await harness.http.post(f"/api/v1/arena/runs/{run_id}/stop")
+    assert (await first).status_code == second.status_code == 200
+    assert (await store.get_run(run_id))["status"] == "stopped"
+    assert run_id not in harness.runs.active
+    run = await harness.get(f"/runs/{run_id}")
+    assert run["status"] == "stopped"
+    assert by_label(run["cases"])["02"]["status"] == "stopped"
+
+
+@pytest.mark.asyncio
 async def test_startup_marks_unfinished_runs_interrupted():
     store = MemoryRunStore()
     harness = Harness(store=store)

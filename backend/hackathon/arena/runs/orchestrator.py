@@ -102,6 +102,12 @@ class ActiveRun:
     task: asyncio.Task | None = None
     cancel_status: str = "stopped"
 
+    def cancel(self, status: str) -> None:
+        """Cancel the run task once; a second cancel would interrupt it while it saves its final state."""
+        if self.task and not self.task.done() and not self.task.cancelling():
+            self.cancel_status = status
+            self.task.cancel()
+
 
 def _seconds_between(start: str, end: str | None) -> float:
     begin = datetime.fromisoformat(start)
@@ -154,9 +160,7 @@ class Orchestrator:
 
     async def shutdown(self) -> None:
         for active in list(self.active.values()):
-            active.cancel_status = "interrupted"
-            if active.task:
-                active.task.cancel()
+            active.cancel("interrupted")
         tasks = [active.task for active in self.active.values() if active.task]
         if tasks:
             await asyncio.wait(tasks, timeout=STOP_TIMEOUT_SECONDS)
@@ -298,8 +302,7 @@ class Orchestrator:
     async def stop_run(self, run_id: str) -> dict[str, Any]:
         active = self.active.get(run_id)
         if active and active.task and not active.task.done():
-            active.cancel_status = "stopped"
-            active.task.cancel()
+            active.cancel("stopped")
             await asyncio.wait({active.task}, timeout=STOP_TIMEOUT_SECONDS)
             return self.summary(active.run)
         run = await self._stored_run(run_id)

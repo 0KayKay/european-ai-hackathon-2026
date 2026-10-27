@@ -119,7 +119,7 @@ difficulties:
         model: { model: gemini-3.8-flash, params: { temperature: 0, reasoning_effort: low, max_tokens: 2048 } }
         system_prompt: shared/prompts/judge_system.md
         policy: prompts/input_judge.md
-        on_block: refuse          # refuse | replace_output | tool_error
+        on_block: refuse          # optional; derived from the position (see rules)
         on_error: block           # judge timeout / failure
         timeout_seconds: 30
 ```
@@ -135,8 +135,26 @@ Rules:
 - Attack-type vocabulary is framework-neutral snake_case (`prompt_injection`, `roleplay`, `linear_jailbreaking`, …);
   the backend registry knows for each type whether it is `single` or `multi` turn; the deepteam service maps it to
   DeepTeam classes. A multi-turn type on a single-turn surface is a load error.
-- Validation errors name the file and the problem (`R-CFG-5`), e.g. `levels/email-review/level.yaml: guardrails[1].at:
-  unknown tool 'send_mail' in around:send_mail`.
+- Validation errors name the file and the problem (`R-CFG-5`), e.g. `levels/email-review/level.yaml: [hard]
+  guardrails[3].at: unknown tool 'send_mail' in around:send_mail` (`[hard]` = the difficulty being resolved). Problems
+  in a prompt or data file name that file.
+- **Files** (WP1): paths are relative to the level directory, falling back to `backend/levels/` (so
+  `shared/prompts/refusal.md` and `hidden-mailbox/prompts/system.md` work from any level) and must stay inside
+  `backend/levels/`. A prompt file is used verbatim except that **one final newline is removed**. Top-level keys
+  starting with `x-` are ignored (YAML anchors). The level `id` must equal its directory name; optional `order`
+  sorts the level list.
+- **Placeholders** (WP1): load-time — level `variables` (e.g. `user_name: User`), `user_task` (indirect levels) and,
+  in the agent's `system_prompt` only, `security_prompt` (the system prompt file must contain
+  `{{security_prompt}}` when a variant sets `agent.security_prompt`). Runtime — kept in the text, rendered by the
+  engine: `content` (`llm_judge` policy), `user_context` and `args.<parameter>` of the wrapped tool
+  (`tool_authorization` policy; defaults of the tool signature apply), `secret` and `user_email` (tool data files).
+- **`on_block`** is optional and must match the position: `user->agent` → `refuse`, `agent->output` →
+  `replace_output`, `tool->agent` / `around:<tool>` → `tool_error`; so moving a guardrail is a one-field change.
+  `tool_authorization` needs `blocked_message` (the tool result returned on block).
+- **Further fields** (WP1): guardrail `name` (display/legacy name, default = id) and `description`; toolset
+  `{ kind, id?, data?, params?, descriptions? }` (kinds: `shared_drive`, `inbox`, `send_email` with
+  `params.sender`, `offers`; an inbox email marked `injection: true` receives the injected fields; `parse_offer`
+  adds them to the offer); `secret.description`, `secret.embedded_in`; `success.params`, `success.description`.
 
 ## 3. Execution engine (one case)
 
@@ -187,8 +205,15 @@ Built in the backend from the resolved level (`hackathon/arena/graph.py`), so te
 Stable node ids: `attacker`, `user_task` (indirect), `injection` (indirect, attacker-controlled data),
 `guardrails:<position>` (group per occupied position), `guardrail:<id>` (member, `group` = its group id),
 `agent`, `tools` (group), `tool:<name>` (`group` = `tools`), `data:<id>`, `success`, `output`.
+Node kinds: `attacker`, `user_task`, `injection`, `guardrail_group`, `guardrail`, `agent`, `tool_group`, `tool`,
+`data`, `success`, `output` (`data:<id>` uses the toolset id; `details.model` is `null` for nodes without an LLM).
 Edge kinds: `attacker` (attacker-controlled text), `flow`, `tool_call`, `tool_result`, `success`, `reply_loop`
-(direct multi-turn only: agent → attacker "next turn ≤ N"). Indirect levels have **no** edge back to `attacker`.
+(direct multi-turn only: `output` → `attacker` "next turn ≤ N"). Indirect levels have **no** edge back to `attacker`.
+Edge id = `<source>-><target>` (unique). A path passes a guardrail group only when its position is occupied:
+`attacker|user_task → [guardrails:user->agent] → agent`, `agent → [guardrails:around:<tool>] → tool:<name>`,
+`tool:<name> → [guardrails:tool->agent] → agent`, `agent → [guardrails:agent->output] → output`; indirect:
+`attacker → injection → tool:<injection tool>`; data: `data:<id> → tool` (reads) or `tool → data:<id>` (writes);
+success: `output → success` or `data:<outbox> → success` (sent-email checks).
 Layout is the frontend's job (deterministic, n8n/Langflow style, see `design/`).
 
 ## 5. HTTP API (backend, prefix `/api/v1/arena`, session-protected like the rest of `/api/v1`)
@@ -196,7 +221,7 @@ Layout is the frontend's job (deterministic, n8n/Langflow style, see `design/`).
 | Method | Path | Returns |
 |---|---|---|
 | GET | `/levels` | `[{ id, title, description, channel, turns, difficulties: ["easy","medium","hard"] }]` |
-| GET | `/levels/{level}/{difficulty}` | `{ level, difficulty, title, surface, graph, models: [{role, node, model, params}], source: { files: [{ path, content }] }, red_team: {...summary}, green_team: {...summary} }` |
+| GET | `/levels/{level}/{difficulty}` | `{ level, difficulty, difficulties, title, description, surface, graph, models: [{role, node, model, endpoint, params}], source: { files: [{ path, content }] }, red_team: { attacker, simulator, evaluator, objective, attacks: [{type, title, turns, attempts}], cases, max_turns }, green_team: { generator, cases, guidance: {file, text} } }` — `source.files[0]` is the level.yaml; paths relative to `backend/levels/` |
 | GET | `/levels/{level}/datasets` | `[{ id, name, level, team, created_at, size, run_id }]` |
 | GET | `/datasets/{id}` | `{ …meta, cases: [{ id, team, attack_type?, input?, content? }] }` |
 | POST | `/runs` | body `{ level, difficulty, red: { source: "generate" \| "dataset", dataset_id? }, green: { source, dataset_id? } }` → run summary (201) |

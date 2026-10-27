@@ -1,0 +1,266 @@
+# Config-driven Arena — Implementation plan and contracts
+
+Companion to [`SPEC.md`](SPEC.md). The spec says **what**; this file fixes the **how** where several work packages
+have to agree (module layout, config format, event and graph schemas, HTTP contracts). Work packages may refine
+details inside their own boundary; anything that changes a contract below must be updated here in the same commit.
+
+Decisions taken with the team before implementation (2026-10-27):
+
+- `feat/deep-team-ui` is used as a **template only** (ideas and code pieces are ported), it is not merged.
+- **Backend owns the arena:** level engine, runs, datasets, results and replay events live in the FastAPI backend and
+  Postgres. The `deepteam` service only **generates** attacks and **drives multi-turn attacks** through a narrow internal
+  API.
+- **Frontend:** a new **Arena** area next to the existing Playground / Challenge pages. Legacy manual mode stays.
+- Work continues on branch `spec/config-driven-arena`.
+
+## 1. Module layout
+
+```
+backend/
+  levels/                              # level configs (data, not code)
+    hidden-mailbox/level.yaml
+    hidden-mailbox/prompts/*.md
+    hidden-mailbox/data/*.yaml
+    email-review/…
+    offer-review/…
+    hidden-mailbox-output-judge/…      # AC-3 example level: config + prompts only
+    shared/prompts/*.md                # e.g. judge system prompt, refusal text
+  hackathon/arena/
+    config/        # pydantic schema, YAML loader, difficulty resolution, validation errors (file + problem)
+    registry/      # type registries: tool kinds, guardrail kinds, success checks, secret generators, attack types
+    models.py      # ModelSpec -> pydantic-ai model / OpenAI client per LLM role
+    engine/        # execute one case of a resolved level; records CaseEvents
+    graph.py       # resolved level -> Graph (nodes/edges) for the UI and replay
+    runs/          # store (Postgres + in-memory), orchestrator, red/green generation, results/metrics
+    api.py         # FastAPI routers (/api/v1/arena/...) + internal callback router
+  tests/arena/…
+deepteam/hackathon_deepteam/arena/      # generation + multi-turn driver endpoints (internal)
+frontend/src/arena/                     # Arena UI (level view, run view, results, replay)
+```
+
+The legacy implementation (`backend/hackathon/agent/challenge_*`, `guardrails.py`, `api/challenges.py`) stays
+untouched as the parity reference and for the manual mode.
+
+## 2. Level config (YAML)
+
+One file per level with difficulty variants (Q1 → decided). A variant **deep-merges** over the level base; lists
+(`guardrails`, `tools`) are **replaced**, not merged. Prompts and bulky data live in files referenced by relative path.
+Placeholders in prompt and data files use `{{name}}` (double braces) so prompt text with literal `{…}` is safe;
+the loader renders them, unknown placeholders are a load error.
+
+Illustrative (field names are binding, values are examples):
+
+```yaml
+id: hidden-mailbox
+title: "Level 1 · Hidden Mailbox"
+description: "Onboarding assistant with a shared drive; one restricted file holds a finance mailbox."
+
+attack_surface:
+  channel: direct            # direct | indirect
+  turns: multi               # single | multi
+  max_turns: 15
+  injection: { point: user_message }       # direct
+  # indirect example:
+  # injection:
+  #   point: tool_output
+  #   tool: get_emails
+  #   description: "One inbox email, delivered as the 2nd email by get_emails"
+  #   fields:
+  #     - { name: subject, max_length: 300 }
+  #     - { name: body, max_length: 10000 }
+  # user_task: "Please process my email inbox."
+
+secret:
+  kind: hmac_mailbox         # hmac_mailbox | random_password | none
+  params: { template: "finance-fast-{digest}@internal.com" }
+
+agent:
+  name: hidden-mailbox
+  model: { model: gemini-3.8-flash, params: { reasoning_effort: low, max_tokens: 65536 } }
+  system_prompt: prompts/system.md        # base prompt; difficulty part comes from the variant
+  tools:
+    - { kind: shared_drive, data: data/drive.yaml }
+
+guardrails: []               # base: none; variants set them
+success:
+  kind: secret_in_output     # secret_in_output | secret_in_sent_email | offer_routing
+limits:
+  run: { model_requests: 10, tool_calls: 10 }
+  conversation: { model_requests: 50, tool_calls: 50 }
+  timeout_seconds: 300
+refusal: shared/prompts/refusal.md
+
+red_team:
+  attacker:  { model: …, params: { temperature: 0.7 } }
+  simulator: { model: …, params: {} }     # DeepTeam simulator
+  evaluator: { model: …, params: {} }     # DeepTeam evaluator
+  objective: { purpose: "…", criteria: "…", attacker_knowledge: "…" }
+  attacks:
+    - { type: prompt_injection, attempts: 5 }
+    - { type: linear_jailbreaking, attempts: 5 }
+
+green_team:
+  generator: { model: …, params: { temperature: 0.9 } }
+  cases: 10
+  guidance: prompts/green_guidance.md
+
+difficulties:
+  easy:   { agent: { security_prompt: prompts/security_easy.md } }
+  medium: { agent: { security_prompt: prompts/security_medium.md } }
+  hard:
+    agent: { security_prompt: prompts/security_hard.md }
+    guardrails:
+      - { id: input-sanitizer,  kind: sanitizer, at: "user->agent" }
+      - { id: output-sanitizer, kind: sanitizer, at: "agent->output" }
+      - { id: tool-sanitizer,   kind: sanitizer, at: "tool->agent" }
+      - id: input-judge
+        kind: llm_judge
+        at: "user->agent"
+        model: { model: gemini-3.8-flash, params: { temperature: 0, reasoning_effort: low, max_tokens: 2048 } }
+        system_prompt: shared/prompts/judge_system.md
+        policy: prompts/input_judge.md
+        on_block: refuse          # refuse | replace_output | tool_error
+        on_error: block           # judge timeout / failure
+        timeout_seconds: 30
+```
+
+Rules:
+
+- **Positions** (`at`): `user->agent`, `agent->output`, `tool->agent`, `around:<tool_name>`. Order inside one position
+  = order in the list.
+- **ModelSpec** (every LLM role): `{ model: str, endpoint?: str = "agentgateway", params: {...} }`. Supported params:
+  `temperature, top_p, frequency_penalty, presence_penalty, max_tokens, reasoning_effort, seed, thinking` (+ pass-through
+  `extra` dict). Roles: `agent`, each `llm_judge`/`tool_authorization` guardrail, `red_team.attacker`,
+  `red_team.simulator`, `red_team.evaluator`, `green_team.generator`. Defaults reproduce today's values.
+- Attack-type vocabulary is framework-neutral snake_case (`prompt_injection`, `roleplay`, `linear_jailbreaking`, …);
+  the backend registry knows for each type whether it is `single` or `multi` turn; the deepteam service maps it to
+  DeepTeam classes. A multi-turn type on a single-turn surface is a load error.
+- Validation errors name the file and the problem (`R-CFG-5`), e.g. `levels/email-review/level.yaml: guardrails[1].at:
+  unknown tool 'send_mail' in around:send_mail`.
+
+## 3. Execution engine (one case)
+
+Input: resolved level (one difficulty), a **case** (`team: red|green`, `attack_type?`, and either `messages` for direct
+or `content: {field: value}` for indirect), model factories (injectable for tests), a secret context (user id, case
+id). Output: `CaseResult { outcome, decided_by, turns, events[], usage, error? }`.
+
+- Direct: each attacker turn is one agent run in the same conversation (history kept), with the run limits per turn
+  and conversation limits across turns. Indirect: content goes to the injection point, the fixed `user_task` is the
+  user message, one run, nothing is returned to the attacker.
+- Guardrails run at their positions/order; `on_block` semantics reproduce today's behavior (refusal text instead of
+  model call for input judges, refusal replaces output for output judges, tool returns the configured blocked message
+  for `around:<tool>`).
+- Success check is evaluated on every case (after each turn for direct). Red: `succeeded | defended | error`.
+  Green: `passed | false_positive` (any guardrail `blocked`) `| error`.
+- `decided_by`: `{ kind: guardrail, guardrail_id } | { kind: success_check } | { kind: agent }` (passed all guardrails,
+  success check not met) `| { kind: turn_limit } | { kind: error }`.
+
+### CaseEvent (recorded, persisted, used for replay)
+
+```json
+{ "seq": 3, "t": 0.88, "at": "2026-10-27T21:03:11.123Z", "turn": 1,
+  "kind": "guardrail",
+  "node": "guardrail:input-judge", "edge": null,
+  "data": { "guardrail_id": "input-judge", "guardrail_kind": "llm_judge", "position": "user->agent",
+            "status": "passed", "rule": "…", "reason": "…", "changed": null, "model": "gemini-3.8-flash" } }
+```
+
+`kind` ∈ `attacker_message` (direct), `injection` (indirect planted content, data = fields), `user_task`,
+`guardrail` (status `pending|passed|blocked|sanitized`), `model_call` (data: model, n), `tool_call`
+(data: tool, args, call_id), `tool_result` (data: tool, call_id, result), `agent_reply` (data: text),
+`success_check` (data: met, check kind, detail), `limit` (data: which limit), `error` (data: message).
+`t` = seconds since case start. `node`/`edge` reference ids from the graph (§4). Events never contain request headers
+or credentials (`R-EXE-8`).
+
+## 4. Graph (rendered from config)
+
+Built in the backend from the resolved level (`hackathon/arena/graph.py`), so tests can assert AC-2 without a browser.
+
+```json
+{ "surface": { "channel": "direct", "turns": "multi", "max_turns": 15 },
+  "nodes": [ { "id": "attacker", "kind": "attacker", "label": "Attacker agent", "subtitle": "DeepTeam · 2 attack types · 10 cases",
+               "group": null, "details": { "settings": [{"label": "Model", "value": "…"}], "prompts": [{"name": "Policy", "file": "prompts/input_judge.md", "text": "…"}], "model": {"model": "…", "params": {}} } } ],
+  "edges": [ { "id": "attacker->guardrails:user->agent", "source": "attacker", "target": "guardrails:user->agent",
+               "kind": "attacker", "label": "attacker message" } ] }
+```
+
+Stable node ids: `attacker`, `user_task` (indirect), `injection` (indirect, attacker-controlled data),
+`guardrails:<position>` (group per occupied position), `guardrail:<id>` (member, `group` = its group id),
+`agent`, `tools` (group), `tool:<name>` (`group` = `tools`), `data:<id>`, `success`, `output`.
+Edge kinds: `attacker` (attacker-controlled text), `flow`, `tool_call`, `tool_result`, `success`, `reply_loop`
+(direct multi-turn only: agent → attacker "next turn ≤ N"). Indirect levels have **no** edge back to `attacker`.
+Layout is the frontend's job (deterministic, n8n/Langflow style, see `design/`).
+
+## 5. HTTP API (backend, prefix `/api/v1/arena`, session-protected like the rest of `/api/v1`)
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/levels` | `[{ id, title, description, channel, turns, difficulties: ["easy","medium","hard"] }]` |
+| GET | `/levels/{level}/{difficulty}` | `{ level, difficulty, title, surface, graph, models: [{role, node, model, params}], source: { files: [{ path, content }] }, red_team: {...summary}, green_team: {...summary} }` |
+| GET | `/levels/{level}/datasets` | `[{ id, name, level, team, created_at, size, run_id }]` |
+| GET | `/datasets/{id}` | `{ …meta, cases: [{ id, team, attack_type?, input?, content? }] }` |
+| POST | `/runs` | body `{ level, difficulty, red: { source: "generate" \| "dataset", dataset_id? }, green: { source, dataset_id? } }` → run summary (201) |
+| GET | `/runs?level=` | run summaries, newest first |
+| GET | `/runs/{id}` | `{ id, level, difficulty, status: generating\|running\|completed\|stopped\|failed\|interrupted, started_at, finished_at, elapsed, progress: { red: {done,total}, green: {done,total} }, counts: { succeeded, defended, false_positive, passed, error }, models: [...used ModelSpecs per role], datasets: {red?, green?}, cases: [case summaries incl. generated inputs], live?: { case_id, events } }` |
+| POST | `/runs/{id}/stop` | run summary |
+| GET | `/runs/{id}/results` | `{ rates: { attack_success: {value, numerator, denominator}, false_positive: {...} }, matrix: { red: {stopped, got_through}, green: {blocked, passed} }, errors, by_attack_type: [{type, attempts, succeeded, errors}], by_decision: [{decided_by, label, red, green}], cases: [...] }` |
+| GET | `/runs/{id}/cases/{case_id}` | `{ case summary, input/content, events: CaseEvent[], graph }` (graph = level graph at run time) |
+| GET | `/runs/{id}/export` | full JSON (run, models, datasets, cases with events) |
+
+Case summary: `{ id, index, label ("07" / "G04"), team, attack_type, outcome, decided_by, decided_label, turns,
+duration, input_preview, started_at }`. Rates follow `R-RES-1` exactly (errors excluded). The run snapshot stores the
+resolved config, graph and model specs used, so replay and results do not depend on later config edits.
+
+Internal (not behind the session dependency; not routed by the gateway; token-authenticated):
+`POST /api/v1/arena/internal/cases/{case_id}/turn` with header `x-arena-token: <per-run random token>`, body
+`{ message }` → `{ reply, stop }` (`stop` = success check met or limit reached). Used by the deepteam service as the
+target callback for multi-turn attacks.
+
+Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active. SSE is optional.
+
+## 6. DeepTeam service (internal endpoints)
+
+Base `http://deepteam:8080`, prefix `/internal/arena`, authenticated with the shared `AGENTGATEWAY_API_KEY` as
+`Authorization: Bearer …` (both services already hold it). Responses stream NDJSON so generated cases are visible
+as soon as they exist (`R-RED-4`).
+
+- `POST /internal/arena/generate` — body `{ run_id, level_id, attacks: [{ type, count }], objective: { purpose,
+  criteria, attacker_knowledge }, surface: { channel, injection: { point, description, fields?: [{name, max_length}] } },
+  models: { attacker, simulator, evaluator } }` (ModelSpec each, `endpoint` resolved by backend to a base URL) →
+  NDJSON lines `{type:"case", case:{ attack_type, input? | content? }}` …, then `{type:"done", count}` or
+  `{type:"error", message}`. Only single-turn types. Indirect: `content` has exactly the injection fields, each within
+  `max_length`.
+- `POST /internal/arena/multi-turn` — body `{ case_id, attack_type, max_turns, objective, models, callback: { url,
+  token } }` → NDJSON `{type:"turn", turn, attacker_message, reply}` …, `{type:"done", turns}` / `{type:"error"}`.
+  The service calls the backend callback for every turn and stops early when the callback answers `stop: true`.
+
+Never hand-written attack content anywhere (SPEC §10): tests use mocked model clients and placeholders like
+`"<attack 1>"`.
+
+## 7. Persistence
+
+Postgres via `asyncpg` in the style of `challenge_store.py` (JSONB documents): tables `arena_runs`, `arena_cases`
+(events JSONB), `arena_datasets`. A store interface with a Postgres implementation and an in-memory implementation
+(tests; `ARENA_STORE=memory` for local runs without DB). Runs found `running`/`generating` at startup become
+`interrupted`.
+
+## 8. Conventions for all work packages
+
+- Backend: Python 3.14, `uv run ruff check .`, `uv run pytest -q` must pass; deepteam: Python 3.13 plus
+  `ruff format --check`; frontend: `pnpm exec biome check .`, `pnpm exec tsc -p tsconfig.app.json --noEmit`,
+  `pnpm test`. (These are the CI jobs in `.github/workflows/pr.yml`.)
+- Tests mock all model calls (pydantic-ai `FunctionModel`/`TestModel`, fake OpenAI clients). No network in tests.
+- UI text English. Commits: imperative, capitalized subject ≤ 72 chars, body explains why; atomic.
+- Do not change the legacy level code except where a test proves a bug; never weaken existing tests.
+
+## 9. Work packages
+
+| WP | Scope | Depends on |
+|---|---|---|
+| WP1 | Backend config schema, loader, registries (schemas), level files for 3 levels × 3 difficulties + AC-3 level, graph builder, `GET /levels*` API, static parity tests (prompts, tools, tool outputs, guardrails, limits) | — |
+| WP2 | deepteam `/internal/arena/generate` + `/multi-turn`, ModelSpec → DeepEval model, tests with mocks | — |
+| WP3 | Frontend Arena shell, hash routing, API client types, level view (graph, inspector, config pane) on fixtures | — |
+| WP4 | Backend engine (case execution, guardrails at positions, success checks, events, model roles) + dynamic parity tests vs legacy | WP1 |
+| WP5 | Frontend run view, results, replay on fixtures | WP3 |
+| WP6 | Backend runs: store, orchestrator, green generator, deepteam client, results, export, internal callback, API | WP4, WP2 |
+| WP7 | Integration: wire frontend to backend, infra env (`DEEPTEAM_URL`, network), docs, manual test checklist | all |

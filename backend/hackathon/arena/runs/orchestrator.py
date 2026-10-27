@@ -158,6 +158,7 @@ class Orchestrator:
         tasks = [active.task for active in self.active.values() if active.task]
         if tasks:
             await asyncio.wait(tasks, timeout=STOP_TIMEOUT_SECONDS)
+        await self.store.close()
 
     async def wait(self, run_id: str) -> None:
         """Wait until a run's background task has finished (tests, shutdown)."""

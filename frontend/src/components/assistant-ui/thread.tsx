@@ -67,6 +67,7 @@ import {
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 export type ThreadGroupPart = Pick<
@@ -97,6 +98,8 @@ export type ThreadComponents = {
 
 export type ThreadProps = {
 	composerSend?: { send: () => void; canSend: boolean; cancel: () => void };
+	hideComposer?: boolean;
+	hideToolCalls?: boolean;
 	components?: ThreadComponents | undefined;
 	messageRuns?: ReadonlyMap<string, string>;
 	activeReasoningRun?: string;
@@ -112,6 +115,7 @@ const ComposerSendContext =
 	createContext<ThreadProps["composerSend"]>(undefined);
 
 const RunActivityContext = createContext(false);
+const HideToolCallsContext = createContext(false);
 
 const isEmptyThread = (s: AssistantState) => s.thread.isEmpty;
 
@@ -149,26 +153,34 @@ const ThreadHistorySkeleton: FC = () => {
 export const Thread: FC<ThreadProps> = ({
 	components = EMPTY_COMPONENTS,
 	composerSend,
+	hideComposer = false,
+	hideToolCalls = false,
 	messageRuns,
 	activeReasoningRun,
 	awaitingText,
 }) => {
 	return (
 		<ThreadComponentsContext.Provider value={components}>
-			<ComposerSendContext.Provider value={composerSend}>
-				<ThreadRoot
-					messageRuns={messageRuns}
-					activeReasoningRun={activeReasoningRun}
-					awaitingText={awaitingText}
-				/>
-			</ComposerSendContext.Provider>
+			<HideToolCallsContext.Provider value={hideToolCalls}>
+				<ComposerSendContext.Provider value={composerSend}>
+					<ThreadRoot
+						messageRuns={messageRuns}
+						activeReasoningRun={activeReasoningRun}
+						awaitingText={awaitingText}
+						hideComposer={hideComposer}
+					/>
+				</ComposerSendContext.Provider>
+			</HideToolCallsContext.Provider>
 		</ThreadComponentsContext.Provider>
 	);
 };
 
 const ThreadRoot: FC<
-	Pick<ThreadProps, "messageRuns" | "activeReasoningRun" | "awaitingText">
-> = ({ messageRuns, activeReasoningRun, awaitingText }) => {
+	Pick<
+		ThreadProps,
+		"messageRuns" | "activeReasoningRun" | "awaitingText" | "hideComposer"
+	>
+> = ({ messageRuns, activeReasoningRun, awaitingText, hideComposer }) => {
 	const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
 	return (
@@ -182,9 +194,12 @@ const ThreadRoot: FC<
 			}}
 		>
 			<ThreadPrimitive.Viewport
-				turnAnchor="top"
+				autoScroll={false}
+				scrollToBottomOnRunStart={false}
+				scrollToBottomOnInitialize={false}
+				scrollToBottomOnThreadSwitch={false}
 				data-slot="aui_thread-viewport"
-				className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+				className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll"
 			>
 				<div
 					className={cn(
@@ -218,10 +233,12 @@ const ThreadRoot: FC<
 					>
 						<ThreadScrollToBottom />
 						<ThreadFollowupSuggestions />
-						<Composer />
-						<AuiIf condition={isEmptyThread}>
-							<ThreadSuggestions />
-						</AuiIf>
+						{!hideComposer && <Composer />}
+						{!hideComposer && (
+							<AuiIf condition={isEmptyThread}>
+								<ThreadSuggestions />
+							</AuiIf>
+						)}
 					</ThreadPrimitive.ViewportFooter>
 				</div>
 			</ThreadPrimitive.Viewport>
@@ -233,6 +250,8 @@ const ThreadMessages: FC<
 	Pick<ThreadProps, "messageRuns" | "activeReasoningRun" | "awaitingText">
 > = ({ messageRuns, activeReasoningRun, awaitingText }) => {
 	const messages = useAuiState((s) => s.thread.messages);
+	const running = useAuiState((s) => s.thread.isRunning);
+	const hideToolCalls = useContext(HideToolCallsContext);
 	const groups = new Map<string, number[]>();
 	messages.forEach((message, index) => {
 		const run =
@@ -259,7 +278,16 @@ const ThreadMessages: FC<
 					/>
 				),
 			)}
-			{awaitingText && (
+			{hideToolCalls && running && (
+				<div
+					role="status"
+					className="ml-2 flex items-center gap-2 text-sm text-muted-foreground"
+				>
+					<Spinner className="size-4" aria-hidden="true" role="presentation" />
+					processing…
+				</div>
+			)}
+			{!hideToolCalls && awaitingText && (
 				<span
 					data-slot="aui_pending-dot"
 					className="aui-md ml-2"
@@ -295,6 +323,7 @@ const RunMessages: FC<{ indices: number[]; reasoningActive: boolean }> = ({
 	indices,
 	reasoningActive,
 }) => {
+	const hideToolCalls = useContext(HideToolCallsContext);
 	const messages = useAuiState((s) => s.thread.messages);
 	const runMessages = indices.map((index) => messages[index]);
 	const running = runMessages.some(
@@ -313,7 +342,7 @@ const RunMessages: FC<{ indices: number[]; reasoningActive: boolean }> = ({
 	);
 	return (
 		<div data-slot="aui_run-message" className="space-y-3">
-			{reasoning.length > 0 && (
+			{!hideToolCalls && reasoning.length > 0 && (
 				<ReasoningRoot variant="ghost" streaming={reasoningActive}>
 					<ReasoningTrigger
 						active={reasoningActive}
@@ -334,7 +363,7 @@ const RunMessages: FC<{ indices: number[]; reasoningActive: boolean }> = ({
 					</ReasoningContent>
 				</ReasoningRoot>
 			)}
-			{tools.length > 0 && (
+			{!hideToolCalls && tools.length > 0 && (
 				<ToolGroupRoot
 					variant="ghost"
 					defaultOpen={requiresAction}
@@ -668,6 +697,7 @@ const groupAnswerParts: typeof groupMessageParts = (parts) =>
 
 const AssistantMessage: FC = () => {
 	const runActivity = useContext(RunActivityContext);
+	const hideToolCalls = useContext(HideToolCallsContext);
 	const { ToolFallback: ToolFallbackComponent = ToolFallback } = useContext(
 		ThreadComponentsContext,
 	);
@@ -690,7 +720,9 @@ const AssistantMessage: FC = () => {
 				className="text-foreground px-2 leading-relaxed wrap-break-word"
 			>
 				<MessagePrimitive.Unstable_PartsGrouped
-					groupingFunction={runActivity ? groupAnswerParts : groupMessageParts}
+					groupingFunction={
+						runActivity || hideToolCalls ? groupAnswerParts : groupMessageParts
+					}
 					components={{
 						Group: MessagePartGroup,
 						Text: MarkdownText,

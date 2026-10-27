@@ -178,7 +178,7 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
         return Mock(), {
             "mailbox": "finance-fast-test@internal.com",
             "difficulty": "EASY",
-            "mode": "CHALLENGE_1",
+            "mode": "PLAYGROUND",
         }
 
     span = Mock()
@@ -228,7 +228,8 @@ def test_agent_trace_carries_conversation_and_user_ids(monkeypatch) -> None:
     get_settings.cache_clear()
 
 
-def test_local_tracing_exports_to_phoenix(monkeypatch) -> None:
+@pytest.mark.parametrize("api_key", ["", "collector-key"])
+def test_tracing_exports_to_phoenix(monkeypatch, api_key) -> None:
     from hackathon.extensions import tracing
 
     exporter = Mock()
@@ -251,9 +252,12 @@ def test_local_tracing_exports_to_phoenix(monkeypatch) -> None:
     monkeypatch.setattr(tracing.logfire, "instrument_fastapi", instrument_fastapi)
 
     app = FastAPI()
-    tracing.configure_tracing(app, "http://phoenix:6006/v1/traces")
+    tracing.configure_tracing(app, "http://phoenix:6006/v1/traces", api_key=api_key)
 
-    exporter_factory.assert_called_once_with(endpoint="http://phoenix:6006/v1/traces")
+    exporter_factory.assert_called_once_with(
+        endpoint="http://phoenix:6006/v1/traces",
+        headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+    )
     processor_factory.assert_called_once_with(exporter)
     assert configure.call_args.kwargs["send_to_logfire"] is False
     assert configure.call_args.kwargs["resource_attributes"] == {
@@ -321,5 +325,39 @@ def test_agent_uses_gateway_for_model_requests(monkeypatch) -> None:
 
     assert isinstance(agent.model, OpenAIChatModel)
     assert agent.model.model_name == "gemini-3.8-flash"
+    assert agent.model.settings["openai_reasoning_effort"] == "low"
     assert str(agent.model.provider.base_url) == "http://agentgateway:3000/v1/"
     get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_local_signed_in_user_keeps_name_and_existing_local_identity(monkeypatch):
+    import hackathon.api.auth as auth_api
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        auth_api,
+        "get_settings",
+        lambda: Mock(is_local=True, AUTH_SERVICE_URL="http://auth"),
+    )
+    monkeypatch.setattr(
+        auth_api.httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    204,
+                    headers={
+                        "x-auth-user": "github-user",
+                        "x-auth-name": "Alex%20Example",
+                        "x-auth-email": "alex@example.com",
+                    },
+                )
+            )
+        ),
+    )
+    request = Request(
+        {"type": "http", "headers": [(b"cookie", b"better-auth.session_token=signed")]}
+    )
+    assert await require_user(request) == "local-user"
+    assert request.state.user_name == "Alex Example"

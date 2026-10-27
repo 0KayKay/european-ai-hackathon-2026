@@ -1,10 +1,13 @@
 from openai import AsyncOpenAI
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from hackathon.agent.challenge1 import add_challenge1
+from hackathon.agent.challenge_1.agent import add_challenge1
+from hackathon.agent.challenge_2.agent import add_challenge2
+from hackathon.agent.challenge_3.agent import add_challenge3
 from hackathon.agent.dependencies import AgentDependencies
+from hackathon.agent.guardrails import ChallengeGuardrails
 from hackathon.config import get_settings
 
 
@@ -17,21 +20,44 @@ def build_agent(
     settings = get_settings()
     model = OpenAIChatModel(
         model_id,
+        settings=OpenAIChatModelSettings(
+            thinking=False,
+            # Gateway 1.6 leaves Gemini on its default when effort is "none".
+            **(
+                {"openai_reasoning_effort": "low"}
+                if model_id.startswith("gemini-3")
+                else {}
+            ),
+        ),
         provider=OpenAIProvider(
             openai_client=AsyncOpenAI(
                 base_url=settings.AGENTGATEWAY_URL,
                 api_key=settings.AGENTGATEWAY_API_KEY,
-                default_headers={"x-challenge-difficulty": difficulty}
-                if mode == "CHALLENGE_1"
-                else {},
+                default_headers={},
             ),
         ),
     )
     agent = Agent[AgentDependencies](
         model=model,
-        capabilities=[],
-        name="hidden-mailbox" if mode == "CHALLENGE_1" else "playground",
+        capabilities=[ChallengeGuardrails()] if mode != "PLAYGROUND" else [],
+        name={
+            "CHALLENGE_1": "hidden-mailbox",
+            "CHALLENGE_2": "email-review",
+            "CHALLENGE_3": "offer-review",
+        }.get(mode, "playground"),
     )
     if mode == "CHALLENGE_1":
         add_challenge1(agent, difficulty)
+    elif mode == "CHALLENGE_2":
+        add_challenge2(agent, difficulty)
+    elif mode == "CHALLENGE_3":
+        add_challenge3(agent, difficulty)
+    else:
+
+        @agent.instructions
+        def identify_user(ctx: RunContext[AgentDependencies]) -> str:
+            return (
+                f"The authenticated user's name is {ctx.deps.get('user_name', 'User')}."
+            )
+
     return agent

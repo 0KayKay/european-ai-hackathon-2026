@@ -73,6 +73,18 @@ class Hub(HTTPServer):
         threading.Thread(target=self.serve_forever, daemon=True).start()
 
 
+class GatewayRendering(unittest.TestCase):
+    def test_routes_match_base_without_removed_guardrail_webhook(self):
+        result = subprocess.run(
+            [sys.executable, str(REPO / 'leonardo/tools/render_agentgateway.py'), '--check'],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = (REPO / 'infrastructure/leonardo/agentgateway.yaml').read_text()
+        self.assertNotIn('/guardrails/request', config)
+        self.assertIn('/api/auth/authorize-internal', config)
+        self.assertIn('file: /var/run/leonardo-router/token', config)
+
+
 class Profiles(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

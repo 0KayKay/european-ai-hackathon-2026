@@ -107,12 +107,13 @@ working around security controls. The cluster's maintainers enable the Kubernete
 
    ```bash
    ./leonardo/cli.py install --link-client
-   printf 'leonardo:%s\n' "$LINK_PASSWORD" > /tmp/link_auth
-   ./leonardo/cli.py router up --restart --link-auth-file /tmp/link_auth && rm /tmp/link_auth
+   ./leonardo/cli.py router up --restart --link-auth-file "$HACKATHON_LINK_PRIVATE/link_auth"
    ./leonardo/cli.py status     # "cluster link connected since ..."
    ```
 
 The backend then uses the "Served as" names from the table above as model names in its agentgateway calls.
+The complete ordered instructions, private-file Secret creation, and deployment checks are in
+[the deployment runbook](../docs/deployment.md#4-activate-leonardo-only-after-cineca-approval).
 If `status` shows the link as `retrying`, its error says why; [docs/cluster-link.md](docs/cluster-link.md)
 lists the states.
 

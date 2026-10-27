@@ -1,6 +1,8 @@
 from functools import lru_cache
+from datetime import datetime
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +22,12 @@ class Settings(BaseSettings):
     GOOGLE_STORAGE_BUCKET: str
     FILE_STORAGE: Literal["local", "gcs"] = "local"
     PHOENIX_OTLP_ENDPOINT: str = ""
+    PHOENIX_API_KEY: str = ""
+    GUARDRAIL_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
+    CHALLENGE_TIMEOUT_SECONDS: float = Field(default=300, gt=0)
+    CHALLENGE_START: datetime | None = None
+    CHALLENGE_END: datetime | None = None
+    CHALLENGE_CLOSED: bool = False
 
     PRETTY_DOMAIN: str
 

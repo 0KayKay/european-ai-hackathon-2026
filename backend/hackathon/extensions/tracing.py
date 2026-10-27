@@ -13,7 +13,8 @@ class ContextualOpenInferenceSpanProcessor(OpenInferenceSpanProcessor):
         span.set_attributes(dict(get_attributes_from_context()))
 
 
-def configure_tracing(app: FastAPI, endpoint: str) -> None:
+def configure_tracing(app: FastAPI, endpoint: str, *, api_key: str = "") -> None:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     logfire.configure(
         service_name="hackathon-backend",
         resource_attributes={"openinference.project.name": "hackathon-2026"},
@@ -22,7 +23,7 @@ def configure_tracing(app: FastAPI, endpoint: str) -> None:
         metrics=False,
         additional_span_processors=[
             ContextualOpenInferenceSpanProcessor(),
-            BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)),
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, headers=headers)),
         ],
     )
     logfire.instrument_pydantic_ai(include_content=True, include_binary_content=False)

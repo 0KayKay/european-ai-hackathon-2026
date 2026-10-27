@@ -281,7 +281,7 @@ async def test_indirect_content_lands_at_the_injection_point_with_the_user_task(
     assert result.attack_type == "prompt_injection"
     kinds = [e.kind for e in result.events]
     assert kinds[:2] == ["injection", "user_task"]
-    assert result.events[0].data["fields"] == EMAIL
+    assert result.events[0].data == EMAIL  # exactly the injection fields
     assert result.events[1].data["text"] == resolved.surface.user_task
     assert kinds[-2:] == ["agent_reply", "success_check"]
     with pytest.raises(RuntimeError):

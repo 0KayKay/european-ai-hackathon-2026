@@ -217,7 +217,7 @@ id). Output: `CaseResult { outcome, decided_by, turns, events[], usage, error? }
             "status": "passed", "rule": "…", "reason": "…", "changed": null, "model": "gemini-3.8-flash" } }
 ```
 
-`kind` ∈ `attacker_message` (direct), `injection` (indirect planted content, data = fields), `user_task`,
+`kind` ∈ `attacker_message` (direct), `injection` (indirect planted content, data = exactly the fields), `user_task`,
 `guardrail` (status `pending|passed|blocked|sanitized`), `model_call` (data: model, n), `tool_call`
 (data: tool, args, call_id), `tool_result` (data: tool, call_id, result), `agent_reply` (data: text),
 `success_check` (data: met, check kind, detail), `limit` (data: which limit), `error` (data: message).
@@ -320,6 +320,37 @@ Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active
 - `GET /runs/{id}/export` is used as a plain download link (`<a download>`), so it must answer the session cookie
   without extra headers.
 - The UI route `#/arena/levels/:level/:difficulty?start=1` opens the start-run dialog ("Run again").
+
+**Runs as implemented (WP6, `hackathon/arena/runs/`; additions to the shapes above, nothing removed):**
+
+- Event `data` keys as recorded by the engine: `attacker_message` `{ text, team }` (the UI reads `message ?? text`);
+  `injection` is **exactly** the injection fields (`{ subject, body }`; the tool is the target of the
+  `injection->tool:<name>` edge); `success_check` `{ met, check, detail }` (`check` = success-check kind).
+- Run summary (`POST /runs`, `GET /runs`, `POST /runs/{id}/stop`) adds `error` (run-level failure text or `null`) and
+  `generation: { red, green }`, each `{ status: pending | generating | done | failed | dataset, error }`
+  (`failed` e.g. when DeepTeam is unreachable; the run still executes the other team). `GET /runs/{id}` also has
+  `title`, `graph` and `sources: { red, green }` (the request's `{source, dataset_id}`).
+- Case summary adds `status: pending | running | done | stopped` (`stopped` = interrupted by a stop request, not
+  decided) and `error`. Red cases that could not be generated (service error, too few cases) or were generated
+  invalid (wrong injection fields, over `max_length`) are recorded as decided `error` cases without events, so
+  `progress.total` always equals the configured count. `progress.done` counts decided cases.
+- Case detail adds `messages` (multi-turn: the attacker messages so far; `input` is `null`), `success` and `usage`.
+  A running case's detail carries its events so far.
+- Datasets: `size` cases, plus `difficulty` (of the run that generated it) and `models` (generator roles used). A
+  dataset can be reused on any difficulty of its level. `POST /runs` answers 400 for a red dataset on a direct level
+  (red cases of direct levels are generated during each run), a dataset of another level or team, or a missing
+  `dataset_id`; 404 for an unknown level, difficulty or dataset. `models` of a run lists the case roles (agent,
+  model guardrails) and the generator roles, taken from the dataset when it is reused.
+- `by_attack_type[]` adds `title`, `turns`, `defended`; results add `counts` (decided cases). Only decided cases
+  count in results; a stopped run's undecided cases are left out.
+- `GET /runs/{id}/export` (attachment `arena-run-<id>.json`): `{ run (= GET /runs/{id} without live), models,
+  datasets: { red, green } (full dataset or null), snapshot: { level (resolved config), graph }, results, cases: [case
+  detail with events, without graph — the graph is in snapshot] }`.
+- Internal callback: unknown or finished case → 404, missing or wrong `x-arena-token` → 403. The token exists in
+  memory only; it is never stored or served.
+- Settings: `ARENA_STORE` (`postgres` | `memory`), `DEEPTEAM_URL` (default `http://deepteam:8080`),
+  `ARENA_CALLBACK_URL` (base URL under which deepteam reaches the backend, default `http://backend:8000`; the
+  callback is `<ARENA_CALLBACK_URL>/api/v1/arena/internal/cases/{case_id}/turn`).
 
 ## 6. DeepTeam service (internal endpoints)
 

@@ -253,9 +253,7 @@ class CaseSession:
             "injection",
             node="injection",
             edge="attacker->injection",
-            tool=surface.injection.tool,
-            fields=injection,
-            team=self.case.team,
+            **injection,  # data = exactly the injection fields (IMPLEMENTATION.md §3, §5 WP5)
         )
         await self.emit(
             "user_task",

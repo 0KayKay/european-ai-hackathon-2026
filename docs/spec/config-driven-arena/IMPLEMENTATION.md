@@ -217,7 +217,7 @@ id). Output: `CaseResult { outcome, decided_by, turns, events[], usage, error? }
             "status": "passed", "rule": "…", "reason": "…", "changed": null, "model": "gemini-3.8-flash" } }
 ```
 
-`kind` ∈ `attacker_message` (direct), `injection` (indirect planted content, data = fields), `user_task`,
+`kind` ∈ `attacker_message` (direct), `injection` (indirect planted content, data = exactly the fields), `user_task`,
 `guardrail` (status `pending|passed|blocked|sanitized`), `model_call` (data: model, n), `tool_call`
 (data: tool, args, call_id), `tool_result` (data: tool, call_id, result), `agent_reply` (data: text),
 `success_check` (data: met, check kind, detail), `limit` (data: which limit), `error` (data: message).

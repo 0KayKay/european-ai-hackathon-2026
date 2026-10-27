@@ -13,7 +13,7 @@ from uuid import uuid4
 import pytest
 
 from hackathon.arena.runs.store import MemoryRunStore, PostgresRunStore
-from tests.arena.test_arena_runs import Harness, by_label
+from tests.arena.test_arena_runs import FakeRedTeam, Harness, by_label
 
 DATABASE_URL = os.environ.get("ARENA_TEST_DATABASE_URL")
 postgres = pytest.mark.skipif(
@@ -148,4 +148,65 @@ async def test_postgres_store_full_run(database):
     assert [c["input_preview"] for c in reused["cases"] if c["team"] == "red"] == [
         c["input_preview"] for c in run["cases"] if c["team"] == "red"
     ]
+    await asyncio.wait_for(store.close(), 10)
+
+
+# Attacker, benign and model text may contain characters that Postgres cannot keep in JSONB (NUL, lone UTF-16
+# surrogates). Saving such a record must not fail (that failed the whole run); both stores keep the same text.
+UNSTORABLE = "<attack \x00 1> \ud800"
+STORED = "<attack � 1> �"
+
+
+async def check_unstorable_text(store) -> None:
+    run = run_record()
+    await store.save_run({**run, "error": UNSTORABLE})
+    case = {
+        **case_record(run["id"], "red", 1),
+        "input": UNSTORABLE,
+        "events": [
+            {"seq": 0, "kind": "attacker_message", "data": {UNSTORABLE: UNSTORABLE}}
+        ],
+    }
+    await store.save_case(case)
+    stored = await store.get_case(run["id"], case["id"])
+    assert stored["input"] == STORED
+    assert stored["events"][0]["data"] == {STORED: STORED}
+    assert (await store.get_run(run["id"]))["error"] == STORED
+    dataset = {
+        "id": str(uuid4()),
+        "level": run["level"],
+        "team": "red",
+        "created_at": "2026-10-27T20:00:01.000Z",
+        "size": 1,
+        "cases": [{"id": "c1", "team": "red", "content": {"body": UNSTORABLE}}],
+    }
+    await store.save_dataset(dataset)
+    stored_dataset = await store.get_dataset(dataset["id"])
+    assert stored_dataset["cases"][0]["content"] == {"body": STORED}
+    await store.close()
+
+
+@pytest.mark.asyncio
+async def test_memory_store_unstorable_text():
+    await check_unstorable_text(MemoryRunStore())
+
+
+@postgres
+@pytest.mark.asyncio
+async def test_postgres_store_unstorable_text(database):
+    await check_unstorable_text(PostgresRunStore())
+
+
+@postgres
+@pytest.mark.asyncio
+async def test_postgres_run_with_unstorable_generated_text_completes(database):
+    store = PostgresRunStore()
+    content = {"subject": "<subject \x00 3>", "body": "<body \x00 3>"}
+    harness = Harness(red=FakeRedTeam(invalid={3: {"content": content}}), store=store)
+    run = await harness.run("email-review", "easy")
+    assert run["status"] == "completed", run["error"]
+    case = by_label(run["cases"])["03"]
+    assert case["outcome"] == "defended"
+    assert "<subject � 3>" in case["input_preview"]
+    assert "<body � 3>" in case["input_preview"]
     await asyncio.wait_for(store.close(), 10)

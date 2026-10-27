@@ -8,6 +8,7 @@ Records never contain request headers or credentials (R-EXE-8); the orchestrator
 import asyncio
 import copy
 import json
+import re
 from collections.abc import Iterable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -46,6 +47,26 @@ def dataset_meta(dataset: dict[str, Any]) -> dict[str, Any]:
 
 def newest_first(records: Iterable[dict[str, Any]], key: str) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: record[key], reverse=True)
+
+
+# Postgres JSONB cannot hold NUL characters or UTF-16 surrogates. Attacker, benign and model text may contain
+# them; they are stored as U+FFFD instead of failing the save (which failed the whole run).
+_UNSTORABLE = re.compile("[\x00\ud800-\udfff]")
+
+
+def storable(value: Any) -> Any:
+    """`value` with every string (keys too) made storable in JSONB; both stores keep exactly this."""
+    if isinstance(value, str):
+        return _UNSTORABLE.sub("�", value)
+    if isinstance(value, list | tuple):
+        return [storable(item) for item in value]
+    if isinstance(value, dict):
+        return {storable(key): storable(item) for key, item in value.items()}
+    return value
+
+
+def dumps(value: Any) -> str:
+    return json.dumps(storable(value))
 
 
 class RunStore(Protocol):
@@ -88,7 +109,7 @@ class RunStore(Protocol):
 
 
 class MemoryRunStore:
-    """In-process store. Records are copied in and out, like a database would."""
+    """In-process store. Records are copied in and out, like a database would, and kept `storable()`."""
 
     def __init__(self) -> None:
         self.runs: dict[str, dict[str, Any]] = {}
@@ -109,7 +130,7 @@ class MemoryRunStore:
         pass
 
     async def save_run(self, run: dict[str, Any]) -> None:
-        self.runs[run["id"]] = copy.deepcopy(run)
+        self.runs[run["id"]] = storable(copy.deepcopy(run))
 
     async def get_run(self, run_id: str) -> dict[str, Any] | None:
         return copy.deepcopy(self.runs.get(run_id))
@@ -121,7 +142,7 @@ class MemoryRunStore:
         return copy.deepcopy(newest_first(runs, "started_at"))
 
     async def save_case(self, case: dict[str, Any]) -> None:
-        self.cases[case["id"]] = copy.deepcopy(case)
+        self.cases[case["id"]] = storable(copy.deepcopy(case))
 
     async def list_cases(
         self, run_id: str, *, events: bool = False
@@ -139,7 +160,7 @@ class MemoryRunStore:
         return copy.deepcopy(case) if case and case["run_id"] == run_id else None
 
     async def save_dataset(self, dataset: dict[str, Any]) -> None:
-        self.datasets[dataset["id"]] = copy.deepcopy(dataset)
+        self.datasets[dataset["id"]] = storable(copy.deepcopy(dataset))
 
     async def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         return copy.deepcopy(self.datasets.get(dataset_id))
@@ -287,7 +308,7 @@ class PostgresRunStore:
         data = {key: value for key, value in run.items() if key != "snapshot"}
         snapshot = None
         if run["id"] not in self._snapshot_saved and "snapshot" in run:
-            snapshot = json.dumps(run["snapshot"])
+            snapshot = dumps(run["snapshot"])
         await conn.execute(
             "INSERT INTO arena_runs(id,level,status,started_at,data,snapshot) "
             "VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb) "
@@ -297,7 +318,7 @@ class PostgresRunStore:
             run["level"],
             run["status"],
             run["started_at"],
-            json.dumps(data),
+            dumps(data),
             snapshot,
         )
         if snapshot is not None:
@@ -333,8 +354,8 @@ class PostgresRunStore:
                 case["run_id"],
                 case["team"],
                 case["index"],
-                json.dumps(data),
-                json.dumps(events),
+                dumps(data),
+                dumps(events),
             )
 
     async def list_cases(
@@ -369,7 +390,7 @@ class PostgresRunStore:
                 dataset["level"],
                 dataset["team"],
                 dataset["created_at"],
-                json.dumps(dataset),
+                dumps(dataset),
             )
 
     async def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:

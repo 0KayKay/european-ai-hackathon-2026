@@ -326,6 +326,7 @@ def test_agent_uses_gateway_for_model_requests(monkeypatch) -> None:
     assert isinstance(agent.model, OpenAIChatModel)
     assert agent.model.model_name == "gemini-3.8-flash"
     assert agent.model.settings["openai_reasoning_effort"] == "low"
+    assert agent.model.settings["max_tokens"] == 65536
     assert str(agent.model.provider.base_url) == "http://agentgateway:3000/v1/"
     get_settings.cache_clear()
 

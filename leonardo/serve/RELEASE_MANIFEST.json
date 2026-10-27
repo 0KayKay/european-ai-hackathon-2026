@@ -10,7 +10,7 @@
     "node.py": "21e5fa9874932174cc3078af01b2d92b5dad26d122350b2cb227ed1546c4efe8",
     "prepare_run.sh": "033bc136770dd19e1508894ab18b9c22c10a48a20071cb2a8588c839324b4ad5",
     "registry.py": "6257e6fc606e28fd4fb252bfa8ae9bff70b6ae3f8dc162a11744b6a1e3e8519e",
-    "router.py": "e429cd2644b922223cfcafa0b8f3f6d59aa6c5aedb056a6588d91c489da9061b",
+    "router.py": "ceddcc5dc8aedd8d86e469d530d535176047e89e9bdd1a378f9e356cacd07064",
     "router.sbatch": "2ae1bf6695b6b126faa7c5723832fd6f0335e676c1896363c8b488c016c26810",
     "runtime_patches/pp_kv_empty_groups/pp_kv_guard.py": "d87aba9acb44929dc2c3b6edd561ae713b8bc80d2e896bc5f3e5985d19e29aab",
     "runtime_patches/pp_kv_empty_groups/sitecustomize.py": "6e847d74dee3d59a11e5b9ccf1e5208de486744bb4f10d009ce5ca27003650b7",

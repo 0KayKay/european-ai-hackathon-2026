@@ -67,7 +67,7 @@ For each line item:
    - `"overpriced"` if ANY line has overprice_% ≥ 20%
    - `"ok"` otherwise
 3. **plausibility tag:**
-   - `"suspect"` if the overall offer is implausible / not plausible to you 
+   - `"suspect"` if the overall offer is implausible / not plausible to you
    - `"plausible"` otherwise
 
 ## Routing Rules

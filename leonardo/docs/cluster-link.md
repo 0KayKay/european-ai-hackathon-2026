@@ -70,7 +70,7 @@ flowchart LR
 | --- | --- |
 | Can the router's CPU queue reach GPU-node ports? | Yes: the router serves models today (20 Oct). |
 | Does that queue have outbound internet? | Yes: install jobs download there. |
-| Does the whole chain work (agentgateway, routes, guardrails, Services, chisel, router)? | Yes, in a local k3s cluster with this repository's manifests: [tests/cluster_link_poc](../tests/cluster_link_poc/run.sh). |
+| Does the transport chain work (agentgateway, routes, Services, chisel, router)? | The original PR passed a local k3s test. The [current PoC](../tests/cluster_link_poc/run.sh) requires an explicit local context and still needs a full Linux rerun after the integration changes. Challenge guardrails are tested in `backend/tests`, not in the transport stub. |
 | Does the GCE load balancer pass the WebSocket through the Ingress? | Not tested. Check with the `curl` in the cluster README (expects `101`). |
 | Can Leonardo's CPU queue reach that URL? | Yes, directly, without a proxy (`diagnose reach`, job 61614655, 21 Oct: the app's frontend answered, since the link server is not deployed yet). Once it is, the same check should report `101`. |
 | Do the organisers allow it? | Open. The link stays off until they do. |

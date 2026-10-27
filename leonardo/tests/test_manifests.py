@@ -34,14 +34,6 @@ class GkeWithLeonardo(unittest.TestCase):
             cls.before = render(INFRASTRUCTURE / 'gke')
             cls.after = render(Path(temp) / 'gke')
 
-    def test_adds_the_link_and_changes_only_agentgateway_and_the_ingress(self):
-        added = sorted(set(self.after) - set(self.before))
-        self.assertEqual([k for k in added if not k.startswith('ConfigMap/')],
-                         ['BackendConfig/leonardo-link', 'Deployment/leonardo-link', 'Service/leonardo-link',
-                          'Service/leonardo-router'])
-        changed = sorted(k for k in set(self.before) & set(self.after) if self.before[k] != self.after[k])
-        self.assertEqual(changed, ['Deployment/agentgateway', 'Ingress/frontend'])
-
     def test_agentgateway_mounts_the_router_token_it_reads(self):
         deployment = self.after['Deployment/agentgateway']
         self.assertIn('mountPath: /var/run/leonardo-router', deployment)

@@ -471,10 +471,11 @@ class Link:
                                                 stderr=subprocess.STDOUT)
             # Bytes to the job log unchanged: chisel prints "µs", which Python 3.6 cannot print to a job
             # whose locale is ASCII.
-            for line in self.process.stdout:
-                sys.stdout.buffer.write(line)
-                sys.stdout.flush()
-                self.read(line.decode('utf-8', 'replace'))
+            with self.process.stdout:
+                for line in self.process.stdout:
+                    sys.stdout.buffer.write(line)
+                    sys.stdout.flush()
+                    self.read(line.decode('utf-8', 'replace'))
             code = self.process.wait()
             if self.stopping.is_set():
                 return

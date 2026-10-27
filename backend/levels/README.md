@@ -222,7 +222,8 @@ Every LLM role has its own **ModelSpec**: `{ model, endpoint?, params }`.
 `params`: `temperature`, `top_p`, `frequency_penalty`, `presence_penalty`, `max_tokens`, `reasoning_effort`
 (`none | minimal | low | medium | high`), `seed`, `thinking`, and `extra` (passed through to the provider as extra
 request body, e.g. `{ chat_template_kwargs: { enable_thinking: false } }`). Unset parameters are not sent.
-`endpoint` is `agentgateway` (default) or an explicit OpenAI-compatible base URL. Changing a parameter of one role
+`endpoint` is `agentgateway` (default) or an explicit OpenAI-compatible base URL. The gateway key is sent only to
+agentgateway; an explicit URL gets no credentials, so use it only for unauthenticated endpoints. Changing a parameter of one role
 changes only that role; the values used are recorded with every run and shown in the node inspector and under
 "Models used". Open-weight models on Leonardo are used by name through agentgateway; see
 [TESTING.md · Connecting real models](../../docs/spec/config-driven-arena/TESTING.md#connecting-real-models).

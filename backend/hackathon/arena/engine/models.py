@@ -51,6 +51,12 @@ def endpoint_url(endpoint: str) -> str:
     raise ValueError(f"unknown model endpoint '{endpoint}'")
 
 
+def endpoint_api_key(endpoint: str) -> str:
+    """The gateway key goes only to agentgateway; level files are edited by participants, so an explicit URL
+    must never receive it."""
+    return get_settings().AGENTGATEWAY_API_KEY if endpoint == GATEWAY else "unused"
+
+
 def gateway_headers(spec: ModelSpec, identity: ModelIdentity) -> dict[str, str]:
     return {
         "x-user-id": identity.user_id,
@@ -70,7 +76,7 @@ def gateway_agent_model(spec: ModelSpec, identity: ModelIdentity) -> Model:
         provider=OpenAIProvider(
             openai_client=AsyncOpenAI(
                 base_url=endpoint_url(spec.endpoint),
-                api_key=get_settings().AGENTGATEWAY_API_KEY,
+                api_key=endpoint_api_key(spec.endpoint),
                 default_headers=gateway_headers(spec, identity),
             ),
         ),
@@ -107,7 +113,7 @@ class GatewayJudge:
             raise ValueError(f"guardrail '{guardrail.id}' has no judge model")
         async with self.client_factory(
             base_url=endpoint_url(spec.endpoint),
-            api_key=get_settings().AGENTGATEWAY_API_KEY,
+            api_key=endpoint_api_key(spec.endpoint),
             timeout=guardrail.timeout_seconds,
             max_retries=0,
             default_headers={

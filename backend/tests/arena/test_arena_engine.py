@@ -649,6 +649,23 @@ async def test_each_role_gets_its_own_model_parameters():
     ] == 0.3
 
 
+@pytest.mark.asyncio
+async def test_gateway_key_is_only_sent_to_agentgateway():
+    def explicit_endpoint(document):
+        guardrails = document["difficulties"]["hard"]["guardrails"]
+        judge = next(g for g in guardrails if g["id"] == "send-email-judge")
+        judge["model"] = {"model": "judge-b", "endpoint": "https://example.com/v1"}
+
+    tuned, _ = await judge_requests(
+        variant("email-review", "hard", explicit_endpoint)
+    )
+    send = tuned["judges"]["send-email-judge"]["options"]
+    output = tuned["judges"]["output-judge"]["options"]
+    assert send["base_url"] == "https://example.com/v1"
+    assert send["api_key"] != get_settings().AGENTGATEWAY_API_KEY
+    assert output["api_key"] == get_settings().AGENTGATEWAY_API_KEY
+
+
 def test_gateway_agent_model_uses_the_role_spec_and_headers():
     spec = level("hidden-mailbox", "easy").agent.model
     tuned = spec.model_copy(

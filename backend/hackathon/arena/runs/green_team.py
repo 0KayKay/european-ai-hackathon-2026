@@ -14,9 +14,13 @@ import structlog
 from openai import AsyncOpenAI
 
 from hackathon.arena.config.resolved import InjectionError, ResolvedLevel
-from hackathon.arena.engine.models import ModelIdentity, endpoint_url, gateway_headers
+from hackathon.arena.engine.models import (
+    ModelIdentity,
+    endpoint_api_key,
+    endpoint_url,
+    gateway_headers,
+)
 from hackathon.arena.models import chat_completion_params
-from hackathon.config import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -165,7 +169,7 @@ class GreenGenerator:
         try:
             async with self.client_factory(
                 base_url=endpoint_url(spec.endpoint),
-                api_key=get_settings().AGENTGATEWAY_API_KEY,
+                api_key=endpoint_api_key(spec.endpoint),
                 timeout=self.timeout,
                 max_retries=1,
                 default_headers=gateway_headers(

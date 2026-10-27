@@ -201,8 +201,9 @@ model:
   data, conversation) will usually not fit into 2,048 tokens; use Gemini or `qwen3-0.6b-leonardo` (8,192) for the
   agent, and the large models for judges, the green generator (fewer `cases` per request fit better) or the
   attacker.
-- `endpoint:` an explicit base URL bypasses agentgateway, but the backend always authenticates with the gateway
-  key, so it does not work against the Leonardo router's own token; use agentgateway.
+- `endpoint:` an explicit base URL bypasses agentgateway and is called without credentials (the gateway key is
+  only ever sent to agentgateway, because participants edit level files), so it does not work against the Leonardo
+  router's own token; use agentgateway.
 - A Leonardo server runs at most 2 hours and the router renews every 4 hours (a few seconds of 503); a failed
   judge call blocks (`on_error: block`), a failed agent call makes the case an error. Plan runs inside a server's
   time window and check the errors count.
@@ -253,7 +254,9 @@ service, but has not run against the real services.
   (single-turn); `linear_jailbreaking`, `tree_jailbreaking`, `crescendo_jailbreaking`, `sequential_jailbreak`,
   `bad_likert_judge` (multi-turn). The vocabulary is in `backend/hackathon/arena/registry/attacks.py`.
 - Build one model client per role from its ModelSpec (`endpoint` is already a base URL, `params` are the
-  OpenAI-style parameters; send `x-user-id` / `x-run-id` headers like `runner.py`). For indirect levels the
+  OpenAI-style parameters; send `x-user-id` / `x-run-id` headers like `runner.py`). Send the gateway key only when
+  `endpoint` is the agentgateway base URL; any other URL comes from a participant-edited level file and gets no
+  credentials (same rule as the backend). For indirect levels the
   simulator must produce content for the injection fields (e.g. an email subject and body), not chat messages.
 - Tests with mocked models and placeholders such as `"<attack 1>"` only (SPEC §10). The backend waits up to 900 s
   between two stream lines.

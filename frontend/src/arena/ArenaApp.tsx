@@ -1,7 +1,9 @@
 import { ArenaShell } from "./components";
 import { LevelList } from "./LevelList";
 import { LevelView } from "./level/LevelView";
+import { CaseReplay } from "./replay/CaseReplay";
 import { type ArenaRoute, arenaHref } from "./router";
+import { RunPage } from "./run/RunPage";
 
 function Placeholder({
 	crumbs,
@@ -41,31 +43,13 @@ export function ArenaApp({ route }: { route: ArenaRoute }) {
 					key={route.level}
 					level={route.level}
 					difficulty={route.difficulty}
+					start={route.start}
 				/>
 			);
 		case "run":
-			return (
-				<Placeholder
-					crumbs={[{ label: "Runs" }, { label: route.runId }]}
-					title={`Run ${route.runId}`}
-					text="The run view is not available yet."
-				/>
-			);
+			return <RunPage key={route.runId} runId={route.runId} />;
 		case "case":
-			return (
-				<Placeholder
-					crumbs={[
-						{ label: "Runs" },
-						{
-							label: route.runId,
-							href: arenaHref({ name: "run", runId: route.runId }),
-						},
-						{ label: `Case ${route.caseId}` },
-					]}
-					title={`Case ${route.caseId}`}
-					text="The case replay is not available yet."
-				/>
-			);
+			return <CaseReplay runId={route.runId} caseId={route.caseId} />;
 		case "not_found":
 			return (
 				<Placeholder

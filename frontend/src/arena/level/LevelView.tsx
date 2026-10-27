@@ -12,7 +12,8 @@ import {
 } from "../components";
 import { ArenaGraph, GraphLegend } from "../graph/ArenaGraph";
 import { nodeKind } from "../graph/layout";
-import { arenaHref } from "../router";
+import { arenaHref, replaceHash } from "../router";
+import { StartRunDialog } from "../run/StartRunDialog";
 import type {
 	ArenaGraph as ArenaGraphData,
 	Difficulty,
@@ -48,9 +49,12 @@ function teamSummary(detail: LevelDetail) {
 export function LevelView({
 	level,
 	difficulty,
+	start = false,
 }: {
 	level: string;
 	difficulty: Difficulty;
+	/** Open the start-run dialog (from "Run again"); the flag is dropped from the hash. */
+	start?: boolean;
 }) {
 	const query = useArenaQuery(
 		(signal) => getLevel(level, difficulty, { signal }),
@@ -59,6 +63,13 @@ export function LevelView({
 	const detail = query.data;
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [activePath, setActivePath] = useState("level.yaml");
+	const [startOpen, setStartOpen] = useState(start);
+
+	useEffect(() => {
+		if (!start) return;
+		setStartOpen(true);
+		replaceHash(arenaHref({ name: "level", level, difficulty }));
+	}, [start, level, difficulty]);
 
 	const graph = detail?.graph;
 	const nodesById = useMemo(
@@ -120,8 +131,8 @@ export function LevelView({
 					<Button
 						type="button"
 						size="sm"
-						disabled
-						title="Starting runs from the arena comes in a later version."
+						disabled={!detail || detail.level !== level}
+						onClick={() => setStartOpen(true)}
 					>
 						<PlayIcon className="size-3.5" aria-hidden="true" />
 						Run evaluation
@@ -129,6 +140,14 @@ export function LevelView({
 				</>
 			}
 		>
+			{detail && detail.level === level && (
+				<StartRunDialog
+					key={`${detail.level}/${detail.difficulty}`}
+					detail={detail}
+					open={startOpen}
+					onOpenChange={setStartOpen}
+				/>
+			)}
 			{!detail && query.loading && <LoadingState label="Loading level…" />}
 			{query.error && !query.loading && (
 				<ErrorState

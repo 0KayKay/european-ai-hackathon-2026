@@ -6,13 +6,13 @@ import { DIFFICULTIES, type Difficulty } from "./types";
  * server-side routing is needed.
  *
  *   #/arena                                → levels
- *   #/arena/levels/:level/:difficulty      → level
- *   #/arena/runs/:runId                    → run
- *   #/arena/runs/:runId/cases/:caseId      → case
+ *   #/arena/levels/:level/:difficulty      → level (`?start=1` opens the start-run dialog)
+ *   #/arena/runs/:runId                    → run (progress while active, then results)
+ *   #/arena/runs/:runId/cases/:caseId      → case replay
  */
 export type ArenaRoute =
 	| { name: "levels" }
-	| { name: "level"; level: string; difficulty: Difficulty }
+	| { name: "level"; level: string; difficulty: Difficulty; start?: true }
 	| { name: "run"; runId: string }
 	| { name: "case"; runId: string; caseId: string }
 	| { name: "not_found"; path: string };
@@ -30,15 +30,23 @@ const decode = (value: string) => {
 
 /** Parses a location hash. Returns `null` when the hash is not an arena route. */
 export function parseArenaHash(hash: string): ArenaRoute | null {
-	const path = hash.replace(/^#/, "").split("?")[0];
+	const [path, query = ""] = hash.replace(/^#/, "").split("?");
 	const parts = path.split("/").filter(Boolean);
 	if (parts[0] !== "arena") return null;
 	const [, section, ...rest] = parts.map(decode);
 
 	if (section === undefined) return { name: "levels" };
 	if (section === "levels" && rest.length === 0) return { name: "levels" };
-	if (section === "levels" && rest.length === 2 && isDifficulty(rest[1]))
-		return { name: "level", level: rest[0], difficulty: rest[1] };
+	if (section === "levels" && rest.length === 2 && isDifficulty(rest[1])) {
+		const route = {
+			name: "level",
+			level: rest[0],
+			difficulty: rest[1],
+		} as const;
+		return new URLSearchParams(query).get("start") === "1"
+			? { ...route, start: true }
+			: route;
+	}
 	if (section === "runs" && rest.length === 1)
 		return { name: "run", runId: rest[0] };
 	if (section === "runs" && rest.length === 3 && rest[1] === "cases")
@@ -54,7 +62,7 @@ export function arenaHref(route: Exclude<ArenaRoute, { name: "not_found" }>) {
 		case "levels":
 			return "#/arena";
 		case "level":
-			return `#/arena/levels/${enc(route.level)}/${route.difficulty}`;
+			return `#/arena/levels/${enc(route.level)}/${route.difficulty}${route.start ? "?start=1" : ""}`;
 		case "run":
 			return `#/arena/runs/${enc(route.runId)}`;
 		case "case":
@@ -67,6 +75,12 @@ export const PLAYGROUND_HREF = "#/";
 
 export function navigate(href: string) {
 	window.location.hash = href.replace(/^#/, "");
+}
+
+/** Replaces the current hash without a new history entry (e.g. to drop a one-shot `?start=1`). */
+export function replaceHash(href: string) {
+	window.history.replaceState(window.history.state, "", href);
+	window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
 
 const subscribe = (onChange: () => void) => {

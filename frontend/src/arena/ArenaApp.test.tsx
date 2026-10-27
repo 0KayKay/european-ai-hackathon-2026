@@ -15,6 +15,11 @@ import {
 	hiddenMailboxHard,
 	levelsFixture,
 } from "./fixtures";
+import {
+	hiddenMailboxCase03,
+	hiddenMailboxResults,
+	hiddenMailboxRunCompleted,
+} from "./fixtures/runs";
 import { mockArenaFetch, requestedUrls } from "./testing/fetch";
 import { mockReactFlow } from "./testing/reactflow";
 import type { LevelDetail } from "./types";
@@ -88,6 +93,9 @@ const routes = {
 	"/api/v1/arena/levels/hidden-mailbox/medium":
 		withoutGuardrails(hiddenMailboxHard),
 	"/api/v1/arena/levels/email-review/hard": emailReviewHard,
+	"/api/v1/arena/runs/run-hm-1": hiddenMailboxRunCompleted,
+	"/api/v1/arena/runs/run-hm-1/results": hiddenMailboxResults,
+	"/api/v1/arena/runs/run-hm-1/cases/hm-03": hiddenMailboxCase03,
 };
 
 const go = (hash: string) =>
@@ -145,15 +153,20 @@ describe("arena routing", () => {
 		).toBeGreaterThan(0);
 	});
 
-	it("renders placeholders for run and case routes", async () => {
-		renderAt("#/arena/runs/r1");
+	it("restores run and case routes on reload", async () => {
+		const fetch = renderAt("#/arena/runs/run-hm-1");
+		expect(await screen.findByTestId("rate-attack-success")).toHaveTextContent(
+			"22.2%",
+		);
+		expect(requestedUrls(fetch)).toContain("/api/v1/arena/runs/run-hm-1");
+		cleanup();
+
+		renderAt("#/arena/runs/run-hm-1/cases/hm-03");
 		expect(
-			await screen.findByRole("heading", { name: "Run r1" }),
+			await screen.findByRole("list", { name: "Event log" }),
 		).toBeInTheDocument();
-		await go("#/arena/runs/r1/cases/c7");
-		expect(
-			await screen.findByRole("heading", { name: "Case c7" }),
-		).toBeInTheDocument();
+		expect(screen.getByText("Case 03")).toBeInTheDocument();
+
 		await go("#/arena/unknown");
 		expect(
 			await screen.findByRole("heading", { name: "Page not found" }),

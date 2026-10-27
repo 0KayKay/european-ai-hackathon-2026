@@ -294,6 +294,33 @@ Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active
 - Results `errors`: `{ red, green }` (counts). Case summary `outcome` and `decided_by` are `null` until the case is
   decided; `duration` is seconds.
 
+**Run, results and replay details (WP5, additions to the shapes above):**
+
+- `GET /runs/{id}` additionally carries `title` (level title) and `graph` (level graph at run time, as in the case
+  detail). Both are optional: without them the UI shows the level id and loads `GET /levels/{level}/{difficulty}` for
+  the live sample graph.
+- `cases` of `GET /runs/{id}` lists every case known so far in run order (red, then green), including generated but
+  not yet run ones (`outcome: null`, `turns: 0`, `started_at: null`) with their `input_preview` (R-RED-4); a direct
+  red case whose first message does not exist yet has `input_preview: null`. The replay's previous/next buttons follow
+  this order. `live.case_id` marks the running case; `live.events` are its events so far (same shape as `events` of
+  the case detail).
+- `Rate.value` is the fraction `numerator / denominator` (0…1), `null` when the denominator is 0. The UI shows it as a
+  percentage with one decimal and the numerator / denominator next to it, unchanged.
+- `decided_label` is the display text of "decided at" (e.g. `Input judge · UNSAFE`, `Success check · secret in
+  output`); `by_decision[].label` likewise. The UI falls back to a plain name of `decided_by`.
+- CaseEvent `data` keys the replay renders specially (anything else is listed as recorded): `attacker_message`
+  `{ message }`; `injection` `{ <field>: value }` (exactly the injection fields); `user_task` `{ text }`; `guardrail`
+  as in §3; `model_call` `{ model, n }`; `tool_call` `{ tool, args, call_id }`; `tool_result` `{ tool, call_id,
+  result }` (string or JSON); `agent_reply` `{ text }`; `success_check` `{ met, kind, detail }`; `error`
+  `{ message }`; `limit` is listed field by field. Green cases use the same kinds (`attacker_message` / `injection` carry the
+  benign input).
+- Event `node`/`edge` drive the replay highlight: a `tool_call`/`tool_result` uses the member id (`tool:<name>`); a
+  `guardrail` event uses `guardrail:<id>`; the `success_check` event uses `success`. A `guardrail` event with status
+  `blocked` marks its node as blocked, a `success_check` with `met: true` as alert. Highlights are per turn.
+- `GET /runs/{id}/export` is used as a plain download link (`<a download>`), so it must answer the session cookie
+  without extra headers.
+- The UI route `#/arena/levels/:level/:difficulty?start=1` opens the start-run dialog ("Run again").
+
 ## 6. DeepTeam service (internal endpoints)
 
 Base `http://deepteam:8080`, prefix `/internal/arena`, authenticated with the shared `AGENTGATEWAY_API_KEY` as

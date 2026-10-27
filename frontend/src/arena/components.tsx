@@ -3,9 +3,16 @@ import { Fragment, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { OUTCOME_LABELS } from "./format";
 import { arenaHref, PLAYGROUND_HREF } from "./router";
-import type { Channel, Difficulty, Turns } from "./types";
-import { DIFFICULTIES } from "./types";
+import type {
+	CaseOutcome,
+	Channel,
+	Difficulty,
+	RunDetail,
+	Turns,
+} from "./types";
+import { ACTIVE_RUN_STATUSES, DIFFICULTIES } from "./types";
 
 export interface Crumb {
 	label: string;
@@ -190,4 +197,62 @@ export function ErrorState({
 			</div>
 		</div>
 	);
+}
+
+const OUTCOME_TONES: Record<CaseOutcome, string> = {
+	succeeded: "border-red-200 bg-red-50 text-red-700",
+	defended: "border-emerald-200 bg-emerald-50 text-emerald-700",
+	passed: "border-emerald-200 bg-emerald-50 text-emerald-700",
+	false_positive: "border-amber-200 bg-amber-50 text-amber-800",
+	error: "border-slate-200 bg-slate-100 text-slate-600",
+};
+
+/** Outcome of a decided case, e.g. "Attack succeeded" or "False positive". */
+export function OutcomeBadge({
+	outcome,
+	className,
+}: {
+	outcome: CaseOutcome;
+	className?: string;
+}) {
+	return (
+		<span
+			data-outcome={outcome}
+			className={cn(
+				"inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-semibold whitespace-nowrap",
+				OUTCOME_TONES[outcome],
+				className,
+			)}
+		>
+			{OUTCOME_LABELS[outcome]}
+		</span>
+	);
+}
+
+/**
+ * Breadcrumbs of the run and replay pages: level · difficulty, then "Run" (active) or "Results"
+ * (finished). The brand already links to the level list.
+ */
+export function runCrumbs(
+	run: Pick<RunDetail, "level" | "difficulty" | "title" | "status"> | undefined,
+	runId: string,
+	current?: boolean,
+): Crumb[] {
+	const label =
+		run && !ACTIVE_RUN_STATUSES.includes(run.status) ? "Results" : "Run";
+	const runCrumb: Crumb = current
+		? { label }
+		: { label, href: arenaHref({ name: "run", runId }) };
+	if (!run) return [runCrumb];
+	return [
+		{
+			label: `${run.title ?? run.level} · ${difficultyLabel(run.difficulty)}`,
+			href: arenaHref({
+				name: "level",
+				level: run.level,
+				difficulty: run.difficulty,
+			}),
+		},
+		runCrumb,
+	];
 }

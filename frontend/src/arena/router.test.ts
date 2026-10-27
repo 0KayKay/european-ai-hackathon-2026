@@ -28,6 +28,26 @@ describe("parseArenaHash", () => {
 		});
 	});
 
+	it("reads the start-run flag of a level route", () => {
+		expect(parseArenaHash("#/arena/levels/email-review/hard?start=1")).toEqual({
+			name: "level",
+			level: "email-review",
+			difficulty: "hard",
+			start: true,
+		});
+		expect(
+			parseArenaHash("#/arena/levels/email-review/hard?start=0"),
+		).not.toHaveProperty("start");
+		expect(
+			arenaHref({
+				name: "level",
+				level: "email-review",
+				difficulty: "hard",
+				start: true,
+			}),
+		).toBe("#/arena/levels/email-review/hard?start=1");
+	});
+
 	it("rejects unknown paths and difficulties", () => {
 		expect(parseArenaHash("#/arena/levels/x/extreme")).toEqual({
 			name: "not_found",

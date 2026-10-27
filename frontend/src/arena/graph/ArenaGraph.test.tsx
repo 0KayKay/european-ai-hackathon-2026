@@ -104,7 +104,10 @@ describe("ArenaGraph", () => {
 	it("has no edge back to the attacker on an indirect level", () => {
 		render(<ArenaGraph graph={emailReviewHard.graph} />);
 		expect(flowNode("injection")).not.toBeNull();
-		expect(flowNode("user_task")).not.toBeNull();
+		// The fixed user task shows its text (the backend's subtitle), quoted.
+		expect(flowNode("user_task")).toHaveTextContent(
+			"“Please process my email inbox.”",
+		);
 		const edges = [...document.querySelectorAll("[data-testid^='rf__edge-']")];
 		expect(edges.length).toBeGreaterThan(5);
 		expect(

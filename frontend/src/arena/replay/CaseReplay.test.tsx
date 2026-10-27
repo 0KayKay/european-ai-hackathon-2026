@@ -172,8 +172,12 @@ describe("case replay", () => {
 	it("shows a blocking guardrail with rule and reason as recorded", async () => {
 		renderAt("#/arena/runs/run-hm-1/cases/hm-01");
 		await screen.findByRole("list", { name: "Event log" });
+		await waitFor(() => expect(graphNode("attacker")).not.toBeNull());
 		fireEvent.keyDown(window, { key: "ArrowRight" });
 		fireEvent.keyDown(window, { key: "ArrowRight" });
+		await waitFor(() =>
+			expect(currentEntry()).toHaveAttribute("data-seq", "2"),
+		);
 		const entry = currentEntry() as HTMLElement;
 		expect(entry).toHaveTextContent("Input judge · blocked");
 		expect(
@@ -184,6 +188,9 @@ describe("case replay", () => {
 				"<judge reason as returned: request targets restricted data>",
 			),
 		).toBeVisible();
+		// The implementation name is shown, the internal check id is not.
+		expect(within(entry).getByText("InputGuardrail")).toBeVisible();
+		expect(entry).not.toHaveTextContent("check_id");
 		await waitFor(() =>
 			expect(graphNode("guardrail:input-judge")).toHaveAttribute(
 				"data-highlight",

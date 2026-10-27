@@ -140,18 +140,25 @@ function EventBody({ event }: { event: CaseEvent }) {
 				rows.push(["reason", g.reason]);
 			if (g.changed !== null && g.changed !== undefined)
 				rows.push(["changed", g.changed ? "yes" : "no character changes"]);
+			if (g.failed) rows.push(["check", "failed or timed out"]);
 			if (g.position) rows.push(["position", g.position]);
 			if (g.model) rows.push(["model", g.model]);
+			if (g.guardrail_name && g.guardrail_name !== g.guardrail_id)
+				rows.push(["name", g.guardrail_name]);
 			rows.push(
 				...rest(data, [
 					"guardrail_id",
 					"guardrail_kind",
+					"guardrail_name",
 					"position",
 					"status",
 					"rule",
 					"reason",
 					"changed",
 					"model",
+					// Links the pending and the final event of one check; not useful to read.
+					"check_id",
+					"failed",
 				]),
 			);
 			return <Fields rows={rows} />;

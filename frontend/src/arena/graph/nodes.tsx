@@ -247,6 +247,17 @@ const makeSimple = (type: keyof typeof TONES) =>
 		return <SimpleNode node={data.node} type={type} />;
 	});
 
+/** The backend labels the node "User task" and sends the task text as subtitle; the card quotes the text. */
+const UserTaskNode = memo(function UserTaskNode({ data }: NodeProps<FlowNode>) {
+	const { node } = data;
+	return (
+		<SimpleNode
+			node={{ ...node, label: node.subtitle || node.label, subtitle: null }}
+			type="user_task"
+		/>
+	);
+});
+
 const AgentNode = memo(function AgentNode({ data }: NodeProps<FlowNode>) {
 	const model = data.node.details?.model?.model;
 	return (
@@ -426,7 +437,7 @@ const ToolsNode = memo(function ToolsNode({ data }: NodeProps<FlowNode>) {
 export const nodeTypes: NodeTypes = {
 	[flowTypeName("attacker")]: makeSimple("attacker"),
 	[flowTypeName("injection")]: makeSimple("injection"),
-	[flowTypeName("user_task")]: makeSimple("user_task"),
+	[flowTypeName("user_task")]: UserTaskNode,
 	[flowTypeName("agent")]: AgentNode,
 	[flowTypeName("data")]: makeSimple("data"),
 	[flowTypeName("success")]: makeSimple("success"),

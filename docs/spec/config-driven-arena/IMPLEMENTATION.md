@@ -205,8 +205,15 @@ Built in the backend from the resolved level (`hackathon/arena/graph.py`), so te
 Stable node ids: `attacker`, `user_task` (indirect), `injection` (indirect, attacker-controlled data),
 `guardrails:<position>` (group per occupied position), `guardrail:<id>` (member, `group` = its group id),
 `agent`, `tools` (group), `tool:<name>` (`group` = `tools`), `data:<id>`, `success`, `output`.
+Node kinds: `attacker`, `user_task`, `injection`, `guardrail_group`, `guardrail`, `agent`, `tool_group`, `tool`,
+`data`, `success`, `output` (`data:<id>` uses the toolset id; `details.model` is `null` for nodes without an LLM).
 Edge kinds: `attacker` (attacker-controlled text), `flow`, `tool_call`, `tool_result`, `success`, `reply_loop`
-(direct multi-turn only: agent → attacker "next turn ≤ N"). Indirect levels have **no** edge back to `attacker`.
+(direct multi-turn only: `output` → `attacker` "next turn ≤ N"). Indirect levels have **no** edge back to `attacker`.
+Edge id = `<source>-><target>` (unique). A path passes a guardrail group only when its position is occupied:
+`attacker|user_task → [guardrails:user->agent] → agent`, `agent → [guardrails:around:<tool>] → tool:<name>`,
+`tool:<name> → [guardrails:tool->agent] → agent`, `agent → [guardrails:agent->output] → output`; indirect:
+`attacker → injection → tool:<injection tool>`; data: `data:<id> → tool` (reads) or `tool → data:<id>` (writes);
+success: `output → success` or `data:<outbox> → success` (sent-email checks).
 Layout is the frontend's job (deterministic, n8n/Langflow style, see `design/`).
 
 ## 5. HTTP API (backend, prefix `/api/v1/arena`, session-protected like the rest of `/api/v1`)
@@ -214,7 +221,7 @@ Layout is the frontend's job (deterministic, n8n/Langflow style, see `design/`).
 | Method | Path | Returns |
 |---|---|---|
 | GET | `/levels` | `[{ id, title, description, channel, turns, difficulties: ["easy","medium","hard"] }]` |
-| GET | `/levels/{level}/{difficulty}` | `{ level, difficulty, title, surface, graph, models: [{role, node, model, params}], source: { files: [{ path, content }] }, red_team: {...summary}, green_team: {...summary} }` |
+| GET | `/levels/{level}/{difficulty}` | `{ level, difficulty, difficulties, title, description, surface, graph, models: [{role, node, model, endpoint, params}], source: { files: [{ path, content }] }, red_team: { attacker, simulator, evaluator, objective, attacks: [{type, title, turns, attempts}], cases, max_turns }, green_team: { generator, cases, guidance: {file, text} } }` — `source.files[0]` is the level.yaml; paths relative to `backend/levels/` |
 | GET | `/levels/{level}/datasets` | `[{ id, name, level, team, created_at, size, run_id }]` |
 | GET | `/datasets/{id}` | `{ …meta, cases: [{ id, team, attack_type?, input?, content? }] }` |
 | POST | `/runs` | body `{ level, difficulty, red: { source: "generate" \| "dataset", dataset_id? }, green: { source, dataset_id? } }` → run summary (201) |

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from hackathon.api.router import router as ag_ui_router
 from hackathon.api.challenges import router as challenges_router
+from hackathon.arena.api import get_level_catalog, router as arena_router
 from hackathon.config import get_settings
 from hackathon.extensions import (
     LogCorrelationIdMiddleware,
@@ -25,6 +26,8 @@ settings = get_settings()
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     normalize_external_loggers()
     logger.info("Starting application", app=settings.APP_NAME, environment=settings.ENV)
+    # Fail fast on an invalid level config (R-CFG-5) instead of on the first arena request.
+    get_level_catalog()
     yield None
 
 
@@ -33,6 +36,7 @@ app.add_middleware(LogCorrelationIdMiddleware)
 app.add_exception_handler(Exception, global_exception_handler)
 app.include_router(ag_ui_router)
 app.include_router(challenges_router)
+app.include_router(arena_router)
 if settings.PHOENIX_OTLP_ENDPOINT:
     configure_tracing(
         app, settings.PHOENIX_OTLP_ENDPOINT, api_key=settings.PHOENIX_API_KEY

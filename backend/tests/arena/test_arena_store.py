@@ -207,6 +207,6 @@ async def test_postgres_run_with_unstorable_generated_text_completes(database):
     assert run["status"] == "completed", run["error"]
     case = by_label(run["cases"])["03"]
     assert case["outcome"] == "defended"
-    assert "<subject � 3>" in case["input_preview"]
-    assert "<body � 3>" in case["input_preview"]
+    # Read back from Postgres, in the order of the injection fields.
+    assert case["input_preview"] == "<subject � 3> · <body � 3>"
     await asyncio.wait_for(store.close(), 10)

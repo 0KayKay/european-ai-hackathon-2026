@@ -305,6 +305,39 @@ describe("level view", () => {
 		).toBeInTheDocument();
 	});
 
+	it("does not start a run for the previous difficulty while switching", async () => {
+		window.location.hash = "#/arena/levels/hidden-mailbox/hard";
+		let answerEasy: (() => void) | undefined;
+		const fetch = mockArenaFetch(routes);
+		const answer = fetch.getMockImplementation();
+		fetch.mockImplementation((input, init) =>
+			String(input) === "/api/v1/arena/levels/hidden-mailbox/easy"
+				? new Promise<Response>((resolve) => {
+						answerEasy = () =>
+							resolve(
+								new Response(JSON.stringify({ detail: "Boom" }), {
+									status: 500,
+								}),
+							);
+					})
+				: (answer as typeof globalThis.fetch)(input, init),
+		);
+		render(<App />);
+		const runButton = () =>
+			screen.getByRole("button", { name: "Run evaluation" });
+		await waitFor(() => expect(runButton()).toBeEnabled());
+
+		await go("#/arena/levels/hidden-mailbox/easy");
+		// The hard level is still shown while easy loads, but a run must not start for it.
+		expect(runButton()).toBeDisabled();
+		await waitFor(() => expect(answerEasy).toBeDefined());
+		await act(async () => answerEasy?.());
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"This level could not be loaded.",
+		);
+		expect(runButton()).toBeDisabled();
+	});
+
 	it("shows an error with retry when the level cannot be loaded", async () => {
 		renderAt("#/arena/levels/missing/easy");
 		const alert = await screen.findByRole("alert");

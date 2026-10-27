@@ -107,6 +107,12 @@ export function LevelView({
 	);
 
 	const title = detail?.level === level ? detail.title : level;
+	// While another difficulty loads (or fails to), the previous one stays on screen; a run must only
+	// start for the difficulty in the route.
+	const runnable =
+		detail?.level === level && detail.difficulty === difficulty
+			? detail
+			: undefined;
 	const surface = detail?.surface ?? graph?.surface;
 
 	return (
@@ -131,7 +137,7 @@ export function LevelView({
 					<Button
 						type="button"
 						size="sm"
-						disabled={!detail || detail.level !== level}
+						disabled={!runnable}
 						onClick={() => setStartOpen(true)}
 					>
 						<PlayIcon className="size-3.5" aria-hidden="true" />
@@ -140,10 +146,10 @@ export function LevelView({
 				</>
 			}
 		>
-			{detail && detail.level === level && (
+			{runnable && (
 				<StartRunDialog
-					key={`${detail.level}/${detail.difficulty}`}
-					detail={detail}
+					key={`${runnable.level}/${runnable.difficulty}`}
+					detail={runnable}
 					open={startOpen}
 					onOpenChange={setStartOpen}
 				/>

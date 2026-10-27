@@ -83,7 +83,13 @@ function ProgressCard({
 
 function caseStatus(item: CaseSummary, liveId: string | undefined) {
 	if (item.outcome) return <OutcomeBadge outcome={item.outcome} />;
-	if (item.id === liveId)
+	if (item.status === "stopped")
+		return (
+			<span className="inline-flex h-5 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 text-[11px] text-amber-800">
+				Stopped
+			</span>
+		);
+	if (item.id === liveId || item.status === "running")
 		return (
 			<span className="inline-flex h-5 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-1.5 text-[11px] font-semibold text-blue-700">
 				<span className="size-1.5 animate-pulse rounded-full bg-blue-500" />
@@ -221,7 +227,7 @@ function LiveSample({ run }: { run: RunDetail }) {
 						Case {item.label}
 						{item.attack_type ? ` · ${item.attack_type}` : ""}
 						{lastTurn
-							? ` · turn ${lastTurn}${run.graph?.surface.max_turns ? ` of ≤ ${run.graph.surface.max_turns}` : ""}`
+							? ` · turn ${lastTurn}${run.graph?.surface.turns === "multi" ? ` of ≤ ${run.graph.surface.max_turns}` : ""}`
 							: ""}
 					</span>
 				)}
@@ -262,7 +268,8 @@ function LiveSample({ run }: { run: RunDetail }) {
 	);
 }
 
-function ModelsUsed({ run }: { run: RunDetail }) {
+/** The model and parameters of every LLM role, as recorded with the run (R-EXE-7, AC-9). */
+export function ModelsUsed({ run }: { run: RunDetail }) {
 	if (!run.models.length) return null;
 	return (
 		<details className="group rounded-xl border bg-white shadow-sm">

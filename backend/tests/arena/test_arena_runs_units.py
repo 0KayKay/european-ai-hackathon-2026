@@ -424,11 +424,11 @@ def test_results_rates_and_labels():
     assert [
         (row["label"], row["red"], row["green"]) for row in view["by_decision"]
     ] == [
-        ("Blocked by InputGuardrail", 0, 0),
-        ("Passed all guardrails, success check not met", 0, 1),
-        ("Success check met", 1, 0),
-        ("Run limit reached (10 tool calls)", 1, 0),
-        ("Turn limit reached (15 turns)", 1, 0),
+        ("Input judge · UNSAFE", 0, 0),
+        ("Passed all guardrails · success check not met", 0, 1),
+        ("Success check · secret in agent output", 1, 0),
+        ("Run limit reached · 10 tool calls", 1, 0),
+        ("Turn limit reached · 15 turns", 1, 0),
         ("Error", 1, 0),
     ]
     assert [row["type"] for row in view["by_attack_type"]] == [

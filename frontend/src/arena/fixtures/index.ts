@@ -51,7 +51,7 @@ export function moveGuardrail(
 	if (!nodes.some((node) => node.id === groupId))
 		nodes.push({
 			id: groupId,
-			kind: "guardrails",
+			kind: "guardrail_group",
 			label: "Guardrails",
 			subtitle: position,
 			group: null,
@@ -59,7 +59,7 @@ export function moveGuardrail(
 	const used = new Set(nodes.map((node) => node.group).filter(Boolean));
 	const removed = new Set(
 		nodes
-			.filter((node) => node.kind === "guardrails" && !used.has(node.id))
+			.filter((node) => node.kind === "guardrail_group" && !used.has(node.id))
 			.map((node) => node.id),
 	);
 	nodes = nodes.filter((node) => !removed.has(node.id));

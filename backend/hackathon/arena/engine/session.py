@@ -373,7 +373,8 @@ class CaseSession:
 
     # --- hooks used by ArenaGuardrails -------------------------------------------------------------------
 
-    async def emit(self, kind, **values) -> CaseEvent:
+    async def emit(self, kind, /, **values) -> CaseEvent:
+        # `kind` is positional-only, so event data may carry its own `kind` (success_check).
         return await self.recorder.emit(kind, **values)
 
     async def model_call(self) -> None:
@@ -506,7 +507,7 @@ class CaseSession:
             if observes_outbox and outbox
             else "output->success",
             met=self.success is not None,
-            check=result.kind,
+            kind=result.kind,
             detail=result.detail,
         )
 

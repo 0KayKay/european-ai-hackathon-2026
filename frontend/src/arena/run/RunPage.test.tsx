@@ -182,9 +182,7 @@ describe("run in progress", () => {
 		const row = (label: string) =>
 			cases.querySelector(`[data-case="${label}"]`) as HTMLElement;
 		expect(within(row("03")).getByText("Attack succeeded")).toBeInTheDocument();
-		expect(
-			within(row("03")).getByText("<attack 3 · turn 1>"),
-		).toBeInTheDocument();
+		expect(within(row("03")).getByText("<attack 3>")).toBeInTheDocument();
 		expect(within(row("03")).getByRole("link")).toHaveAttribute(
 			"href",
 			"#/arena/runs/run-hm-1/cases/hm-03",
@@ -208,18 +206,34 @@ describe("run in progress", () => {
 		const cases = screen.getByRole("list", { name: "Cases" });
 		expect(within(cases).getAllByRole("listitem")).toHaveLength(4);
 		expect(
-			within(cases).getByText("<planted email subject 1>"),
+			within(cases).getByText(
+				"<planted email subject 1> · <planted email body 1>",
+			),
 		).toBeInTheDocument();
 		expect(screen.getByText(/Cases are being generated/)).toBeInTheDocument();
 	});
 
 	it("stops the run with the stop button", async () => {
 		let stopped = false;
+		const stoppedCases = hiddenMailboxRunRunning.cases.map((item) =>
+			item.status === "running"
+				? { ...item, status: "stopped" as const }
+				: item,
+		);
 		const fetch = renderAt("#/arena/runs/run-hm-1", {
 			[`${API}/runs/run-hm-1`]: () =>
 				stopped
-					? { ...hiddenMailboxRunRunning, status: "stopped", live: null }
+					? {
+							...hiddenMailboxRunRunning,
+							status: "stopped",
+							live: null,
+							cases: stoppedCases,
+						}
 					: hiddenMailboxRunRunning,
+			[`${API}/runs/run-hm-1/results`]: {
+				...hiddenMailboxResults,
+				cases: stoppedCases,
+			},
 			[`${API}/runs/run-hm-1/stop`]: ({ method }: { method: string }) => {
 				if (method !== "POST") return new Response(null, { status: 405 });
 				stopped = true;
@@ -237,6 +251,12 @@ describe("run in progress", () => {
 		]);
 		expect(screen.getByRole("status")).toHaveTextContent("Stopped");
 		expect(screen.queryByRole("button", { name: "Stop run" })).toBeNull();
+		// The interrupted case is marked as stopped, the others as not run.
+		const table = screen.getByRole("region", { name: "Cases" });
+		const row = (label: string) =>
+			table.querySelector(`tr[data-case="${label}"]`) as HTMLElement;
+		expect(within(row("07")).getByText("stopped")).toBeInTheDocument();
+		expect(within(row("08")).getByText("not run")).toBeInTheDocument();
 	});
 });
 
@@ -275,11 +295,15 @@ describe("results", () => {
 			name: "Where it was decided",
 		});
 		expect(
-			within(decided).getByText("Input judge blocked"),
+			within(decided).getByText("Input judge · UNSAFE"),
 		).toBeInTheDocument();
 		expect(
 			within(decided).getByText("4 attacks · 1 benign"),
 		).toBeInTheDocument();
+
+		// The models used stay visible after the run (AC-9).
+		fireEvent.click(screen.getByText("Models used"));
+		expect(screen.getByText("guardrail:input-judge")).toBeVisible();
 	});
 
 	it("shows a rate without a value as a dash", async () => {
@@ -323,7 +347,7 @@ describe("results", () => {
 		expect(labels()).toEqual(["05"]);
 		const row = table.querySelector('tr[data-case="05"]') as HTMLElement;
 		expect(
-			within(row).getByText("Error · agent model timeout"),
+			within(row).getByText("The run exceeded the time limit (300 s)."),
 		).toBeInTheDocument();
 		expect(within(row).getByText("30.2 s")).toBeInTheDocument();
 		fireEvent.click(within(table).getByRole("button", { name: "All 20" }));
@@ -332,7 +356,7 @@ describe("results", () => {
 		fireEvent.click(
 			within(
 				table.querySelector('tr[data-case="06"]') as HTMLElement,
-			).getByText("Turn limit reached · no secret"),
+			).getByText("Turn limit reached · 15 turns"),
 		);
 		expect(window.location.hash).toBe("#/arena/runs/run-hm-1/cases/hm-06");
 	});
@@ -351,6 +375,27 @@ describe("results", () => {
 		expect(
 			screen.getByRole("link", { name: "Level 2 · Email Review · Hard" }),
 		).toHaveAttribute("href", "#/arena/levels/email-review/hard");
+	});
+
+	it("shows failed case generation and the reason of an error case", async () => {
+		renderAt("#/arena/runs/run-er-1", {
+			[`${API}/runs/run-er-1`]: {
+				...emailReviewRunCompleted,
+				generation: {
+					red: {
+						status: "failed",
+						error:
+							"DeepTeam service unreachable at http://deepteam:8080 (ConnectError).",
+					},
+					green: { status: "done", error: null },
+				},
+			},
+		});
+		const alert = await screen.findByRole("alert", { name: "Run problems" });
+		expect(alert).toHaveTextContent(
+			"Red-team generation failed: DeepTeam service unreachable at http://deepteam:8080 (ConnectError).",
+		);
+		expect(alert).not.toHaveTextContent("Green-team");
 	});
 
 	it("shows an error with retry for an unknown run", async () => {

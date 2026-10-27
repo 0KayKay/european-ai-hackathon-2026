@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -25,7 +25,24 @@ from hackathon.arena.runs.store import create_store
 # Routes with a fixed second segment under /levels/{level_id}/ (e.g. `datasets`) must be declared before
 # `get_level`, which otherwise matches them as a difficulty.
 router = APIRouter(prefix="/api/v1/arena", dependencies=[Depends(require_user)])
-internal_router = APIRouter(prefix="/api/v1/arena/internal")
+
+PROXY_HEADERS = ("forwarded", "x-forwarded-for", "x-forwarded-host", "x-real-ip")
+
+
+def direct_only(request: Request) -> None:
+    """The internal callback is for the deepteam service, which calls the backend Service directly.
+
+    A request that passed a proxy (frontend Caddy, the public load balancer, agentgateway) carries forwarding
+    headers and is answered as if the route did not exist. The edge also denies the path; this is the second
+    line, so a proxy misconfiguration cannot expose the callback.
+    """
+    if any(header in request.headers for header in PROXY_HEADERS):
+        raise HTTPException(404, "Not Found")
+
+
+internal_router = APIRouter(
+    prefix="/api/v1/arena/internal", dependencies=[Depends(direct_only)]
+)
 
 
 @dataclass

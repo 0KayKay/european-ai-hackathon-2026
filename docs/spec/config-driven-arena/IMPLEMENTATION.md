@@ -151,7 +151,9 @@ Rules:
 - **`on_block`** is optional and must match the position: `user->agent` → `refuse`, `agent->output` →
   `replace_output`, `tool->agent` / `around:<tool>` → `tool_error`; so moving a guardrail is a one-field change.
   `tool_authorization` needs `blocked_message` (the tool result returned on block).
-- **Further fields** (WP1): guardrail `name` (display/legacy name, default = id) and `description`; toolset
+- **Further fields** (WP1): guardrail `name` (implementation/legacy name recorded in events and shown in the
+  inspector, default = id), `label` (display label in the graph and results, default = the id in words, e.g.
+  `send-email-judge` → "Send email judge") and `description`; toolset
   `{ kind, id?, data?, params?, descriptions? }` (kinds: `shared_drive`, `inbox`, `send_email` with
   `params.sender`, `offers`; an inbox email marked `injection: true` receives the injected fields; `parse_offer`
   adds them to the offer); `secret.description`, `secret.embedded_in`; `success.params`, `success.description`.
@@ -220,7 +222,8 @@ id). Output: `CaseResult { outcome, decided_by, turns, events[], usage, error? }
 `kind` ∈ `attacker_message` (direct), `injection` (indirect planted content, data = exactly the fields), `user_task`,
 `guardrail` (status `pending|passed|blocked|sanitized`), `model_call` (data: model, n), `tool_call`
 (data: tool, args, call_id), `tool_result` (data: tool, call_id, result), `agent_reply` (data: text),
-`success_check` (data: met, check kind, detail), `limit` (data: which limit), `error` (data: message).
+`success_check` (data: `{met, kind, detail}`, the same shape as `CaseResult.success`), `limit` (data: limit,
+message), `error` (data: message). `attacker_message` data is `{text, team}` (red attack or green benign message).
 `t` = seconds since case start. `node`/`edge` reference ids from the graph (§4). Events never contain request headers
 or credentials (`R-EXE-8`).
 
@@ -279,18 +282,19 @@ Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active
 
 **Details the frontend relies on (WP3, refines the shapes above; TypeScript in `frontend/src/arena/types.ts`):**
 
-- Graph node `kind` mirrors the id prefix: `attacker | user_task | injection | guardrails` (group
-  `guardrails:<position>`) `| guardrail` (member) `| agent | tools` (group) `| tool` (member) `| data | success |
-  output`. The UI falls back to the id prefix for an unknown `kind` and derives a missing group node from a member's
-  `group`. Edges may reference members (`tool:send_email`); the UI draws them on the member's group.
+- Graph node `kind` is sent as listed in §4 (`guardrail_group`, `tool_group` for the groups); the UI maps the group
+  kinds onto its own `guardrails` / `tools` and falls back to the id prefix for an unknown `kind`, and derives a
+  missing group node from a member's `group`. Edges may reference members (`tool:send_email`); the UI draws them on
+  the member's group.
 - `details.prompts[].file` is optional (`null` for inline text, e.g. the attacker objective); `details.settings` values
   are display strings. A guardrail member with `details.model` is shown as an LLM guardrail.
 - `models[].node` links a role to its graph node (several roles may share `attacker`); `null` for roles without a node
   (green-team generator).
 - Level detail `red_team` summary: `{ attacks: [{ type, attempts, turns }], cases, max_turns, attacker?, simulator?,
   evaluator? }`; `green_team`: `{ cases, generator? }` (ModelSpecs). All optional for the UI.
-- `source.files[0]` is `level.yaml`, followed by the files it references; each `path` is spelled as in `level.yaml`
-  (e.g. `prompts/input_judge.md`, `shared/prompts/judge_system.md`), so prompt `file` values match a tab.
+- `source.files[0]` is the level's `level.yaml`, followed by the files it references; every `path` is relative to
+  `backend/levels/` (e.g. `hidden-mailbox/level.yaml`, `hidden-mailbox/prompts/input_judge.md`,
+  `shared/prompts/judge_system.md`), exactly like the prompt `file` values, so a prompt opens its tab.
 - Results `errors`: `{ red, green }` (counts). Case summary `outcome` and `decided_by` are `null` until the case is
   decided; `duration` is seconds.
 
@@ -306,14 +310,19 @@ Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active
   the case detail).
 - `Rate.value` is the fraction `numerator / denominator` (0…1), `null` when the denominator is 0. The UI shows it as a
   percentage with one decimal and the numerator / denominator next to it, unchanged.
-- `decided_label` is the display text of "decided at" (e.g. `Input judge · UNSAFE`, `Success check · secret in
-  output`); `by_decision[].label` likewise. The UI falls back to a plain name of `decided_by`.
-- CaseEvent `data` keys the replay renders specially (anything else is listed as recorded): `attacker_message`
-  `{ message }`; `injection` `{ <field>: value }` (exactly the injection fields); `user_task` `{ text }`; `guardrail`
-  as in §3; `model_call` `{ model, n }`; `tool_call` `{ tool, args, call_id }`; `tool_result` `{ tool, call_id,
-  result }` (string or JSON); `agent_reply` `{ text }`; `success_check` `{ met, kind, detail }`; `error`
-  `{ message }`; `limit` is listed field by field. Green cases use the same kinds (`attacker_message` / `injection` carry the
-  benign input).
+- `decided_label` is the display text of "decided at", `<step> · <result>`, built from the run's snapshot:
+  `<guardrail label> · UNSAFE` (LLM judge, tool authorization) or `<guardrail label> · blocked` (other kinds),
+  `Success check · <success kind title>` (e.g. `Success check · secret in agent output`), `Passed all guardrails ·
+  success check not met`, `Turn limit reached · 15 turns`, `Run limit reached · 10 tool calls`, `Error`.
+  `by_decision[].label` likewise. The UI falls back to a plain name of `decided_by`.
+- CaseEvent `data` keys (the replay renders these specially; anything else is listed as recorded):
+  `attacker_message` `{ text, team }`; `injection` `{ <field>: value }` (exactly the injection fields); `user_task`
+  `{ text }`; `guardrail` as in §3 (`guardrail_id, guardrail_kind, guardrail_name, position, model, check_id, status,
+  rule, reason, changed`, plus `failed` on a judge's final event); `model_call` `{ model, n }`; `tool_call` `{ tool,
+  call_id, args }`; `tool_result` `{ tool, call_id, result, blocked_by }` (`result` string or JSON); `agent_reply`
+  `{ text }`; `success_check` `{ met, kind, detail }` (`detail` an object, e.g. `{source}` or `{sent_emails,
+  matching}`); `limit` `{ limit, message }`; `error` `{ message }`. Green cases use the same kinds
+  (`attacker_message` / `injection` carry the benign input). `guardrail` events carry a `node` but no `edge`.
 - Event `node`/`edge` drive the replay highlight: a `tool_call`/`tool_result` uses the member id (`tool:<name>`); a
   `guardrail` event uses `guardrail:<id>`; the `success_check` event uses `success`. A `guardrail` event with status
   `blocked` marks its node as blocked, a `success_check` with `met: true` as alert. Highlights are per turn.
@@ -323,9 +332,11 @@ Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active
 
 **Runs as implemented (WP6, `hackathon/arena/runs/`; additions to the shapes above, nothing removed):**
 
-- Event `data` keys as recorded by the engine: `attacker_message` `{ text, team }` (the UI reads `message ?? text`);
-  `injection` is **exactly** the injection fields (`{ subject, body }`; the tool is the target of the
-  `injection->tool:<name>` edge); `success_check` `{ met, check, detail }` (`check` = success-check kind).
+- Event `data` keys as recorded by the engine: see the WP5 list above (`injection` is **exactly** the injection
+  fields, `{ subject, body }`; the tool is the target of the `injection->tool:<name>` edge). The JSON of every
+  endpoint is checked against these key sets by `backend/tests/arena/test_arena_contract.py`, which can also dump
+  real responses (`ARENA_CONTRACT_DUMP=<dir>`); `frontend/src/arena/types.ts` mirrors them, and the level fixtures
+  `frontend/src/arena/fixtures/{hidden-mailbox,email-review}-hard.ts` are such dumps.
 - Run summary (`POST /runs`, `GET /runs`, `POST /runs/{id}/stop`) adds `error` (run-level failure text or `null`) and
   `generation: { red, green }`, each `{ status: pending | generating | done | failed | dataset, error }`
   (`failed` e.g. when DeepTeam is unreachable; the run still executes the other team). `GET /runs/{id}` also has
@@ -373,10 +384,16 @@ Never hand-written attack content anywhere (SPEC §10): tests use mocked model c
 
 ## 7. Persistence
 
-Postgres via `asyncpg` in the style of `challenge_store.py` (JSONB documents): tables `arena_runs`, `arena_cases`
-(events JSONB), `arena_datasets`. A store interface with a Postgres implementation and an in-memory implementation
+Postgres via `asyncpg` in the style of `challenge_store.py` (JSONB documents) over a small connection pool:
+tables `arena_runs` (the config `snapshot` in its own column, written once), `arena_cases` (events JSONB),
+`arena_datasets`. A store interface with a Postgres implementation and an in-memory implementation
 (tests; `ARENA_STORE=memory` for local runs without DB). Runs found `running`/`generating` at startup become
-`interrupted`.
+`interrupted` (finished at their last update) and their running case `stopped`. `tests/arena/test_arena_store.py`
+runs the store tests against Postgres when `ARENA_TEST_DATABASE_URL` is set.
+
+The internal callback (`/api/v1/arena/internal/`) is answered with 404 by the frontend proxy (Caddy, Vite), and the
+backend refuses requests on it that carry forwarding headers (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`,
+`X-Real-IP`), so only direct in-cluster calls (deepteam → `backend:8000`) reach it.
 
 ## 8. Conventions for all work packages
 

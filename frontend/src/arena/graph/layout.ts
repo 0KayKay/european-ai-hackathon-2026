@@ -40,10 +40,17 @@ export const KNOWN_KINDS: readonly NodeKind[] = [
 	"output",
 ];
 
+/** Backend group kinds (`WireNodeKind`) → UI kinds. */
+const WIRE_KINDS: Record<string, NodeKind> = {
+	guardrail_group: "guardrails",
+	tool_group: "tools",
+};
+
 /** Node kind, falling back to the stable id prefix when the backend sends an unknown kind. */
 export function nodeKind(
 	node: Pick<GraphNode, "id" | "kind">,
 ): NodeKind | null {
+	if (node.kind in WIRE_KINDS) return WIRE_KINDS[node.kind];
 	if ((KNOWN_KINDS as readonly string[]).includes(node.kind))
 		return node.kind as NodeKind;
 	const { id } = node;
@@ -434,6 +441,10 @@ export function buildFlow(graph: ArenaGraph): {
 			connectable: false,
 			selectable: false,
 			focusable: false,
+			// React Flow gives nodes that are neither selectable nor draggable `pointer-events: none`,
+			// which would swallow every mouse click on a node or a group member (the inspector selects on
+			// click). The inline style wins over React Flow's own.
+			style: { pointerEvents: "all" },
 		};
 	});
 

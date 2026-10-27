@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import {
+	emailReviewCase01,
 	emailReviewCase03,
 	emailReviewRunCompleted,
 	hiddenMailboxCase01,
@@ -51,6 +52,18 @@ const routes = {
 	[`${hm}/cases/hm-g04`]: hiddenMailboxCaseG04,
 	[`${API}/runs/run-er-1`]: emailReviewRunCompleted,
 	[`${API}/runs/run-er-1/cases/er-03`]: emailReviewCase03,
+	[`${API}/runs/run-er-1/cases/er-08`]: {
+		...emailReviewCase01,
+		id: "er-08",
+		label: "08",
+		index: 8,
+		outcome: "error",
+		decided_by: { kind: "error" },
+		decided_label: "Error",
+		error: "Invalid generated case: 'subject' is longer than 300 characters",
+		content: { subject: "<subject 8>", body: "<body 8>" },
+		events: [],
+	},
 };
 
 function renderAt(hash: string) {
@@ -83,7 +96,7 @@ describe("case replay", () => {
 
 		expect(currentEntry()).toHaveAttribute("data-seq", "0");
 		expect(currentEntry()).toHaveTextContent("Attacker · message");
-		expect(currentEntry()).toHaveTextContent("<attack 3 · turn 1>");
+		expect(currentEntry()).toHaveTextContent("<attack 3>");
 		await waitFor(() =>
 			expect(graphNode("attacker")).toHaveAttribute(
 				"data-highlight",
@@ -133,7 +146,8 @@ describe("case replay", () => {
 		fireEvent.click(
 			within(log()).getByRole("button", { name: "3.22s Success check · met" }),
 		);
-		expect(currentEntry()).toHaveTextContent("Secret found in agent output.");
+		expect(currentEntry()).toHaveTextContent("secret_in_output");
+		expect(currentEntry()).toHaveTextContent("agent output");
 		await waitFor(() =>
 			expect(graphNode("success")).toHaveAttribute("data-highlight", "alert"),
 		);
@@ -158,8 +172,12 @@ describe("case replay", () => {
 	it("shows a blocking guardrail with rule and reason as recorded", async () => {
 		renderAt("#/arena/runs/run-hm-1/cases/hm-01");
 		await screen.findByRole("list", { name: "Event log" });
+		await waitFor(() => expect(graphNode("attacker")).not.toBeNull());
 		fireEvent.keyDown(window, { key: "ArrowRight" });
 		fireEvent.keyDown(window, { key: "ArrowRight" });
+		await waitFor(() =>
+			expect(currentEntry()).toHaveAttribute("data-seq", "2"),
+		);
 		const entry = currentEntry() as HTMLElement;
 		expect(entry).toHaveTextContent("Input judge · blocked");
 		expect(
@@ -170,6 +188,9 @@ describe("case replay", () => {
 				"<judge reason as returned: request targets restricted data>",
 			),
 		).toBeVisible();
+		// The implementation name is shown, the internal check id is not.
+		expect(within(entry).getByText("InputGuardrail")).toBeVisible();
+		expect(entry).not.toHaveTextContent("check_id");
 		await waitFor(() =>
 			expect(graphNode("guardrail:input-judge")).toHaveAttribute(
 				"data-highlight",
@@ -287,16 +308,28 @@ describe("case replay", () => {
 
 		fireEvent.click(
 			within(log()).getByRole("button", {
-				name: "2.31s Send-email auth · passed",
+				name: "2.31s Send email judge · passed",
 			}),
 		);
-		expect(graphNode("guardrail:send-email-auth")).toHaveTextContent(
+		expect(graphNode("guardrail:send-email-judge")).toHaveTextContent(
 			"SAFE · passed",
 		);
 		expect(graphNode("tool:get_emails")).toHaveTextContent("0.92s");
 		expect(within(log()).getByText(/send_email\(/)).toHaveTextContent(
 			'"to": "external.sender@example.com"',
 		);
+	});
+
+	it("shows why a case without events is an error, with its input", async () => {
+		renderAt("#/arena/runs/run-er-1/cases/er-08");
+		expect(await screen.findByRole("note")).toHaveTextContent(
+			"Invalid generated case: 'subject' is longer than 300 characters",
+		);
+		expect(
+			screen.getByText("No events were recorded for this case."),
+		).toBeInTheDocument();
+		expect(screen.getByText("<subject 8>")).toBeInTheDocument();
+		expect(screen.getByText("<body 8>")).toBeInTheDocument();
 	});
 
 	it("shows an error for an unknown case", async () => {

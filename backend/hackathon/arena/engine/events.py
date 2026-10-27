@@ -60,6 +60,7 @@ class EventRecorder:
     async def emit(
         self,
         kind: EventKind,
+        /,
         *,
         node: str | None = None,
         edge: str | None = None,

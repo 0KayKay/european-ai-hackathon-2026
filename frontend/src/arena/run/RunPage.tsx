@@ -95,6 +95,29 @@ function StopButton({
 	);
 }
 
+/** Run-level failure and failed case generation (e.g. DeepTeam unreachable), as recorded. */
+function RunNotices({ run }: { run: RunDetail }) {
+	const notices = [
+		run.error,
+		run.generation?.red.status === "failed" &&
+			`Red-team generation failed: ${run.generation.red.error ?? "unknown error"}`,
+		run.generation?.green.status === "failed" &&
+			`Green-team generation failed: ${run.generation.green.error ?? "unknown error"}`,
+	].filter((notice): notice is string => Boolean(notice));
+	if (!notices.length) return null;
+	return (
+		<div
+			role="alert"
+			aria-label="Run problems"
+			className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800"
+		>
+			{notices.map((notice) => (
+				<p key={notice}>{notice}</p>
+			))}
+		</div>
+	);
+}
+
 /**
  * `#/arena/runs/:runId`: progress while the run is generating or running (polled about every
  * second), the results once it has finished.
@@ -152,6 +175,7 @@ export function RunPage({ runId }: { runId: string }) {
 					Live updates are failing ({error.message}). Retrying…
 				</p>
 			)}
+			{run && <RunNotices run={run} />}
 			{run &&
 				(active ? <RunProgress run={run} /> : <RunResultsView run={run} />)}
 		</ArenaShell>

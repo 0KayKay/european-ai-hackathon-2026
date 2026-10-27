@@ -206,7 +206,9 @@ export function StartRunDialog({
 
 	const attacks = detail.red_team?.attacks ?? [];
 	const redCases = detail.red_team?.cases;
-	const maxTurns = detail.red_team?.max_turns;
+	// Indirect levels report `max_turns: 1`; only a multi-turn surface has a turn budget worth showing.
+	const maxTurns =
+		detail.surface.turns === "multi" ? detail.red_team?.max_turns : undefined;
 	const greenCases = detail.green_team?.cases;
 	const chosenRed = red.find((d) => d.id === redDataset);
 	const chosenGreen = green.find((d) => d.id === greenDataset);

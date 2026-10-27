@@ -136,6 +136,41 @@ packages it into a ConfigMap for Tilt.
 Backend agent traces use the AG-UI `threadId` as Phoenix `session.id` and the verified Better Auth user ID as `user.id`,
 including on nested agent and model spans.
 
+## Guardrail Arena
+
+The arena evaluates the prompt-injection levels automatically: an attacker generates attacks against a level, a
+benign-case generator produces normal requests, every case runs to completion, and the results show how many
+attacks got through and how many legitimate requests the guardrails wrongly blocked. Specification, contracts and
+status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPEC.md); the manual test checklist is
+[TESTING.md](docs/spec/config-driven-arena/TESTING.md).
+
+- **Levels are config.** Each level × difficulty is described in [backend/levels/](backend/levels/README.md)
+  (agent, tools and data, secret, guardrails and their positions, success check, red and green team, a model and
+  parameters per LLM role). Edit the files and restart the backend; the UI is generated from them. Levels 1–3
+  reproduce the legacy challenges; `hidden-mailbox-output-judge` is an example of a new level without code.
+- **Where.** After sign-in, **Arena** in the playground header (`#/arena`). Pick a level and difficulty to see the
+  config source, the execution graph and a node inspector with prompts and models. **Run evaluation** starts a
+  run; the run page shows progress, live counts, a live sample of the running case and the generated inputs; once
+  finished it shows attack success rate, false-positive rate, breakdowns and a filterable case list. Every case
+  opens a step-by-step replay on the graph. Runs can be stopped and exported as JSON.
+- **Runs and datasets.** Red cases come from the deepteam service (single-turn types are generated up front;
+  multi-turn types are driven turn by turn through an internal backend callback). Green cases come from the
+  level's generator model. The single-turn cases of a run (indirect red cases, all green cases) are stored as
+  datasets; a new run can reuse a stored dataset of the same level unchanged to compare guardrail changes on the
+  same data. Runs, cases with all events and datasets are stored in Postgres and survive reloads and restarts
+  (a run that was active when the backend stopped is marked *interrupted*).
+- **Settings** (backend; set in `infrastructure/base/local.yaml`, see `backend/.env.example`):
+  `ARENA_STORE` (`postgres` default, `memory` for a backend without database), `DEEPTEAM_URL`
+  (`http://deepteam:8080`), `ARENA_CALLBACK_URL` (base URL under which deepteam reaches the backend,
+  `http://backend:8000`). Model calls go through agentgateway with the backend's internal key. The callback path
+  `/api/v1/arena/internal/` is answered with 404 by the frontend proxy and refused by the backend when a request
+  arrives through a proxy; only in-cluster calls reach it.
+- **Limitations.** The deepteam service does not implement the arena endpoints yet
+  (`/internal/arena/generate`, `/internal/arena/multi-turn`, see
+  [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)); until then red-team
+  generation fails visibly and only the green team runs. Execution is serial per run. Configs are edited as files,
+  not in the UI; runs are not compared with each other. The manual challenge mode keeps using the legacy levels.
+
 ## GKE
 
 The [Terraform stack](infrastructure/terraform/gke) creates a GKE Autopilot cluster in `europe-west1` with private

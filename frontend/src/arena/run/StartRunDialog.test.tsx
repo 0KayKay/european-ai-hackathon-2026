@@ -59,7 +59,8 @@ describe("start run", () => {
 		const dialog = await screen.findByRole("dialog", {
 			name: "Run evaluation",
 		});
-		expect(within(dialog).getByText(/prompt_injection × 10/)).toBeVisible();
+		expect(within(dialog).getByText(/prompt_injection × 5/)).toBeVisible();
+		expect(within(dialog).getByText(/roleplay × 5/)).toBeVisible();
 		const red = within(dialog).getByRole("region", {
 			name: "Red team · attacks",
 		});
@@ -67,7 +68,7 @@ describe("start run", () => {
 			name: "Green team · benign cases",
 		});
 		expect(within(red).getByText("10 cases")).toBeInTheDocument();
-		expect(within(green).getByText("20 cases")).toBeInTheDocument();
+		expect(within(green).getByText("10 cases")).toBeInTheDocument();
 
 		const stored = await within(red).findByRole("radio", {
 			name: /Use stored dataset/,
@@ -111,7 +112,7 @@ describe("start run", () => {
 			within(red).getByText(/Red cases are generated during each run/),
 		).toBeInTheDocument();
 		expect(within(red).queryByRole("radio")).toBeNull();
-		expect(within(red).getByText("10 cases · ≤ 15 turns")).toBeInTheDocument();
+		expect(within(red).getByText("15 cases · ≤ 15 turns")).toBeInTheDocument();
 		expect(
 			within(red).getByText(/linear_jailbreaking × 5/),
 		).toBeInTheDocument();

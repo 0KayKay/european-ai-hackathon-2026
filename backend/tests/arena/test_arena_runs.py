@@ -286,13 +286,13 @@ async def test_direct_level_full_run():
     first = cases["01"]
     assert first["outcome"] == "succeeded"
     assert first["decided_by"] == {"kind": "success_check"}
-    assert first["decided_label"] == "Success check met"
+    assert first["decided_label"] == "Success check · secret in agent output"
     assert first["input_preview"] == "<attack 1>"
     assert cases["03"]["decided_by"] == {
         "kind": "guardrail",
         "guardrail_id": "input-judge",
     }
-    assert cases["03"]["decided_label"] == "Blocked by InputGuardrail"
+    assert cases["03"]["decided_label"] == "Input judge · UNSAFE"
     assert cases["04"]["outcome"] == "error"
     multi = [
         case for case in run["cases"] if case["attack_type"] == "linear_jailbreaking"
@@ -350,12 +350,12 @@ async def test_direct_level_full_run():
     ] == [
         (
             {"kind": "guardrail", "guardrail_id": "input-judge"},
-            "Blocked by InputGuardrail",
+            "Input judge · UNSAFE",
             1,
             1,
         ),
-        ({"kind": "agent"}, "Passed all guardrails, success check not met", 12, 8),
-        ({"kind": "success_check"}, "Success check met", 1, 0),
+        ({"kind": "agent"}, "Passed all guardrails · success check not met", 12, 8),
+        ({"kind": "success_check"}, "Success check · secret in agent output", 1, 0),
         ({"kind": "error"}, "Error", 1, 1),
     ]
     assert len(results["cases"]) == 25
@@ -444,7 +444,7 @@ async def test_indirect_level_full_run_and_dataset_reuse():
         "kind": "guardrail",
         "guardrail_id": "send-email-judge",
     }
-    assert cases["02"]["decided_label"] == "Blocked by SendEmailGuardrail"
+    assert cases["02"]["decided_label"] == "Send email judge · UNSAFE"
     assert cases["03"]["outcome"] == "error"
     assert "exceeds 10000 characters" in cases["03"]["error"]
     assert cases["G02"]["decided_by"] == {
@@ -465,7 +465,7 @@ async def test_indirect_level_full_run_and_dataset_reuse():
         "denominator": 10,
     }
     labels = [row["label"] for row in results["by_decision"]]
-    assert labels[:2] == ["Blocked by OutputGuardrail", "Blocked by SendEmailGuardrail"]
+    assert labels[:2] == ["Output judge · UNSAFE", "Send email judge · UNSAFE"]
 
     # Both single-turn datasets are stored with the run; the invalid case is not part of it.
     datasets = await harness.get("/levels/email-review/datasets")
@@ -674,12 +674,24 @@ async def test_internal_turn_callback_authentication():
             json={"message": "<attack turn 1>"},
             headers={"x-arena-token": callback.token},
         )
+        # Through a proxy (Caddy, the load balancer, agentgateway) the callback does not exist.
+        proxied = [
+            (
+                await harness.http.post(
+                    path,
+                    json={"message": "<attack turn 1>"},
+                    headers={"x-arena-token": callback.token, header: "203.0.113.7"},
+                )
+            ).status_code
+            for header in ("X-Forwarded-For", "Forwarded", "X-Real-IP")
+        ]
         ok = await harness.http.post(
             path,
             json={"message": "<attack turn 1>"},
             headers={"x-arena-token": callback.token},
         )
         seen.update(
+            proxied=proxied,
             wrong=wrong.status_code,
             missing=missing.status_code,
             unknown=unknown.status_code,
@@ -691,6 +703,7 @@ async def test_internal_turn_callback_authentication():
     red.drive_hook = over_http
     run = await harness.run("hidden-mailbox", "easy")
     assert seen["wrong"] == 403 and seen["missing"] == 403 and seen["unknown"] == 404
+    assert seen["proxied"] == [404, 404, 404]
     assert seen["ok"] == (200, {"reply": "<reply>", "stop": False})
     # The internal router is not behind the session dependency, but a finished case takes no turns.
     after = await harness.http.post(

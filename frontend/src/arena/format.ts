@@ -84,6 +84,8 @@ function decidedByText(decided: DecidedBy): string {
 			return "Agent answered";
 		case "turn_limit":
 			return "Turn limit";
+		case "limit":
+			return `Limit · ${decided.limit}`;
 		case "error":
 			return "Error";
 	}

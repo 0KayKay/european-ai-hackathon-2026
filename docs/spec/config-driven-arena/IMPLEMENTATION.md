@@ -384,10 +384,16 @@ Never hand-written attack content anywhere (SPEC §10): tests use mocked model c
 
 ## 7. Persistence
 
-Postgres via `asyncpg` in the style of `challenge_store.py` (JSONB documents): tables `arena_runs`, `arena_cases`
-(events JSONB), `arena_datasets`. A store interface with a Postgres implementation and an in-memory implementation
+Postgres via `asyncpg` in the style of `challenge_store.py` (JSONB documents) over a small connection pool:
+tables `arena_runs` (the config `snapshot` in its own column, written once), `arena_cases` (events JSONB),
+`arena_datasets`. A store interface with a Postgres implementation and an in-memory implementation
 (tests; `ARENA_STORE=memory` for local runs without DB). Runs found `running`/`generating` at startup become
-`interrupted`.
+`interrupted` (finished at their last update) and their running case `stopped`. `tests/arena/test_arena_store.py`
+runs the store tests against Postgres when `ARENA_TEST_DATABASE_URL` is set.
+
+The internal callback (`/api/v1/arena/internal/`) is answered with 404 by the frontend proxy (Caddy, Vite), and the
+backend refuses requests on it that carry forwarding headers (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`,
+`X-Real-IP`), so only direct in-cluster calls (deepteam → `backend:8000`) reach it.
 
 ## 8. Conventions for all work packages
 

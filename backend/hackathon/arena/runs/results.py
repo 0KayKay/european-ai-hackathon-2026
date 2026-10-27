@@ -9,6 +9,7 @@ from typing import Any
 
 from hackathon.arena.registry.attacks import ATTACK_TYPES
 from hackathon.arena.registry.guardrails import GUARDRAIL_KINDS
+from hackathon.arena.registry.success import SUCCESS_KINDS
 
 OUTCOMES = ("succeeded", "defended", "false_positive", "passed", "error")
 
@@ -35,39 +36,42 @@ def _level(run: dict[str, Any]) -> dict[str, Any]:
     return run["snapshot"]["level"]
 
 
-def _guardrail_labels(run: dict[str, Any]) -> dict[str, str]:
+def _guardrail_label(run: dict[str, Any], guardrail_id: str) -> str:
+    """`Input judge · UNSAFE` for a judge, `<label> · blocked` for other kinds; the label as in the graph."""
     nodes = {node["id"]: node for node in run["snapshot"]["graph"]["nodes"]}
-    labels = {}
-    for guardrail in _level(run)["guardrails"]:
-        node = nodes.get(f"guardrail:{guardrail['id']}")
-        labels[guardrail["id"]] = node["label"] if node else guardrail["id"]
-    return labels
+    node = nodes.get(f"guardrail:{guardrail_id}")
+    label = node["label"] if node else guardrail_id
+    guardrail = next(
+        (g for g in _level(run)["guardrails"] if g["id"] == guardrail_id), None
+    )
+    kind = GUARDRAIL_KINDS.get(guardrail["kind"]) if guardrail else None
+    return f"{label} · {'UNSAFE' if kind and kind.uses_model else 'blocked'}"
 
 
 def decision_label(
     run: dict[str, Any], decided_by: dict[str, Any] | None
 ) -> str | None:
-    """Display label of a deciding step, from the run's config snapshot."""
+    """Display label of a deciding step (`<step> · <result>`), from the run's config snapshot."""
     if not decided_by:
         return None
     kind = decided_by.get("kind")
     if kind == "guardrail":
-        guardrail_id = decided_by.get("guardrail_id", "")
-        return f"Blocked by {_guardrail_labels(run).get(guardrail_id, guardrail_id)}"
+        return _guardrail_label(run, decided_by.get("guardrail_id", ""))
     if kind == "success_check":
-        return "Success check met"
+        success = SUCCESS_KINDS.get(_level(run)["success"]["kind"])
+        return f"Success check · {success.title.lower() if success else 'met'}"
     if kind == "agent":
-        return "Passed all guardrails, success check not met"
+        return "Passed all guardrails · success check not met"
     if kind == "turn_limit":
-        return f"Turn limit reached ({_level(run)['surface']['max_turns']} turns)"
+        return f"Turn limit reached · {_level(run)['surface']['max_turns']} turns"
     if kind == "limit":
         limit = decided_by.get("limit", "")
         if limit in LIMIT_LABELS:
             title, unit = LIMIT_LABELS[limit]
             section, name = limit.split(".")
             value = _level(run)["limits"][section][name]
-            return f"{title} reached ({value} {unit})"
-        return f"Limit reached ({limit})"
+            return f"{title} reached · {value} {unit}"
+        return f"Limit reached · {limit}"
     if kind == "error":
         return "Error"
     return str(kind)

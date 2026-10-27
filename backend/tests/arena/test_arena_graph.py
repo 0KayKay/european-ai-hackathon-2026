@@ -249,3 +249,31 @@ def test_example_level_uses_an_output_judge_instead_of_an_input_judge():
     assert "reply_loop" in edge_kinds(g)
     assert hard.guardrails_at("agent->output")[1].policy.runtime == ["content"]
     assert "hidden-mailbox-output-judge/prompts/output_judge.md" in hard.sources
+
+
+def test_guardrail_labels_are_readable_and_configurable():
+    g = graph("email-review", "hard")
+    assert g.node("guardrail:send-email-judge").label == "Send email judge"
+    assert g.node("guardrail:input-sanitizer").label == "Input sanitizer"
+    # The implementation name stays visible in the inspector.
+    judge = g.node("guardrail:send-email-judge")
+    assert {s.label: s.value for s in judge.details.settings}["Name"] == (
+        "SendEmailGuardrail"
+    )
+
+    doc = yaml.safe_load((LEVELS_ROOT / "email-review" / "level.yaml").read_text())
+    output_judge = next(
+        g
+        for g in doc["difficulties"]["hard"]["guardrails"]
+        if g["id"] == "output-judge"
+    )
+    output_judge["label"] = "Reply judge"
+    level = load_level_document(doc, LEVELS_ROOT / "email-review")
+    relabelled = build_graph(level.variants["hard"])
+    assert relabelled.node("guardrail:output-judge").label == "Reply judge"
+
+
+def test_model_parameters_are_shown_as_json_values():
+    agent = graph("hidden-mailbox", "easy").node("agent")
+    settings = {s.label: s.value for s in agent.details.settings}
+    assert "thinking false" in settings["Model parameters"]

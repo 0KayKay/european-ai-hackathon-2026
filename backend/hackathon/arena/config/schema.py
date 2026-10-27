@@ -136,6 +136,7 @@ class GuardrailConfig(Strict):
     kind: str
     at: str
     name: str | None = None
+    label: str | None = None
     description: str = ""
     model: ModelSpec | None = None
     system_prompt: str | None = None

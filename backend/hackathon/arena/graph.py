@@ -6,6 +6,7 @@ per occupied position), `guardrail:<id>` (member of its group), `agent`, `tools`
 `reply_loop` (direct multi-turn only: output -> attacker). Layout is the frontend's job.
 """
 
+import json
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -98,10 +99,14 @@ class Graph(BaseModel):
         return next((node for node in self.nodes if node.id == node_id), None)
 
 
+def _value(value: Any) -> str:
+    return value if isinstance(value, str) else json.dumps(value)
+
+
 def _params(spec: ModelSpec) -> str:
     params = spec.params.compact()
     return (
-        ", ".join(f"{key} {value}" for key, value in params.items())
+        ", ".join(f"{key} {_value(value)}" for key, value in params.items())
         or "provider defaults"
     )
 
@@ -302,7 +307,7 @@ class _Builder:
         self.node(
             id=f"guardrail:{guardrail.id}",
             kind="guardrail",
-            label=guardrail.name if guardrail.name != guardrail.id else guardrail.id,
+            label=guardrail.label,
             subtitle=kind.title
             + (f" · {guardrail.model.model}" if guardrail.model else ""),
             group=group_id(position),

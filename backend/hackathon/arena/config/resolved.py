@@ -72,7 +72,8 @@ class ResolvedGuardrail(BaseModel):
     at: str
     tool: str | None  # wrapped tool for around:<tool>
     order: int  # index within its position
-    name: str
+    name: str  # implementation / legacy name (events, inspector)
+    label: str  # display label in the graph and results
     description: str
     model: ModelSpec | None
     system_prompt: PromptFile | None

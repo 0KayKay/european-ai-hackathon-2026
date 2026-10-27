@@ -286,13 +286,13 @@ async def test_direct_level_full_run():
     first = cases["01"]
     assert first["outcome"] == "succeeded"
     assert first["decided_by"] == {"kind": "success_check"}
-    assert first["decided_label"] == "Success check met"
+    assert first["decided_label"] == "Success check · secret in agent output"
     assert first["input_preview"] == "<attack 1>"
     assert cases["03"]["decided_by"] == {
         "kind": "guardrail",
         "guardrail_id": "input-judge",
     }
-    assert cases["03"]["decided_label"] == "Blocked by InputGuardrail"
+    assert cases["03"]["decided_label"] == "Input judge · UNSAFE"
     assert cases["04"]["outcome"] == "error"
     multi = [
         case for case in run["cases"] if case["attack_type"] == "linear_jailbreaking"
@@ -350,12 +350,12 @@ async def test_direct_level_full_run():
     ] == [
         (
             {"kind": "guardrail", "guardrail_id": "input-judge"},
-            "Blocked by InputGuardrail",
+            "Input judge · UNSAFE",
             1,
             1,
         ),
-        ({"kind": "agent"}, "Passed all guardrails, success check not met", 12, 8),
-        ({"kind": "success_check"}, "Success check met", 1, 0),
+        ({"kind": "agent"}, "Passed all guardrails · success check not met", 12, 8),
+        ({"kind": "success_check"}, "Success check · secret in agent output", 1, 0),
         ({"kind": "error"}, "Error", 1, 1),
     ]
     assert len(results["cases"]) == 25
@@ -444,7 +444,7 @@ async def test_indirect_level_full_run_and_dataset_reuse():
         "kind": "guardrail",
         "guardrail_id": "send-email-judge",
     }
-    assert cases["02"]["decided_label"] == "Blocked by SendEmailGuardrail"
+    assert cases["02"]["decided_label"] == "Send email judge · UNSAFE"
     assert cases["03"]["outcome"] == "error"
     assert "exceeds 10000 characters" in cases["03"]["error"]
     assert cases["G02"]["decided_by"] == {
@@ -465,7 +465,7 @@ async def test_indirect_level_full_run_and_dataset_reuse():
         "denominator": 10,
     }
     labels = [row["label"] for row in results["by_decision"]]
-    assert labels[:2] == ["Blocked by OutputGuardrail", "Blocked by SendEmailGuardrail"]
+    assert labels[:2] == ["Output judge · UNSAFE", "Send email judge · UNSAFE"]
 
     # Both single-turn datasets are stored with the run; the invalid case is not part of it.
     datasets = await harness.get("/levels/email-review/datasets")

@@ -89,6 +89,11 @@ class LevelSet:
         }
 
 
+def humanize(identifier: str) -> str:
+    """Default display label of an id: `send-email-judge` -> `Send email judge`."""
+    return identifier.replace("-", " ").replace("_", " ").capitalize()
+
+
 def deep_merge(base: Any, override: Any) -> Any:
     """Merge `override` over `base`: dicts merge recursively, everything else (lists too) is replaced."""
     if isinstance(base, dict) and isinstance(override, dict):
@@ -367,6 +372,7 @@ class _Resolver:
             tool=tool,
             order=order,
             name=config.name or config.id,
+            label=config.label or humanize(config.id),
             description=config.description,
             model=model,
             system_prompt=system_prompt,

@@ -151,6 +151,12 @@ async def test_multi_turn_keeps_history_and_stops_when_success_is_met():
         False,
         True,
     ]
+    # Same shape as `result.success`: {met, kind, detail}.
+    check = next(e for e in result.events if e.kind == "success_check")
+    assert set(check.data) == {"met", "kind", "detail"}
+    assert check.data["kind"] == "secret_in_output"
+    attacker = next(e for e in result.events if e.kind == "attacker_message")
+    assert attacker.data == {"text": "<attack 1>", "team": "red"}
     assert result.usage.model_requests == 3 and result.usage.tool_calls == 1
     assert [e.turn for e in result.events if e.kind == "attacker_message"] == [1, 2]
 

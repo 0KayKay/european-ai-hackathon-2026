@@ -27,6 +27,8 @@
 		"src/AGUIPlayground.tsx",
 		"src/components/assistant-ui/agui-settings.tsx",
 		"src/i18n.ts",
-		"src/vite-env.d.ts"
-	]
+		"src/vite-env.d.ts",
+		"src/arena"
+	],
+	"exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

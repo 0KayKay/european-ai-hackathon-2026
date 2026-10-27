@@ -1,0 +1,193 @@
+import { AlertTriangleIcon, ArrowLeftIcon, ShieldIcon } from "lucide-react";
+import { Fragment, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
+import { arenaHref, PLAYGROUND_HREF } from "./router";
+import type { Channel, Difficulty, Turns } from "./types";
+import { DIFFICULTIES } from "./types";
+
+export interface Crumb {
+	label: string;
+	href?: string;
+}
+
+const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+	easy: "Easy",
+	medium: "Medium",
+	hard: "Hard",
+};
+export const difficultyLabel = (d: Difficulty) => DIFFICULTY_LABELS[d];
+
+/** Easy / Medium / Hard segmented switch; each option is a link to that difficulty. */
+export function DifficultySwitch({
+	value,
+	hrefFor,
+	available = DIFFICULTIES,
+}: {
+	value: Difficulty;
+	hrefFor: (difficulty: Difficulty) => string;
+	available?: readonly Difficulty[];
+}) {
+	return (
+		<nav
+			aria-label="Difficulty"
+			className="flex items-center gap-0.5 rounded-lg border bg-slate-100/80 p-0.5"
+		>
+			{DIFFICULTIES.filter((d) => available.includes(d)).map((difficulty) => (
+				<a
+					key={difficulty}
+					href={hrefFor(difficulty)}
+					aria-current={difficulty === value ? "page" : undefined}
+					className={cn(
+						"rounded-md px-3.5 py-1.5 text-[13px] font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-500",
+						difficulty === value && "bg-white text-slate-900 shadow-sm",
+					)}
+				>
+					{DIFFICULTY_LABELS[difficulty]}
+				</a>
+			))}
+		</nav>
+	);
+}
+
+/** Full-screen arena frame: header with brand, breadcrumb, optional center/actions, back link. */
+export function ArenaShell({
+	crumbs,
+	center,
+	actions,
+	children,
+}: {
+	crumbs: Crumb[];
+	center?: ReactNode;
+	actions?: ReactNode;
+	children: ReactNode;
+}) {
+	return (
+		<div className="flex h-dvh w-full flex-col bg-slate-50 text-slate-900">
+			<header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b bg-white px-4 py-2.5 lg:h-14 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:py-0">
+				<div className="flex min-w-0 items-center gap-3">
+					<a
+						href={arenaHref({ name: "levels" })}
+						className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-blue-500"
+					>
+						<span className="grid size-7 place-items-center rounded-lg bg-blue-600 text-white">
+							<ShieldIcon className="size-4" aria-hidden="true" />
+						</span>
+						<span className="text-sm font-semibold tracking-tight">
+							Guardrail Arena
+						</span>
+					</a>
+					<nav aria-label="Breadcrumb" className="hidden min-w-0 sm:block">
+						<ol className="flex min-w-0 items-center gap-2 text-[13px]">
+							{crumbs.map((crumb) => (
+								<Fragment key={crumb.href ?? crumb.label}>
+									<li aria-hidden="true" className="text-slate-300">
+										/
+									</li>
+									<li className="min-w-0 truncate">
+										{crumb.href ? (
+											<a
+												href={crumb.href}
+												className="text-slate-500 hover:text-slate-900"
+											>
+												{crumb.label}
+											</a>
+										) : (
+											<span aria-current="page" className="font-medium">
+												{crumb.label}
+											</span>
+										)}
+									</li>
+								</Fragment>
+							))}
+						</ol>
+					</nav>
+				</div>
+				{center ? (
+					<div className="order-last col-span-2 flex justify-center lg:order-none lg:col-span-1">
+						{center}
+					</div>
+				) : (
+					<div className="hidden lg:block" />
+				)}
+				<div className="flex min-w-0 items-center justify-end gap-3">
+					{actions}
+					<a
+						href={PLAYGROUND_HREF}
+						className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+					>
+						<ArrowLeftIcon className="size-3.5" aria-hidden="true" />
+						<span className="sr-only sm:not-sr-only">Back to playground</span>
+					</a>
+				</div>
+			</header>
+			<div className="flex min-h-0 flex-1 flex-col">{children}</div>
+		</div>
+	);
+}
+
+export function SurfaceBadge({
+	channel,
+	turns,
+	className,
+}: {
+	channel: Channel;
+	turns: Turns;
+	className?: string;
+}) {
+	const text = `${channel === "direct" ? "Direct" : "Indirect"} · ${turns === "multi" ? "multi-turn" : "single-turn"}`;
+	return (
+		<span
+			className={cn(
+				"inline-flex h-6 items-center rounded-full border px-2.5 text-xs font-medium whitespace-nowrap",
+				channel === "direct"
+					? "border-red-200 bg-red-50 text-red-700"
+					: "border-amber-200 bg-amber-50 text-amber-800",
+				className,
+			)}
+		>
+			{text}
+		</span>
+	);
+}
+
+export function LoadingState({ label }: { label: string }) {
+	return (
+		<div className="flex flex-1 items-center justify-center gap-2 p-10 text-sm text-slate-500">
+			<Spinner className="size-4" aria-hidden="true" />
+			{label}
+		</div>
+	);
+}
+
+export function ErrorState({
+	title,
+	error,
+	onRetry,
+}: {
+	title: string;
+	error: Error;
+	onRetry?: () => void;
+}) {
+	return (
+		<div className="flex flex-1 items-center justify-center p-10">
+			<div
+				role="alert"
+				className="flex max-w-md flex-col items-center gap-3 rounded-xl border bg-white p-6 text-center shadow-sm"
+			>
+				<AlertTriangleIcon
+					className="size-6 text-amber-500"
+					aria-hidden="true"
+				/>
+				<p className="font-medium">{title}</p>
+				<p className="text-sm text-slate-500">{error.message}</p>
+				{onRetry && (
+					<Button type="button" variant="outline" size="sm" onClick={onRetry}>
+						Try again
+					</Button>
+				)}
+			</div>
+		</div>
+	);
+}

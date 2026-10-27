@@ -53,6 +53,10 @@ agentgateway verify browser sessions through the auth service. Backend model cal
 credential. `/api/health` remains public on the backend for readiness checks. To run the frontend through Vite, the auth
 service is forwarded on `localhost:3005`; the browser still uses the Vite `/api/auth` proxy.
 
+In local mode, backend and DeepTeam use `local-user` only for requests without a session cookie.
+Signed-in requests keep their verified user ID, including in guardrail logs. Earlier challenge attempts
+saved under `local-user` remain under that identity and do not appear in the signed-in user's dashboard.
+
 Vertex AI credentials belong on agentgateway. For local Kind, create the Secret from your Google Application Default
 Credentials file, then restart the gateway:
 
@@ -76,6 +80,26 @@ just down     # removes services; retains the Postgres volume
 `/api/*`.
 `just check` runs a one-shot Tilt deployment check.
 The database credentials in `infrastructure/base/local.yaml` are for local development only.
+
+### Gateway guardrail webhooks
+
+The `guardrail` FastAPI service implements `POST /request` and `POST /response` from the
+[guardrail webhook specification](https://raw.githubusercontent.com/solo-io/gloo-gateway-use-cases/refs/heads/main/ai-guardrail-webhook-server/docs/gloo-ai-gateway-guardrail-webhook-openapi.yaml).
+The global LLM policy calls both hooks for every model, including Leonardo and streaming responses.
+Valid payloads return a pass action unchanged; this service currently provides observation only.
+Gateway webhook failures use the default fail-closed behavior, so guardrail must be healthy for model calls.
+
+Inspect events with `kubectl logs -f deployment/guardrail`. Each event includes the phase, user and model,
+request/correlation IDs, received headers, message roles, counts, and content sizes. Prompt and response text
+is omitted; authorization, cookies, API keys, tokens, secrets, and passwords in header names are redacted.
+Backend agents, the challenge judge, and DeepTeam attach user/model context to their model requests.
+User metadata in these logs is supplied by internal callers, not independently authenticated by guardrail.
+Additional headers may contain sensitive context, so restrict access to these logs.
+
+Tilt forwards the service to `http://localhost:5003`; `/api/health` checks readiness and `/docs` shows its API.
+Outside Tilt, run `cd guardrail && uv sync --locked && uv run uvicorn hackathon_guardrail.main:app --port 5003`.
+The deployed service stays internal to the cluster. Set `LOG_FORMAT=json` for structured logs and
+`LOG_LEVEL` to select verbosity, using the same logging and error-handling base as the backend.
 
 ### DeepTeam scans
 
@@ -120,7 +144,7 @@ Cloud NAT. Agentgateway uses Workload Identity to reach Vertex AI. The outbound 
 NAT; the future custom LLM can allowlist it without changing the gateway model configuration yet.
 
 Terraform creates cloud infrastructure; the [GKE Kustomize overlay](infrastructure/gke) deploys the application. It
-removes the local development database Secret and the gateway credentials file. All six Kubernetes Services stay
+removes the local development database Secret and the gateway credentials file. All Kubernetes Services stay
 `ClusterIP`. The only public Ingress routes to the frontend Caddy service, which proxies authenticated API traffic.
 Phoenix has no public route. GKE enables its native login and restricts collector traffic
 to the backend with a NetworkPolicy. Complete the [deployment runbook](docs/deployment.md)
@@ -146,7 +170,7 @@ kubectl create secret generic local-db --from-literal=password="$(openssl rand -
 ```
 
 Deploy application images by pushing to `main`. [GitHub Actions](.github/workflows/deploy-gke.yml)
-builds and pushes all four images tagged with the commit SHA, applies the GKE overlay,
+builds and pushes all five images tagged with the commit SHA, applies the GKE overlay,
 and verifies rollouts. Keep infrastructure and Secret preparation manual. The `v1` tags
 in the checked-in overlay are placeholders replaced by the workflow.
 

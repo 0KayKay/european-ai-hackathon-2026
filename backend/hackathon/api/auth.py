@@ -35,7 +35,7 @@ async def require_user(request: Request) -> str:
         raise HTTPException(status_code=503, detail="Authentication unavailable")
     request.state.user_email = response.headers.get("x-auth-email", "")
     request.state.user_name = unquote(response.headers.get("x-auth-name", "User"))
-    return "local-user" if settings.is_local else user_id
+    return user_id
 
 
 def is_internal(request: Request) -> bool:

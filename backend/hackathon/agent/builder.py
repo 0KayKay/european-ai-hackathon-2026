@@ -1,3 +1,4 @@
+import structlog
 from openai import AsyncOpenAI
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
@@ -33,7 +34,13 @@ def build_agent(
             openai_client=AsyncOpenAI(
                 base_url=settings.AGENTGATEWAY_URL,
                 api_key=settings.AGENTGATEWAY_API_KEY,
-                default_headers={},
+                default_headers={
+                    "x-user-id": deps["user_id"],
+                    "x-model": model_id,
+                    "x-correlation-id": str(
+                        structlog.contextvars.get_contextvars().get("correlation_id", "")
+                    ),
+                },
             ),
         ),
     )

@@ -86,7 +86,8 @@ def test_health_and_invalid_agent_request(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_auth_checks_better_auth_session(monkeypatch) -> None:
+@pytest.mark.parametrize("is_local", [False, True])
+async def test_auth_checks_better_auth_session(monkeypatch, is_local) -> None:
     import hackathon.api.auth as auth_api
 
     requests = []
@@ -106,7 +107,7 @@ async def test_auth_checks_better_auth_session(monkeypatch) -> None:
     monkeypatch.setattr(
         auth_api,
         "get_settings",
-        lambda: Mock(is_local=False, AUTH_SERVICE_URL="http://localhost:3005"),
+        lambda: Mock(is_local=is_local, AUTH_SERVICE_URL="http://localhost:3005"),
     )
     request = Request(
         {"type": "http", "headers": [(b"cookie", b"better-auth.session_token=signed")]}
@@ -327,11 +328,13 @@ def test_agent_uses_gateway_for_model_requests(monkeypatch) -> None:
     assert agent.model.model_name == "gemini-3.8-flash"
     assert agent.model.settings["openai_reasoning_effort"] == "low"
     assert str(agent.model.provider.base_url) == "http://agentgateway:3000/v1/"
+    assert agent.model.provider.client.default_headers["x-user-id"] == "test"
+    assert agent.model.provider.client.default_headers["x-model"] == "gemini-3.8-flash"
     get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
-async def test_local_signed_in_user_keeps_name_and_existing_local_identity(monkeypatch):
+async def test_local_signed_in_user_keeps_verified_identity_and_profile(monkeypatch):
     import hackathon.api.auth as auth_api
 
     client_type = httpx.AsyncClient
@@ -359,5 +362,6 @@ async def test_local_signed_in_user_keeps_name_and_existing_local_identity(monke
     request = Request(
         {"type": "http", "headers": [(b"cookie", b"better-auth.session_token=signed")]}
     )
-    assert await require_user(request) == "local-user"
+    assert await require_user(request) == "github-user"
     assert request.state.user_name == "Alex Example"
+    assert request.state.user_email == "alex@example.com"

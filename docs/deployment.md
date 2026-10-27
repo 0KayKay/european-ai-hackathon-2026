@@ -126,7 +126,7 @@ projects/363640862423/locations/global/workloadIdentityPools/hackathon-github/pr
 ```
 
 Leave `LEONARDO_ENABLED` unset or `false` while CINECA approval is pending. Push the tested
-changes to `main`; GitHub Actions builds four images tagged with that commit SHA, applies
+changes to `main`; GitHub Actions builds five images tagged with that commit SHA, applies
 the selected overlay, and waits for all application rollouts. The frontend load-balancer
 BackendConfig now allows **900 seconds**. Challenge runs have a **300-second** deadline,
 and individual HARD guardrail checks have a **30-second** deadline and fail closed.

@@ -38,6 +38,7 @@ jobs:
           repo=europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026
           docker buildx build --platform linux/amd64 -t "$repo/backend:$GITHUB_SHA" --push backend
           docker buildx build --platform linux/amd64 -t "$repo/deepteam:$GITHUB_SHA" --push deepteam
+          docker buildx build --platform linux/amd64 -t "$repo/guardrail:$GITHUB_SHA" --push guardrail
           docker buildx build --platform linux/amd64 -t "$repo/auth:$GITHUB_SHA" --push -f frontend/Dockerfile.auth frontend
           docker buildx build --platform linux/amd64 -t "$repo/frontend:$GITHUB_SHA" --push frontend
 
@@ -67,7 +68,7 @@ jobs:
             overlay=infrastructure/gke-leonardo
           fi
           kubectl apply -k "$overlay"
-          for deployment in auth backend deepteam frontend agentgateway phoenix postgres; do
+          for deployment in auth backend deepteam guardrail frontend agentgateway phoenix postgres; do
             kubectl rollout status --timeout=5m "deployment/$deployment"
           done
           if [ "$LEONARDO_ENABLED" = "true" ]; then

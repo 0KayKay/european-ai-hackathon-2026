@@ -6,6 +6,7 @@ from uuid import uuid4
 from typing import Any
 
 from openai import AsyncOpenAI
+from openinference.instrumentation import get_attributes_from_context
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
@@ -57,11 +58,17 @@ class GuardrailDecision(BaseModel):
 
 async def judge(prompt: str) -> GuardrailDecision:
     settings = get_settings()
+    attributes = dict(get_attributes_from_context())
     async with AsyncOpenAI(
         base_url=settings.AGENTGATEWAY_URL,
         api_key=settings.AGENTGATEWAY_API_KEY,
         timeout=settings.GUARDRAIL_TIMEOUT_SECONDS,
         max_retries=0,
+        default_headers={
+            "x-model": "gemini-3.8-flash",
+            "x-user-id": str(attributes.get("user.id", "")),
+            "x-thread-id": str(attributes.get("session.id", "")),
+        },
     ) as client:
         response = await client.chat.completions.create(
             model="gemini-3.8-flash",

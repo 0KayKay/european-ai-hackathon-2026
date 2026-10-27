@@ -13,6 +13,12 @@ repos:
         language: system
         files: ^deepteam/.*\.py$
         pass_filenames: false
+      - id: guardrail-lint
+        name: Guardrail Ruff
+        entry: bash -c 'cd guardrail && uv run --locked --group dev ruff check . && uv run --locked --group dev ruff format --check .'
+        language: system
+        files: ^guardrail/.*\.py$
+        pass_filenames: false
       - id: frontend-lint
         name: Frontend Biome
         entry: bash -c 'cd frontend && ./node_modules/.bin/biome check .'

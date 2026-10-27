@@ -34,7 +34,9 @@ app.add_exception_handler(Exception, global_exception_handler)
 app.include_router(ag_ui_router)
 app.include_router(challenges_router)
 if settings.PHOENIX_OTLP_ENDPOINT:
-    configure_tracing(app, settings.PHOENIX_OTLP_ENDPOINT)
+    configure_tracing(
+        app, settings.PHOENIX_OTLP_ENDPOINT, api_key=settings.PHOENIX_API_KEY
+    )
 
 
 @app.get("/api/health")

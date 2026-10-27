@@ -16,3 +16,6 @@ spec:
               value: info
             - name: PRETTY_DOMAIN
               value: european-ai-hackathon-2026.codify.ch
+            - name: PHOENIX_API_KEY
+              valueFrom:
+                secretKeyRef: {name: phoenix-collector, key: api-key}

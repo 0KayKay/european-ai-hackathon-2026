@@ -251,12 +251,17 @@ async def run_challenge(agent, deps, attempt, prompt, run_id):
             history = ModelMessagesTypeAdapter.validate_python(attempt["history"])
             with capture_run_messages() as captured:
                 task = asyncio.create_task(
-                    agent.run(
-                        prompt,
-                        deps=deps,
-                        message_history=history,
-                        usage=usage,
-                        usage_limits=UsageLimits(request_limit=10, tool_calls_limit=10),
+                    asyncio.wait_for(
+                        agent.run(
+                            prompt,
+                            deps=deps,
+                            message_history=history,
+                            usage=usage,
+                            usage_limits=UsageLimits(
+                                request_limit=10, tool_calls_limit=10
+                            ),
+                        ),
+                        timeout=get_settings().CHALLENGE_TIMEOUT_SECONDS,
                     )
                 )
                 task.add_done_callback(lambda _: notifications.put_nowait(None))
@@ -267,6 +272,8 @@ async def run_challenge(agent, deps, attempt, prompt, run_id):
     except asyncio.CancelledError:
         error = "Run cancelled. Start a new submission or resume this chat."
         raise
+    except TimeoutError:
+        error = "The attempt exceeded the time limit. Try a shorter request or start a new attempt."
     except Exception:
         structlog.get_logger(__name__).exception(
             "Challenge run failed", mode=deps["mode"], thread_id=thread_id

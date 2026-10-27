@@ -42,18 +42,6 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
-      guardrails:
-        request:
-          - webhook:
-              target:
-                host: backend:8000
-                policies:
-                  http:
-                    requestTimeout: "30s"
-              headers:
-                ":path": '"/guardrails/request"'
-                x-challenge-difficulty: request.headers["x-challenge-difficulty"]
-              failureMode: failClosed
     - name: deepseek-v4.1-flash-1017-leonardo
       provider: openAI
       params:
@@ -61,18 +49,6 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
-      guardrails:
-        request:
-          - webhook:
-              target:
-                host: backend:8000
-                policies:
-                  http:
-                    requestTimeout: "30s"
-              headers:
-                ":path": '"/guardrails/request"'
-                x-challenge-difficulty: request.headers["x-challenge-difficulty"]
-              failureMode: failClosed
     - name: glm-5.3-flash-leonardo
       provider: openAI
       params:
@@ -80,18 +56,6 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
-      guardrails:
-        request:
-          - webhook:
-              target:
-                host: backend:8000
-                policies:
-                  http:
-                    requestTimeout: "30s"
-              headers:
-                ":path": '"/guardrails/request"'
-                x-challenge-difficulty: request.headers["x-challenge-difficulty"]
-              failureMode: failClosed
     - name: qwen3-0.6b-leonardo
       provider: openAI
       params:
@@ -99,18 +63,6 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
-      guardrails:
-        request:
-          - webhook:
-              target:
-                host: backend:8000
-                policies:
-                  http:
-                    requestTimeout: "30s"
-              headers:
-                ":path": '"/guardrails/request"'
-                x-challenge-difficulty: request.headers["x-challenge-difficulty"]
-              failureMode: failClosed
     - name: qwen3-235b-a22b-fp8-leonardo
       provider: openAI
       params:
@@ -118,32 +70,8 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
-      guardrails:
-        request:
-          - webhook:
-              target:
-                host: backend:8000
-                policies:
-                  http:
-                    requestTimeout: "30s"
-              headers:
-                ":path": '"/guardrails/request"'
-                x-challenge-difficulty: request.headers["x-challenge-difficulty"]
-              failureMode: failClosed
     - name: "*"
       provider: vertex
-      guardrails:
-        request:
-          - webhook:
-              target:
-                host: backend:8000
-                policies:
-                  http:
-                    requestTimeout: "30s"
-              headers:
-                ":path": '"/guardrails/request"'
-                x-challenge-difficulty: request.headers["x-challenge-difficulty"]
-              failureMode: failClosed
       params:
         vertexProject: european-ai-hackathon-2026
         vertexRegion: global

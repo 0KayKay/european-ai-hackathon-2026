@@ -1,3 +1,4 @@
+import asyncio
 import re
 from typing import Literal
 from pydantic import BaseModel, Field
@@ -57,11 +58,27 @@ class GuardrailDecision(BaseModel):
 async def judge(prompt: str) -> GuardrailDecision:
     settings = get_settings()
     async with AsyncOpenAI(
-        base_url=settings.AGENTGATEWAY_URL, api_key=settings.AGENTGATEWAY_API_KEY
+        base_url=settings.AGENTGATEWAY_URL,
+        api_key=settings.AGENTGATEWAY_API_KEY,
+        timeout=settings.GUARDRAIL_TIMEOUT_SECONDS,
+        max_retries=0,
     ) as client:
         response = await client.chat.completions.create(
             model="gemini-3.8-flash",
             temperature=0,
+            reasoning_effort="low",
+            max_completion_tokens=2048,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "guardrail_decision",
+                    "strict": True,
+                    "schema": {
+                        **GuardrailDecision.model_json_schema(),
+                        "additionalProperties": False,
+                    },
+                },
+            },
             messages=[
                 {
                     "role": "system",
@@ -102,7 +119,8 @@ class ChallengeGuardrails(AbstractCapability[AgentDependencies]):
         }
         self.report(ctx, dict(check), persist=False)
         try:
-            decision = await judge(prompt)
+            async with asyncio.timeout(get_settings().GUARDRAIL_TIMEOUT_SECONDS):
+                decision = await judge(prompt)
             safe = decision.decision == "SAFE"
             check.update(
                 status="passed" if safe else "blocked",

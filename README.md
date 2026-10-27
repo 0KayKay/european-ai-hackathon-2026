@@ -122,7 +122,10 @@ NAT; the future custom LLM can allowlist it without changing the gateway model c
 Terraform creates cloud infrastructure; the [GKE Kustomize overlay](infrastructure/gke) deploys the application. It
 removes the local development database Secret and the gateway credentials file. All six Kubernetes Services stay
 `ClusterIP`. The only public Ingress routes to the frontend Caddy service, which proxies authenticated API traffic.
-Phoenix has no public route.
+Phoenix has no public route. GKE enables its native login and restricts collector traffic
+to the backend with a NetworkPolicy. Complete the [deployment runbook](docs/deployment.md)
+before pushing: it covers the required Phoenix Secrets, deployer permissions, private
+Phoenix access, and the optional Leonardo connection.
 
 ```sh
 terraform -chdir=infrastructure/terraform/gke init
@@ -142,17 +145,10 @@ kubectl create secret generic gateway-internal --from-literal=key="$(openssl ran
 kubectl create secret generic local-db --from-literal=password="$(openssl rand -hex 32)"
 ```
 
-Build and push the four application images, then apply the overlay:
-
-```sh
-gcloud auth configure-docker europe-west1-docker.pkg.dev
-REPO=europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026
-docker buildx build --platform linux/amd64 -t "$REPO/backend:v1" --push backend
-docker buildx build --platform linux/amd64 -t "$REPO/deepteam:v1" --push deepteam
-docker buildx build --platform linux/amd64 -t "$REPO/auth:v1" --push -f frontend/Dockerfile.auth frontend
-docker buildx build --platform linux/amd64 -t "$REPO/frontend:v1" --push frontend
-kubectl apply -k infrastructure/gke
-```
+Deploy application images by pushing to `main`. [GitHub Actions](.github/workflows/deploy-gke.yml)
+builds and pushes all four images tagged with the commit SHA, applies the GKE overlay,
+and verifies rollouts. Keep infrastructure and Secret preparation manual. The `v1` tags
+in the checked-in overlay are placeholders replaced by the workflow.
 
 The reserved `frontend_ip` needs an A record for `european-ai-hackathon-2026.codify.ch` before its managed HTTPS
 certificate activates. Then add `https://european-ai-hackathon-2026.codify.ch/api/auth/callback/github` to the GitHub
@@ -165,3 +161,33 @@ You can access it `http://localhost:5002/docs#/default/start_run_api_deepteam_ru
 http://localhost:10350/r/deepteam/overview 
 
 
+
+### Challenge parity
+
+Challenges 1–3 have independent Easy, Medium, and Hard progress, saved in PostgreSQL's
+`challenge_attempts` table (created automatically on first use). The sidebar lists saved chats
+and submissions; choosing one restores its result or lets you resume challenge 1. Email and offer
+attacks are submitted only as untrusted tool data under a server-defined task. Email delivery and
+purchase approval are simulated. Failed email attempts mask credentials before returning them to
+the browser; completed attempts reveal the recovered secret.
+
+Hard mode normalizes user, tool, and assistant text. Challenge 1 adds an input judge; challenge 2
+adds outgoing-mail authorization and output judges; challenge 3 adds an assessment-output judge.
+These checks run in the backend so they can evaluate each challenge at its actual trust boundary.
+When upgrading a running gateway, apply the updated gateway ConfigMap and restart the gateway to
+remove the previous request webhook. Each run permits 10 model/tool calls, with 50 of each per chat.
+
+Set `CHALLENGE_START` and `CHALLENGE_END` to timezone-qualified ISO timestamps to enable an event
+window, or `CHALLENGE_CLOSED=true` to stop submissions. Defaults leave the exercises open. Verified
+`@codify.ch` and `@lapiscode.com` users bypass the window. Competition administration is disabled;
+`/api/v1/challenges/admin` returns 404. Local backend mode retains its shared local identity while
+reading a signed-in user's name from the verified session when available.
+
+The frontend streams individual guardrail checks with their stage, applicable rule, and a short
+explanation. Failed email attempts also mask these explanations before they reach the browser.
+Saved attempts restore the runtime messages, model settings, submitted fields, results, and guardrail
+details. “Not solved” means the agent ran without the attacker achieving the objective. The offer
+preview embeds the original PDF with a separate open-PDF link.
+
+The existing generic playground is unchanged; no challenge-specific practice playgrounds are added.
+The current model configuration is retained, so attack difficulty can differ from the archived models.

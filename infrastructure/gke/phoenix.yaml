@@ -7,6 +7,18 @@ spec:
     spec:
       containers:
         - name: phoenix
+          # Pin the existing GKE version (20.26.1) while enabling authentication.
+          image: arizephoenix/phoenix@sha256:623813cbf1bbd4811456bb4936f21666ae50a1fbf862cf59ea0e3ca824b6b114
           env:
             - name: PHOENIX_LOGGING_MODE
               value: structured
+            - name: PHOENIX_ENABLE_AUTH
+              value: "true"
+            - name: PHOENIX_SECRET
+              valueFrom:
+                secretKeyRef: {name: phoenix-auth, key: PHOENIX_SECRET}
+            - name: PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: phoenix-auth, key: PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD}
+            - name: PHOENIX_CSRF_TRUSTED_ORIGINS
+              value: http://127.0.0.1:16006,http://localhost:16006

@@ -48,8 +48,9 @@ async def call_agui(
     chunks: list[str] = []
     tool_names: dict[str, None] = {}
     finished = False
-    async with httpx.AsyncClient(headers=headers, timeout=120, trust_env=False) as http:
-        async with AGUIChatClient(endpoint=url, http_client=http, timeout=120) as agent:
+    # Leave time for the backend's five-minute challenge deadline and final saved result.
+    async with httpx.AsyncClient(headers=headers, timeout=330, trust_env=False) as http:
+        async with AGUIChatClient(endpoint=url, http_client=http, timeout=330) as agent:
             async for update in agent.get_response(
                 messages,
                 stream=True,

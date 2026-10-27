@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: leonardo-link
+spec:
+  podSelector:
+    matchLabels: {app: leonardo-link}
+  policyTypes: [Ingress]
+  ingress:
+    # Public WebSocket and health checks arrive through Google's frontend proxies.
+    - from:
+        - ipBlock: {cidr: 35.191.0.0/16}
+        - ipBlock: {cidr: 130.211.0.0/22}
+      ports:
+        - protocol: TCP
+          port: 8080
+    # The reverse model port is available only to the authenticated model gateway.
+    - from:
+        - podSelector:
+            matchLabels: {app: agentgateway}
+      ports:
+        - protocol: TCP
+          port: 9000

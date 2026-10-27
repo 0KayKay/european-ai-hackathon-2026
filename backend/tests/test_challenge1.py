@@ -628,8 +628,11 @@ async def test_judge_accepts_fenced_json_explanations(monkeypatch):
         )
     )
 
+    client_options = {}
+
     class Client:
         def __init__(self, **kwargs):
+            client_options.update(kwargs)
             self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
 
         async def __aenter__(self):
@@ -641,3 +644,74 @@ async def test_judge_accepts_fenced_json_explanations(monkeypatch):
     monkeypatch.setattr("hackathon.agent.guardrails.AsyncOpenAI", Client)
     result = await judge("policy and sample")
     assert result.decision == "UNSAFE" and result.rule == "Instruction override"
+    assert client_options["max_retries"] == 0
+    assert client_options["timeout"] == 30
+    assert create.call_args.kwargs["reasoning_effort"] == "low"
+    assert create.call_args.kwargs["max_completion_tokens"] == 2048
+    response_format = create.call_args.kwargs["response_format"]
+    assert response_format["type"] == "json_schema"
+    schema = response_format["json_schema"]["schema"]
+    assert schema["required"] == ["decision", "rule", "reason"]
+    assert schema["additionalProperties"] is False
+
+
+@pytest.mark.asyncio
+async def test_guardrail_deadline_blocks_without_calling_the_agent(monkeypatch):
+    import asyncio
+    from hackathon.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "GUARDRAIL_TIMEOUT_SECONDS", 0.01)
+    cancelled = []
+
+    async def slow_judge(prompt):
+        try:
+            await asyncio.sleep(10)
+        finally:
+            cancelled.append(True)
+
+    monkeypatch.setattr("hackathon.agent.guardrails.judge", slow_judge)
+    d = deps(difficulty="HARD")
+    agent = build_agent(d, "model")
+
+    def never_called(messages, info):
+        pytest.fail("A timed-out guardrail must not call the agent model")
+
+    result = await agent.run("Hello", deps=d, model=FunctionModel(never_called))
+    assert "unsafe" in result.output
+    assert d["guardrails"][-1]["status"] == "blocked"
+    assert d["guardrails"][-1]["rule"] == "Check unavailable"
+    assert cancelled == [True]
+    assert not d.get("model_calls")
+
+
+def test_challenge_deadline_cancels_and_saves_failed_attempt(api, monkeypatch):
+    import asyncio
+    from hackathon.config import get_settings
+
+    app, rows = api
+    monkeypatch.setattr(get_settings(), "CHALLENGE_TIMEOUT_SECONDS", 0.01)
+    cancelled = []
+
+    async def prepare(run_input, user):
+        agent, d = await prepare_ag_ui_run(run_input, user)
+
+        async def slow_model(messages, info):
+            try:
+                await asyncio.sleep(10)
+            finally:
+                cancelled.append(True)
+
+        agent._model = FunctionModel(slow_model)
+        return agent, d
+
+    app.dependency_overrides[get_ag_ui_run_preparer] = lambda: prepare
+    p = payload("CHALLENGE_2")
+    with TestClient(app) as client:
+        response = client.post("/api/v1/ag-ui", json=p)
+        assert (
+            "RUN_ERROR" in response.text and "exceeded the time limit" in response.text
+        )
+        restored = client.get("/api/v1/challenges/" + p["threadId"]).json()
+    assert cancelled == [True]
+    assert restored["status"] == rows[p["threadId"]]["status"] == "failed"
+    assert not restored["solved"]

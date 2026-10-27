@@ -101,6 +101,14 @@ working around security controls. The cluster's maintainers enable the Kubernete
    ./leonardo/cli.py diagnose reach --link-url https://european-ai-hackathon-2026.codify.ch/leonardo-link
    ```
 
+2. After approval and Secret creation, set the GitHub variable `LEONARDO_ENABLED=true` and run
+   **Deploy to GKE** on `main`. It selects `infrastructure/gke-leonardo`. This adds the
+   chisel server under `https://european-ai-hackathon-2026.codify.ch/leonardo-link`, the `leonardo-router`
+   Service and one agentgateway route per model. Read the server's fingerprint with
+   `kubectl logs deploy/leonardo-link | grep Fingerprint`.
+3. In `$BASE/inference-site.json`, set `cluster_link.enabled` to `true`, `server` to that URL,
+   `fingerprint`, and `proxy` if the route needs the hackathon proxy.
+4. Install the chisel client and restart your router with the link password:
 2. In `$BASE/inference-site.json`, set `cluster_link.enabled` to `true`, `server` to that URL, `fingerprint`,
    and `proxy` only if the check needed one (`--proxy`).
 3. Install the chisel client and restart your router with the link password:
@@ -115,6 +123,8 @@ working around security controls. The cluster's maintainers enable the Kubernete
 The backend then uses the "Served as" names from the table above as model names in its agentgateway calls.
 If `status` shows the link as `retrying`, its error says why; [docs/cluster-link.md](docs/cluster-link.md)
 lists the states.
+The complete ordered instructions, private-file Secret creation, and deployment checks are in
+[the deployment runbook](../docs/deployment.md#4-activate-leonardo-only-after-cineca-approval).
 
 ## Usage
 

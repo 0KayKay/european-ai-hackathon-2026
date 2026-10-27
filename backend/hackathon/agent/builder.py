@@ -1,6 +1,6 @@
 from openai import AsyncOpenAI
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from hackathon.agent.challenge_1.agent import add_challenge1
@@ -18,12 +18,16 @@ def build_agent(
     mode: str = "CHALLENGE_1",
 ) -> Agent[AgentDependencies]:
     settings = get_settings()
-    from pydantic_ai import ModelSettings
-
     model = OpenAIChatModel(
         model_id,
-        settings=ModelSettings(
+        settings=OpenAIChatModelSettings(
             thinking=False,
+            # Gateway 1.6 leaves Gemini on its default when effort is "none".
+            **(
+                {"openai_reasoning_effort": "low"}
+                if model_id.startswith("gemini-3")
+                else {}
+            ),
         ),
         provider=OpenAIProvider(
             openai_client=AsyncOpenAI(

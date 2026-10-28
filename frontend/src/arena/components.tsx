@@ -130,7 +130,13 @@ export function ArenaShell({
 						<span className="grid size-7 place-items-center rounded-lg bg-blue-600 text-white">
 							<ShieldIcon className="size-4" aria-hidden="true" />
 						</span>
-						<span className="text-sm font-semibold tracking-tight">
+						{/* Sub-pages need the room for "Back" and the breadcrumb; the logo stays. */}
+						<span
+							className={cn(
+								"text-sm font-semibold tracking-tight",
+								back && "sr-only 2xl:not-sr-only",
+							)}
+						>
 							Guardrail Arena
 						</span>
 					</a>

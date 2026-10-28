@@ -219,7 +219,7 @@ export function CaseReplay({
 			}}
 			center={
 				data && (
-					<div className="flex min-w-0 items-center gap-2.5 text-[13px] text-slate-600">
+					<div className="flex max-w-[min(34rem,42vw)] min-w-0 items-center gap-2.5 text-[13px] text-slate-600 max-lg:max-w-full">
 						{data.outcome && <OutcomeBadge outcome={data.outcome} />}
 						<span className="truncate">{caseFacts(data)}</span>
 						{data.started_at && (

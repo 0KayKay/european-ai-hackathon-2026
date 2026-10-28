@@ -1,10 +1,10 @@
-"""Arena HTTP API (`/api/v1/arena`): levels, datasets, runs, results, replay and export (IMPLEMENTATION.md §5).
+"""Arena HTTP API (`/api/v1/arena`): levels, level editing, datasets, runs, results, replay and export
+(IMPLEMENTATION.md §5).
 
 `router` is session-protected like the rest of `/api/v1`. `internal_router` serves the multi-turn callback of the
 deepteam service; it is authenticated by the per-run `x-arena-token` instead and must not be routed by the gateway.
 """
 
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -13,14 +13,22 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from hackathon.api.auth import require_user
-from hackathon.arena.config.loader import LevelSet, load_levels
+from hackathon.arena.catalog import LevelCatalog, OverrideState, UnknownLevel
+from hackathon.arena.config.loader import load_levels
+from hackathon.arena.config.overrides import (
+    SourceErrors,
+    is_editable,
+    referenced_files,
+)
 from hackathon.arena.config.resolved import ResolvedLevel
-from hackathon.arena.graph import Graph, build_graph
+from hackathon.arena.graph import Graph
 from hackathon.arena.registry.attacks import ATTACK_TYPES
 from hackathon.arena.runs.green_team import GreenGenerator
 from hackathon.arena.runs.orchestrator import Orchestrator, TeamSource
 from hackathon.arena.runs.red_team import DeepTeamClient
-from hackathon.arena.runs.store import create_store
+from hackathon.arena.runs.store import VersionConflict, create_store
+
+__all__ = ["LevelCatalog", "get_level_catalog", "get_orchestrator", "router"]
 
 # Routes with a fixed second segment under /levels/{level_id}/ (e.g. `datasets`) must be declared before
 # `get_level`, which otherwise matches them as a difficulty.
@@ -45,37 +53,13 @@ internal_router = APIRouter(
 )
 
 
-@dataclass
-class LevelCatalog:
-    """Levels loaded once, with their graphs."""
-
-    levels: dict[str, LevelSet]
-    graphs: dict[tuple[str, str], Graph]
-
-    @classmethod
-    def build(cls, levels: dict[str, LevelSet]) -> "LevelCatalog":
-        graphs = {
-            (level_id, difficulty): build_graph(variant)
-            for level_id, level in levels.items()
-            for difficulty, variant in level.variants.items()
-        }
-        return cls(levels=levels, graphs=graphs)
-
-    def variant(self, level_id: str, difficulty: str) -> ResolvedLevel:
-        level = self.levels.get(level_id)
-        if level is None:
-            raise HTTPException(404, f"Unknown level '{level_id}'")
-        variant = level.variants.get(difficulty)
-        if variant is None:
-            raise HTTPException(
-                404, f"Level '{level_id}' has no difficulty '{difficulty}'"
-            )
-        return variant
-
-
 @lru_cache
 def get_level_catalog() -> LevelCatalog:
-    """Load `backend/levels/` once per process; an invalid config raises `LevelConfigError`."""
+    """Load `backend/levels/` once per process; an invalid config raises `LevelConfigError`.
+
+    The app attaches the run store at startup (`hackathon.main`), which serves saved overrides and enables
+    editing; without it the catalog serves the repository files only.
+    """
     return LevelCatalog.build(load_levels())
 
 
@@ -124,7 +108,10 @@ def green_team_summary(level: ResolvedLevel) -> dict[str, Any]:
     }
 
 
-def level_view(level: ResolvedLevel, graph: Graph) -> dict[str, Any]:
+def level_view(
+    level: ResolvedLevel, graph: Graph, state: OverrideState | None = None
+) -> dict[str, Any]:
+    state = state or OverrideState()
     return {
         "level": level.id,
         "difficulty": level.difficulty,
@@ -136,18 +123,52 @@ def level_view(level: ResolvedLevel, graph: Graph) -> dict[str, Any]:
         "models": level.model_roles(),
         "source": {
             "files": [
-                {"path": path, "content": content}
+                {
+                    "path": path,
+                    "content": content,
+                    "modified": path in state.active,
+                    "editable": is_editable(level.id, path),
+                }
                 for path, content in level.sources.items()
             ]
         },
         "red_team": red_team_summary(level),
         "green_team": green_team_summary(level),
+        "version": state.version,
+        "modified": bool(state.active),
+        "override_error": state.error_view(),
     }
+
+
+def level_detail(
+    catalog: LevelCatalog, level_id: str, difficulty: str | None
+) -> dict[str, Any]:
+    """Level view of `difficulty`, or of the first difficulty if the level has no such difficulty (any more)."""
+    level = catalog.levels[level_id]
+    if difficulty not in level.variants:
+        difficulty = next(iter(level.variants))
+    return level_view(
+        level.variants[difficulty],
+        catalog.graphs[(level_id, difficulty)],
+        catalog.state(level_id),
+    )
 
 
 @router.get("/levels")
 async def list_levels(catalog: Catalog) -> list[dict[str, Any]]:
-    return [level.summary() for level in catalog.levels.values()]
+    await catalog.refresh_or_cached()
+    summaries = []
+    for level in catalog.levels.values():
+        state = catalog.state(level.id)
+        summaries.append(
+            {
+                **level.summary(),
+                "version": state.version,
+                "modified": bool(state.active),
+                "override_error": str(state.error) if state.error else None,
+            }
+        )
+    return summaries
 
 
 @router.get("/levels/{level_id}/datasets")
@@ -155,10 +176,125 @@ async def list_datasets(level_id: str, runs: Runs) -> list[dict[str, Any]]:
     return await runs.list_datasets(level_id)
 
 
+# --- level editing (overrides on top of the repository files) ---------------------------------------------
+
+
+class SourceFileBody(BaseModel):
+    path: (
+        str  # relative to backend/levels/, e.g. `email-review/prompts/output_judge.md`
+    )
+    content: str
+
+
+class SaveSourceBody(BaseModel):
+    files: list[SourceFileBody]
+    base_version: int
+    difficulty: str | None = None  # the level view returned on success
+
+
+def _known(catalog: LevelCatalog, level_id: str) -> None:
+    if level_id not in catalog.levels:
+        raise HTTPException(404, f"Unknown level '{level_id}'")
+
+
+def _editing(catalog: LevelCatalog) -> None:
+    if catalog.store is None:
+        raise HTTPException(503, "Level editing is not available: no arena store.")
+
+
+def _conflict(
+    catalog: LevelCatalog, level_id: str, difficulty: str | None, version: int
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": "Someone else saved this level in the meantime.",
+            "version": version,
+            "current": level_detail(catalog, level_id, difficulty),
+        },
+    )
+
+
+@router.get("/levels/{level_id}/source")
+async def get_level_source(level_id: str, catalog: Catalog) -> dict[str, Any]:
+    """Every file of a level as served (all difficulties, overrides applied), e.g. to copy edits into git."""
+    await catalog.refresh_or_cached()
+    _known(catalog, level_id)
+    state = catalog.state(level_id)
+    return {
+        "level": level_id,
+        "version": state.version,
+        "modified": bool(state.active),
+        "updated_at": state.updated_at,
+        "updated_by": state.updated_by,
+        "override_error": state.error_view(),
+        "files": [
+            {
+                "path": path,
+                "content": content,
+                "modified": path in state.active,
+                "editable": is_editable(level_id, path),
+                **(state.meta.get(path, {}) if path in state.active else {}),
+            }
+            for path, content in referenced_files(catalog.levels[level_id]).items()
+        ],
+    }
+
+
+@router.put("/levels/{level_id}/source", response_model=None)
+async def save_level_source(
+    level_id: str, body: SaveSourceBody, catalog: Catalog, user: User
+) -> dict[str, Any] | JSONResponse:
+    """Validate the edited files with the whole level (every difficulty) and store them as overrides."""
+    _editing(catalog)
+    _known(catalog, level_id)
+    try:
+        await catalog.save(
+            level_id,
+            [(file.path, file.content) for file in body.files],
+            base_version=body.base_version,
+            user_id=user,
+        )
+    except UnknownLevel:
+        raise HTTPException(404, f"Unknown level '{level_id}'") from None
+    except VersionConflict as exc:
+        return _conflict(catalog, level_id, body.difficulty, exc.version)
+    except SourceErrors as exc:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": "The level config is invalid; nothing was saved.",
+                "errors": exc.errors,
+            },
+        )
+    return level_detail(catalog, level_id, body.difficulty)
+
+
+@router.delete("/levels/{level_id}/source", response_model=None)
+async def reset_level_source(
+    level_id: str,
+    catalog: Catalog,
+    user: User,
+    difficulty: str | None = None,
+    base_version: int | None = None,
+) -> dict[str, Any] | JSONResponse:
+    """Drop the level's overrides: it is served from the repository files again."""
+    _editing(catalog)
+    _known(catalog, level_id)
+    try:
+        await catalog.reset(level_id, base_version=base_version, user_id=user)
+    except VersionConflict as exc:
+        return _conflict(catalog, level_id, difficulty, exc.version)
+    return level_detail(catalog, level_id, difficulty)
+
+
 @router.get("/levels/{level_id}/{difficulty}")
 async def get_level(level_id: str, difficulty: str, catalog: Catalog) -> dict[str, Any]:
+    await catalog.refresh_or_cached()
     variant = catalog.variant(level_id, difficulty)
-    return level_view(variant, catalog.graphs[(level_id, difficulty)])
+    return level_view(
+        variant, catalog.graphs[(level_id, difficulty)], catalog.state(level_id)
+    )
 
 
 # --- datasets and runs ----------------------------------------------------------------------------------------

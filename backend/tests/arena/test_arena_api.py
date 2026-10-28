@@ -25,7 +25,15 @@ def test_list_levels():
         "channel",
         "turns",
         "difficulties",
+        "version",
+        "modified",
+        "override_error",
     }
+    assert (first["version"], first["modified"], first["override_error"]) == (
+        0,
+        False,
+        None,
+    )
     assert (first["title"], first["difficulties"]) == (
         "Level 1 · Hidden Mailbox",
         ["easy", "medium", "hard"],
@@ -145,7 +153,7 @@ def test_every_arena_route_requires_a_session(monkeypatch):
         for route in router.routes
         for method in route.methods
     ]
-    assert len(routes) == 11
+    assert len(routes) == 14
     api = TestClient(main_app)
     for method, path in routes:
         assert path.startswith("/api/v1/arena/")

@@ -236,6 +236,9 @@ class Orchestrator:
         *,
         user_id: str = "arena",
     ) -> dict[str, Any]:
+        # Saved level edits (possibly from another replica) apply to every new run; a run keeps the snapshot
+        # of the level it started with.
+        await self.catalog.refresh()
         level = self._variant(level_id, difficulty)
         datasets = {
             "red": await self._source_dataset(level, "red", red),

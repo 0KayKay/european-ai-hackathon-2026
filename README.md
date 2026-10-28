@@ -168,11 +168,12 @@ status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPE
   `/api/v1/arena/internal/` is answered with 404 by the frontend proxy and refused by the backend when a request
   arrives through a proxy; only in-cluster calls reach it.
 - **Default models.** Every LLM role of every level (agent, judges, attacker, simulator, evaluator, green
-  generator) uses `qwen3-235b-a22b-fp8-leonardo` through agentgateway, with thinking switched off via
-  `chat_template_kwargs`. This needs the Leonardo cluster link (`infrastructure/gke-leonardo`) and a running
-  `qwen235b` server. The server has a 2,048-token context, so `max_tokens` is kept small (384–1,024). For local
-  runs without Leonardo, change the roles in the level files (or in the UI) to a model you have, e.g.
-  `gemini-3.8-flash` or a local Ollama endpoint.
+  generator) uses `glm-5.3-flash-leonardo` (GLM-5.3-Flash) through agentgateway, with low reasoning via
+  `chat_template_kwargs` (`reasoning_effort: low`, `clear_thinking: true`). This needs the cluster link
+  (`infrastructure/gke-leonardo`) and a running GLM server: on Curiosity (B300) `./b300/cli.py up glm53 --link`,
+  or the `glm53` profile on Leonardo. The server has a 2,048-token context, so `max_tokens` is kept small
+  (384–1,024). For local runs without either cluster, change the roles in the level files (or in the UI) to a
+  model you have, e.g. `gemini-3.8-flash` or a local Ollama endpoint.
 - **Limitations.** The deepteam arena endpoints (`/internal/arena/generate`,
   `/internal/arena/multi-turn`) are implemented, but still need a live model and cluster check (see
   [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)). Execution is serial per

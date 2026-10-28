@@ -40,4 +40,16 @@ sub-agents) → E (clean-up).
 
 ## C · DeepTeam — multi-turn prompts done (see A)
 
-## E · Clean-up — open
+## E · Clean-up — partly done
+
+**Branches to delete on the fork** (this session may push only to `spec/config-driven-arena`; deleting returned
+HTTP 403, so please delete them in the GitHub UI):
+
+| Branch | Why it can go |
+| --- | --- |
+| `claude/friendly-einstein-qhzkt5`, `claude/leonardo-cluster-link`, `claude/leonardo-profiles`, `claude/lucid-brown-jszkf2`, `codex/b300-cli-team-guide`, `feat/arena-deepteam-integration` | fully contained in `main` |
+| `fix/indirect-levels`, `claude/levels-glm-b300` | merged into this branch; delete once this branch is merged |
+
+Keep or check by hand: `abliterated-model` (1 commit, not in `main`), `claude/leonardo-models-and-link` (5 commits;
+their content looks re-committed on `main` under other hashes), `feat/deep-team-ui` (Marina's original UI, used
+as a template only).

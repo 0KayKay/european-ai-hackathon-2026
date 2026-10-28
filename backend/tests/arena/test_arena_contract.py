@@ -16,7 +16,13 @@ from typing import Any
 
 import pytest
 
-from tests.arena.test_arena_runs import Harness, by_label, engine_models, until
+from tests.arena.test_arena_runs import (
+    Harness,
+    by_label,
+    engine_models,
+    mixed_attack_catalog,
+    until,
+)
 
 LEVEL_SUMMARY = {"id", "title", "description", "channel", "turns", "difficulties"}
 LEVEL_DETAIL = {
@@ -283,7 +289,7 @@ async def full_run(
 @pytest.mark.asyncio
 async def test_api_responses_match_the_frontend_contract():
     dump = Dump()
-    harness = Harness()
+    harness = Harness(catalog=mixed_attack_catalog())
 
     levels = dump("levels", await harness.get("/levels"))
     for level in levels:

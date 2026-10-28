@@ -334,6 +334,7 @@ def test_variant_can_override_a_model_parameter_of_one_role():
     assert hard.red_team.attacker.params.compact() == {
         "temperature": 0.7,
         "max_tokens": 2048,
+        "reasoning_effort": "none",
     }
 
 

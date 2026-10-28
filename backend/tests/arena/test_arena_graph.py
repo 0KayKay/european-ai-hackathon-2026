@@ -193,8 +193,8 @@ def test_node_details_show_settings_full_prompts_and_models():
     )
 
     attacker = g.node("attacker")
-    assert attacker.subtitle == "DeepTeam · 3 attack types · 15 cases"
-    assert attacker.details.model["model"] == "gemini-3.8-flash"
+    assert attacker.subtitle == "DeepTeam · 1 attack type · 5 cases"
+    assert attacker.details.model["model"] == "qwen3:8b"
     assert {p.name for p in attacker.details.prompts} == {
         "Purpose",
         "Success criteria",

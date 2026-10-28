@@ -162,14 +162,20 @@ status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPE
 - **Settings** (backend; set in `infrastructure/base/local.yaml`, see `backend/.env.example`):
   `ARENA_STORE` (`postgres` default, `memory` for a backend without database), `DEEPTEAM_URL`
   (`http://deepteam:8080`), `ARENA_CALLBACK_URL` (base URL under which deepteam reaches the backend,
-  `http://backend:8000`). Model calls go through agentgateway with the backend's internal key. The callback path
+  `http://backend:8000`). Models with the default endpoint go through agentgateway with the backend's internal key;
+  models with an explicit URL call that endpoint directly. The callback path
   `/api/v1/arena/internal/` is answered with 404 by the frontend proxy and refused by the backend when a request
   arrives through a proxy; only in-cluster calls reach it.
-- **Limitations.** The deepteam service does not implement the arena endpoints yet
-  (`/internal/arena/generate`, `/internal/arena/multi-turn`, see
-  [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)); until then red-team
-  generation fails visibly and only the green team runs. Execution is serial per run. Configs are edited as files,
-  not in the UI; runs are not compared with each other. The manual challenge mode keeps using the legacy levels.
+- **Local Level 1 red team.** Its attacker, simulator and evaluator use Ollama `qwen3:8b` on the host through
+  `http://host.docker.internal:11434/v1`. Keep Ollama running and pull `qwen3:8b` before starting Level 1 runs.
+  The model uses `reasoning_effort: none` so its JSON answers reach DeepTeam as content rather than consuming the
+  response budget as thinking text. This host endpoint is for local Docker/Kind runs and must be changed for a
+  remote cluster.
+- **Limitations.** The deepteam arena endpoints (`/internal/arena/generate`,
+  `/internal/arena/multi-turn`) are implemented, but still need a live model and cluster check (see
+  [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)). Execution is serial per
+  run. Configs are edited as files, not in the UI; runs are not compared with each other. The manual challenge mode
+  keeps using the legacy levels.
 
 ## GKE
 

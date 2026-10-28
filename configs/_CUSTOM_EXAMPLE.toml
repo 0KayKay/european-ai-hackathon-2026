@@ -1,0 +1,25 @@
+# Copy to CUSTOM.toml to make this level selectable. Replace the inherited
+# finance tools/evaluator to build a different use case.
+extends = "_finance_base.toml"
+id = "CUSTOM"
+title = "Custom example"
+description = "Demonstrates a normalization guard and a regex tool guard."
+
+[[guardrails]]
+id = "normalize_input"
+name = "Normalize input"
+type = "custom"
+hook = "input"
+entrypoint = "hackathon.level_plugins.normalization:normalize_text"
+
+[[guardrails]]
+id = "block_legacy_tool"
+name = "Block legacy file reads"
+type = "custom"
+hook = "before_tool"
+tool = "get_file_content"
+entrypoint = "hackathon.level_plugins.regex_guard:block_if_matches"
+
+[guardrails.settings]
+pattern = "internal_only"
+message = "This tool cannot read internal-only files."

@@ -365,6 +365,12 @@ def snapshot_run(level_id="hidden-mailbox", difficulty="hard"):
 
 def test_results_rates_and_labels():
     run = snapshot_run()
+    # Exercise configured-but-unused attack rows alongside observed cases.
+    run["snapshot"]["level"]["red_team"]["attacks"] = [
+        {"type": "prompt_injection", "attempts": 5},
+        {"type": "roleplay", "attempts": 5},
+        {"type": "linear_jailbreaking", "attempts": 5},
+    ]
     cases = [
         {
             "id": "a",

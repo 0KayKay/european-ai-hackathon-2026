@@ -29,9 +29,9 @@ steps focus on what a browser and real models add. Current state per criterion: 
    ARENA_TEST_DATABASE_URL=postgresql://app:devpassword@localhost:5432/app uv run pytest -q tests/arena/test_arena_store.py
    ```
 
-Until the deepteam arena endpoints exist ([below](#1-deepteam-arena-endpoints)), red-team generation fails with a
-visible "Red-team generation failed: …" banner and every red case is an error case; the green team still runs.
-Steps that need red cases are marked **(needs DeepTeam)**.
+The deepteam arena endpoints are implemented and covered by mocked contract tests. Red-team steps marked
+**(needs DeepTeam)** still need verification against live models and services. If the service fails, the run shows a
+"Red-team generation failed: …" banner and the green team continues.
 
 ## AC-1 Parity
 
@@ -210,16 +210,16 @@ model:
 
 ## What still needs a live check
 
-Everything below is implemented on the backend side and covered by tests with mocked models and a fake deepteam
-service, but has not run against the real services.
+The backend and deepteam endpoints are covered by tests with mocked models, but have not run against the real
+services together.
 
 ### 1. DeepTeam arena endpoints
 
-`deepteam/` does not implement the arena endpoints yet; the backend client is
-`backend/hackathon/arena/runs/red_team.py` (`DeepTeamClient`). The team needs to add to the deepteam service
+The deepteam endpoints are in `deepteam/hackathon_deepteam/arena.py`; the backend client is
+`backend/hackathon/arena/runs/red_team.py` (`DeepTeamClient`). Verify these points in a live run
 (IMPLEMENTATION.md §6):
 
-- A router under `/internal/arena` that is **not** under `/api/deepteam` (the frontend proxy forwards only
+- The router under `/internal/arena` is **not** under `/api/deepteam` (the frontend proxy forwards only
   `/api/deepteam/*`, so `/internal` stays cluster-internal). Authenticate every request with
   `Authorization: Bearer <AGENTGATEWAY_API_KEY>` (both services hold the `gateway-internal` key); 401 otherwise.
 - **`POST /internal/arena/generate`** — body:

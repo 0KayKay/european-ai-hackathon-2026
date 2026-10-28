@@ -23,11 +23,14 @@ from pydantic_ai.models.function import FunctionModel
 
 from hackathon.api.auth import require_user
 from hackathon.arena.api import (
+    LevelCatalog,
     get_level_catalog,
     get_orchestrator,
     internal_router,
     router,
 )
+from hackathon.arena.config.loader import load_levels
+from hackathon.arena.config.schema import AttackConfig
 from hackathon.arena.engine import EngineModels
 from hackathon.arena.registry.guardrails import GuardrailDecision
 from hackathon.arena.runs.orchestrator import Orchestrator
@@ -189,12 +192,12 @@ def engine_models(gate=None, failures=False) -> EngineModels:
 
 
 class Harness:
-    def __init__(self, *, red=None, green=None, models=None, store=None):
+    def __init__(self, *, red=None, green=None, models=None, store=None, catalog=None):
         self.red = red or FakeRedTeam()
         self.green = green or FakeGreen()
         self.store = store or MemoryRunStore()
         self.runs = Orchestrator(
-            get_level_catalog(),
+            catalog or get_level_catalog(),
             self.store,
             self.red,
             self.green,
@@ -206,6 +209,7 @@ class Harness:
         self.app.include_router(internal_router)
         self.app.dependency_overrides[require_user] = lambda: "tester"
         self.app.dependency_overrides[get_orchestrator] = lambda: self.runs
+        self.app.dependency_overrides[get_level_catalog] = lambda: self.runs.catalog
         self.http = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=self.app), base_url=BASE
         )
@@ -238,12 +242,26 @@ def by_label(cases):
     return {case["label"]: case for case in cases}
 
 
+def mixed_attack_catalog():
+    """Keep mixed single/multi-turn coverage without changing Level 1's live config."""
+    levels = load_levels()
+    for variant in levels["hidden-mailbox"].variants.values():
+        variant.red_team.attacks = [
+            AttackConfig(type="prompt_injection", attempts=5),
+            AttackConfig(type="roleplay", attempts=5),
+            AttackConfig(type="linear_jailbreaking", attempts=5),
+        ]
+    return LevelCatalog.build(levels)
+
+
 # --- direct, multi-turn level ------------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_direct_level_full_run():
-    harness = Harness(models=engine_models(failures=True))
+    harness = Harness(
+        models=engine_models(failures=True), catalog=mixed_attack_catalog()
+    )
     summary = await harness.start("hidden-mailbox", "hard")
     assert summary["status"] == "generating"
     assert set(summary) >= {
@@ -415,7 +433,8 @@ async def test_direct_level_red_cases_are_always_generated():
     second = await harness.run(
         "hidden-mailbox", "easy", green={"source": "dataset", "dataset_id": green}
     )
-    assert len(harness.red.generated) == 2  # red generated again, green reused
+    assert harness.red.generated == []  # Level 1 now has only multi-turn cases
+    assert len(harness.red.driven) == 10  # five fresh red cases per run
     assert harness.green.calls == 1
     assert second["datasets"] == {"red": None, "green": green}
 
@@ -841,7 +860,7 @@ async def test_unreachable_deepteam_errors_red_cases_and_green_still_runs():
     red = DeepTeamClient(
         "http://deepteam:8080", "key", transport=httpx.MockTransport(unreachable)
     )
-    harness = Harness(red=red)
+    harness = Harness(red=red, catalog=mixed_attack_catalog())
     run = await harness.run("hidden-mailbox", "easy")
     assert run["status"] == "completed"
     assert run["generation"]["red"]["status"] == "failed"

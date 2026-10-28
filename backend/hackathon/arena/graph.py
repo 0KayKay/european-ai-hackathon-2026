@@ -182,7 +182,7 @@ class _Builder:
             id="attacker",
             kind="attacker",
             label="Attacker agent",
-            subtitle=f"DeepTeam · {len(red.attacks)} attack types · {total} cases",
+            subtitle=f"DeepTeam · {len(red.attacks)} attack {'type' if len(red.attacks) == 1 else 'types'} · {total} cases",
             details=NodeDetails(
                 settings=settings,
                 prompts=[

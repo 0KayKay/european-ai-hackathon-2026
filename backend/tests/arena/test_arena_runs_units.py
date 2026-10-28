@@ -109,7 +109,7 @@ async def test_deepteam_generate_speaks_the_ndjson_contract():
     assert body["models"]["attacker"] == {
         "model": "glm-5.3-flash-leonardo",
         "endpoint": "http://localhost:4000/v1",
-        "params": {"temperature": 0.7, "max_tokens": 512, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
+        "params": {"temperature": 0.7, "max_tokens": 2048, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
     }
     assert "gateway-key" not in json.dumps(body)
 
@@ -294,7 +294,7 @@ async def test_green_generator_direct_level():
     assert fake.options["default_headers"]["x-user-id"] == "tester"
     first = fake.requests[0]
     assert first["temperature"] == 0.9 and first["model"] == "glm-5.3-flash-leonardo"
-    assert first["max_completion_tokens"] == 1024
+    assert first["max_completion_tokens"] == 4096
     assert first["extra_body"] == {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}
     schema = first["response_format"]["json_schema"]["schema"]
     assert schema["properties"]["cases"]["items"]["required"] == ["input"]

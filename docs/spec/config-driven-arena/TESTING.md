@@ -214,7 +214,7 @@ routes these exact names to the Leonardo router (`infrastructure/leonardo/agentg
 | `model:` | Model | Context (prompt + answer) | Parallel sequences | Thinking switch (`chat_template_kwargs`) |
 | --- | --- | --- | --- | --- |
 | `qwen3-235b-a22b-fp8-leonardo` | Qwen3-235B-A22B-FP8 | 2,048 tokens | 4 | `enable_thinking: false` |
-| `glm-5.3-flash-leonardo` | GLM-5.3-Flash | 2,048 | 4 | `reasoning_effort: low`, `clear_thinking: true` |
+| `glm-5.3-flash-leonardo` | GLM-5.3-Flash | 65,536 on B300 (`./b300/cli.py up glm53`), 2,048 on Leonardo | 16 on B300, 4 on Leonardo | `reasoning_effort: low`, `clear_thinking: true` |
 | `deepseek-v4.1-flash-1017-leonardo` | DeepSeek-V4.1-Flash | 2,048 | 2 | `thinking: false` |
 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | DeepSeek-V4.1-Flash, 16 GPUs | 2,048 | 8 | `thinking: false` |
 | `qwen3-0.6b-leonardo` | Qwen3-0.6B (tests) | 8,192 | 16 | `enable_thinking: false` |

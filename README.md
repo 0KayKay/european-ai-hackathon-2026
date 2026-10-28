@@ -171,8 +171,9 @@ status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPE
   generator) uses `glm-5.3-flash-leonardo` (GLM-5.3-Flash) through agentgateway, with low reasoning via
   `chat_template_kwargs` (`reasoning_effort: low`, `clear_thinking: true`). This needs the cluster link
   (`infrastructure/gke-leonardo`) and a running GLM server: on Curiosity (B300) `./b300/cli.py up glm53 --link`,
-  or the `glm53` profile on Leonardo. The server has a 2,048-token context, so `max_tokens` is kept small
-  (384–1,024). For local runs without either cluster, change the roles in the level files (or in the UI) to a
+  or the `glm53` profile on Leonardo. The level defaults (`max_tokens` 1,024–4,096) assume the B300 profile with a
+  65,536-token context ([b300/docs/glm-context.md](b300/docs/glm-context.md)); the Leonardo `glm53` profile still has
+  2,048 tokens, so lower `max_tokens` to 384–1,024 when serving from Leonardo. For local runs without either cluster, change the roles in the level files (or in the UI) to a
   model you have, e.g. `gemini-3.8-flash` or a local Ollama endpoint.
 - **Limitations.** The deepteam arena endpoints (`/internal/arena/generate`,
   `/internal/arena/multi-turn`) are implemented, but still need a live model and cluster check (see

@@ -321,13 +321,13 @@ def test_variant_can_override_a_model_parameter_of_one_role():
         "seed": 7,
     }
     assert hard.agent.model.params.compact() == {
-        "max_tokens": 512,
+        "max_tokens": 4096,
         "extra": {
             "chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}
         },
     }
     assert level.variants["easy"].agent.model.params.compact() == {
-        "max_tokens": 512,
+        "max_tokens": 4096,
         "extra": {
             "chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}
         },
@@ -335,7 +335,7 @@ def test_variant_can_override_a_model_parameter_of_one_role():
     }
     assert hard.red_team.attacker.params.compact() == {
         "temperature": 0.7,
-        "max_tokens": 512,
+        "max_tokens": 2048,
         "extra": {
             "chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}
         },
@@ -386,9 +386,9 @@ def test_every_llm_role_defaults_to_glm():
     for role in roles:
         assert role["model"] == "glm-5.3-flash-leonardo", role["role"]
         assert role["endpoint"] == "agentgateway", role["role"]
-        # vLLM serves GLM with a 2,048-token context and rejects Gemini-only settings. GLM switches its
-        # reasoning with these template arguments (the settings validated on Leonardo and B300).
-        assert role["params"]["max_tokens"] <= 1024, role["role"]
+        # The B300 `glm53` profile serves GLM with a 65,536-token context; vLLM rejects Gemini-only settings.
+        # GLM switches its reasoning with these template arguments (validated on Leonardo and B300).
+        assert role["params"]["max_tokens"] <= 4096, role["role"]
         assert "reasoning_effort" not in role["params"], role["role"]
         assert role["params"]["extra"] == {
             "chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}

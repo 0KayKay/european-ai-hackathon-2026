@@ -85,7 +85,7 @@ def test_level_view():
         "node": "agent",
         "model": "glm-5.3-flash-leonardo",
         "endpoint": "agentgateway",
-        "params": {"max_tokens": 512, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
+        "params": {"max_tokens": 4096, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
     }
     files = body["source"]["files"]
     assert files[0]["path"] == "email-review/level.yaml"

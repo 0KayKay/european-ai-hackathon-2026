@@ -21,6 +21,7 @@ names and contracts: [IMPLEMENTATION.md](../../docs/spec/config-driven-arena/IMP
 - [Red team and green team](#red-team-and-green-team)
 - [Limits and refusal](#limits-and-refusal)
 - [Validation errors](#validation-errors)
+- [Editing levels in the UI](#editing-levels-in-the-ui)
 - [Walkthrough: the example level](#walkthrough-the-example-level)
 - [Checking a change](#checking-a-change)
 
@@ -45,7 +46,8 @@ backend/levels/
 The directory name is the level id and must equal `id:` in `level.yaml`. `order:` sorts the level list. The
 backend loads all levels at startup and refuses to start on an invalid config (the error names the file and the
 problem, see [Validation errors](#validation-errors)). The backend image contains this folder
-(`COPY levels ./levels`); after an edit, restart the backend (Tilt rebuilds it).
+(`COPY levels ./levels`); after an edit, restart the backend (Tilt rebuilds it). On a deployment the files can
+also be edited in the UI, see [Editing levels in the UI](#editing-levels-in-the-ui).
 
 ## A level file
 
@@ -286,6 +288,51 @@ levels/hidden-mailbox/level.yaml: [easy] green_team.guidance: file not found: pr
 Problems inside a prompt or data file (an unknown placeholder, invalid YAML, data that does not fit the tool
 kind) name that file.
 
+## Editing levels in the UI
+
+Where nobody can change the files in the container (GKE), a level's files can be edited as plain text in the
+Arena: level view → **Edit** in the config pane → change → **Save**.
+
+- **Overrides, not files.** A save is stored in the arena database (`arena_level_overrides`) as an *override* of
+  the repository file; `backend/levels/` is never written. The repository files stay the defaults: a level
+  without overrides, a new deployment with an empty database, and **Reset to repository version** all serve the
+  files in git. A level with overrides shows **Modified** in the level list, and each overridden file shows it on
+  its tab.
+- **What can be edited.** The level's `level.yaml` and the files in its own directory that it references (any
+  difficulty). A new file in the level directory can be added when `level.yaml` references it in the same save.
+  Files in `shared/` (used by every level) and in other levels' directories are read-only; overrides are per level,
+  so a level that reuses another level's file by path keeps reading the repository file.
+- **Validation.** A save validates the whole level, every difficulty, with the same loader and messages as at
+  startup. Nothing is stored on an error; the editor lists `file:line message` and marks the line. The graph,
+  inspector and new runs use the saved version immediately (on every backend replica: each request checks the
+  stored version). Runs store a snapshot, so earlier runs and replays keep the config they ran with.
+- **Concurrent edits.** A save names the version it started from. If someone saved in between, the editor says so
+  and offers to load their version.
+- **Schema changes.** If saved overrides no longer validate after an update, the backend still starts, serves the
+  repository version of that level and shows the problem ("The edits saved for this level no longer load") with
+  **Fix the saved edits** and **Reset**.
+
+**Getting UI edits back into git.** Overrides live only in the database of that deployment. To keep them, copy
+them into the repository and commit; then reset the level in the UI (or leave it: an override equal to the
+repository file is dropped on the next save). Either copy the text from the editor, or fetch every file of the
+level as served:
+
+```sh
+# with a session cookie of the deployment (browser dev tools → Cookies)
+curl -s -b "$COOKIE" https://<host>/api/v1/arena/levels/email-review/source \
+  | jq -r '.files[] | select(.modified) | .path' # the files edited in the UI
+
+cd backend/levels
+curl -s -b "$COOKIE" https://<host>/api/v1/arena/levels/email-review/source \
+  | python3 -c 'import json, pathlib, sys
+for f in json.load(sys.stdin)["files"]:
+    if f["modified"]:
+        pathlib.Path(f["path"]).write_text(f["content"])'
+git diff
+```
+
+Then run `uv run pytest -q tests/arena` as for any change (the parity tests fail for edits of levels 1–3).
+
 ## Walkthrough: the example level
 
 [`hidden-mailbox-output-judge/`](hidden-mailbox-output-judge/level.yaml) is level 1 with one change on `hard`: an
@@ -326,4 +373,5 @@ uv run pytest -q tests/arena          # loads every level; graph, engine, parity
 difficulty, `test_arena_parity.py` / `test_arena_engine_parity.py` compare levels 1–3 with the legacy
 implementation (AC-1). The parity tests intentionally fail when you change one of the three original levels;
 create a new level (or difficulty) for experiments instead. In the UI, open **Arena** → your level → switch
-difficulties and click the nodes; the config pane shows the files that were loaded.
+difficulties and click the nodes; the config pane shows the files that were loaded (including edits saved in the
+UI).

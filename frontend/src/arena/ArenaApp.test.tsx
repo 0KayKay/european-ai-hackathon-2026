@@ -33,13 +33,6 @@ vi.mock("../lib/auth-client", () => ({
 		signOut: vi.fn(),
 	},
 }));
-vi.mock("../AGUIPlayground", () => ({
-	default: () => (
-		<main aria-label="Playground">
-			<a href="#/arena">Arena</a>
-		</main>
-	),
-}));
 
 beforeAll(mockReactFlow);
 afterEach(() => {
@@ -116,26 +109,24 @@ const inspector = () =>
 const graph = () => screen.getByTestId("arena-graph");
 
 describe("arena routing", () => {
-	it("opens the arena from the playground and goes back", async () => {
-		renderAt("");
-		expect(screen.getByRole("main", { name: "Playground" })).toBeVisible();
-
-		await go("#/arena");
+	it("sends non-arena hashes to the level overview", async () => {
+		renderAt("#/playground");
 		expect(
 			await screen.findByRole("heading", { name: "Levels" }),
 		).toBeInTheDocument();
 		expect(screen.getByText("Level 1 · Hidden Mailbox")).toBeInTheDocument();
-		// The playground stays mounted (keeps its chat) but is hidden.
-		expect(
-			screen.getByRole("main", { name: "Playground", hidden: true }),
-		).not.toBeVisible();
+		expect(window.location.hash).toBe("#/arena");
 
+		await go("#/arena/levels/hidden-mailbox/hard");
+		expect(await screen.findByText("Direct · multi-turn")).toBeInTheDocument();
 		expect(
-			screen.getByRole("link", { name: /Back to playground/ }),
-		).toHaveAttribute("href", "#/");
+			screen.getByRole("link", { name: "Guardrail Arena" }),
+		).toHaveAttribute("href", "#/arena");
 		await go("#/");
-		expect(screen.queryByRole("heading", { name: "Levels" })).toBeNull();
-		expect(screen.getByRole("main", { name: "Playground" })).toBeVisible();
+		expect(
+			await screen.findByRole("heading", { name: "Levels" }),
+		).toBeInTheDocument();
+		expect(window.location.hash).toBe("#/arena");
 	});
 
 	it("restores the level view from the hash on reload", async () => {

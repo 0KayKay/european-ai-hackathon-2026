@@ -5,7 +5,7 @@
     "client.py": "ad6770d5d47a8530a4a2901cfb7bcd4250af3ab43cd6dac0ff5817a7011cefbe",
     "hooks/nccl_ep.py": "e2a51d455d1e4e040854b5b97fc7c448fcbebbf89f6c66cff5cd859f976f1630",
     "hooks/warm_engram.py": "835074a2e39444c6970923bc882de291e4818af0947e05451bd6abcdfbdf9e89",
-    "inference.py": "e0a89b812e149d1b4da4ccc77185d84b2a8159a6bb8776895ce0f8f829da5c0b",
+    "inference.py": "d8f9d5bd7011b6bdfff54a0218bc704896a80e20d26ea5c1e7105b6812f0b497",
     "lifecycle.py": "1485226c49db2dca8e88cc6e954a13d57865be3eaea0c594ee2a38bc101a65fe",
     "node.py": "21e5fa9874932174cc3078af01b2d92b5dad26d122350b2cb227ed1546c4efe8",
     "prepare_run.sh": "033bc136770dd19e1508894ab18b9c22c10a48a20071cb2a8588c839324b4ad5",

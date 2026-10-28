@@ -1,0 +1,355 @@
+{
+  "prepared_date": "2026-10-27",
+  "timezone": "Europe/Berlin",
+  "scope": "Historical results and current all-profile actual CLI lifecycle verification are separate cohorts; local fixtures are not model outputs.",
+  "glm": {
+    "job_id": "11393",
+    "checks": 21,
+    "passed": 21,
+    "server_stopped": true,
+    "session_key_removed": true
+  },
+  "nemotron": {
+    "job_id": "11962",
+    "phase": "completed",
+    "scored_requests": 280,
+    "metrics": {
+      "safety": {
+        "attacks": 70,
+        "attack_blocks": 60,
+        "benign": 70,
+        "benign_false_blocks": 1,
+        "errors": 0,
+        "median_seconds": 0.04148213844746351
+      },
+      "ultra": {
+        "attacks": 70,
+        "attack_blocks": 70,
+        "benign": 70,
+        "benign_false_blocks": 1,
+        "errors": 0,
+        "median_seconds": 0.29080443689599633
+      }
+    },
+    "laptop_connectivity_verified": false,
+    "cleanup_verified": true,
+    "historical_monitor_mac_success_recorded_at_utc": "2026-10-27T17:31:11.181041+00:00",
+    "historical_final_artifact_overwritten_after_session_expiry": true
+  },
+  "evidence_sha256": {
+    "Cluster_B300/glm53-comparison/remote-evidence/runs/11393/state.json": "3c44cb11d3b26a4fefbe20a94569633483f4f455775eeec74a89a8abe6dbd62e",
+    "Cluster_B300/glm53-comparison/remote-evidence/runs/11393/configuration.json": "2503c0e2c75d5808cb58f5fc0d4186867b7a3bacf640bb8067417e77e25cb8d5",
+    "Cluster_B300/glm53-comparison/remote-evidence/runs/11393/api-local-1.json": "18ed65629b858f9eddd3f292d805ecb13dedc9fa7deab724dcbdbcb67f42238c",
+    "Cluster_B300/glm53-comparison/remote-evidence/runs/11393/api-local-2.json": "b6533d237c30fd0a1a043aabfdf6d82fb7c8b64cda6a7a90e618d32dd6d86e88",
+    "Cluster_B300/glm53-comparison/remote-evidence/runs/11393/api-local-3.json": "b3519c2233006869d1f387e1e77015061ef9562d852231c1e13ba46ddeb276e1",
+    "Cluster_B300/nemotron/results/11962/actual-result.json": "377eecef9dcf4febf35d5a930f1bef02689fb970ed368f87dcac7b985779b40b",
+    "Cluster_B300/nemotron/results/11962/local-verification.json": "09ec7d8ad63f9a8ecddcfa0a136955883a0e4df9bebb6131589f9f8879b88cb5",
+    "Cluster_B300/nemotron/results/11962/laptop-connectivity.json": "f9cad8dafd78eea8e1a2b0ef6289f6ddc1ad36377b7f9edaef6fd297044d35a5",
+    "Cluster_B300/nemotron/results/11962/cleanup-verification.json": "691addbdf9f67000b7537c35bcf72c2c4d1d39b8cfbd4cf5f2d3c883dcf3207f"
+  },
+  "updated_date": "2026-10-28",
+  "mac_access_20261028": {
+    "job_id": "12174",
+    "passed": true,
+    "checks_passed": 13,
+    "actual_completions": 5,
+    "unique_response_ids": 5,
+    "tunnel_mode": "both",
+    "independent_teammate_account_tested": true,
+    "same_physical_mac": true,
+    "other_computers_tested": false,
+    "test_forwards_closed": true,
+    "gpu_servers_retained_until_berlin": "2026-10-28T12:37:31+01:00",
+    "verified_client_sha256": {
+      "clients/nemotron_client.py": "94918d041baa8308abdecfc96c394364f17c175884a885ded6d2778b424eb85e",
+      "clients/query.py": "865efcc0e5795f8120962561d2e5b449086158ff0e875a3c268c0c3776dd95d5",
+      "clients/validation.py": "cb3d7c2912203156f1edcb09bfaea12e284851a7ba0e4d553f23cdcafa3789d7",
+      "profiles.json": "53368ad110a9c4f1629586bf44cce2ea8744c3d77e1e872a55cd85aec88da457"
+    },
+    "verification_sha256": "a6cbd4f5226b3d6f5c3f83e13ef56271827110ba3f367dc52edcfb997f8edbd0",
+    "identity_receipt_sha256": "17bd3f4a81af2535c3bfe7ea3a5d36de7335c6ca8d662a35e3469effc13517fc"
+  },
+  "unified_cli_20261028": {
+    "job_id": "12204",
+    "profile": "safety",
+    "gpus": 1,
+    "passed": true,
+    "workflow_assertions_passed": 15,
+    "node_acceptance_checks_passed": 4,
+    "node_actual_completions": 2,
+    "mac_actual_completions": 2,
+    "unique_completion_ids": 4,
+    "invalid_key_http_status": 401,
+    "ready_at_utc": "2026-10-28T09:21:02.681407+00:00",
+    "finished_at_utc": "2026-10-28T09:22:50.646780+00:00",
+    "queue_empty": true,
+    "owned_servers_stopped": true,
+    "remote_session_keys_removed": true,
+    "owned_forward_closed": true,
+    "owned_private_ssh_master_closed": true,
+    "live_shared_base_acl_tested": false,
+    "large_profiles_tested_through_unified_cli": false,
+    "submitted_snapshot_difference": [
+      "manage.py: pending log, queue reason and not-ready diagnostic; final manager separately exercised live"
+    ],
+    "evidence_sha256": {
+      "actual-verification.json": "a69c1032120f601418c00ab61a12274ff1eaf2aa78b0185677c1a1054269563a",
+      "actual-server-evidence.json": "5aee3ae60723981f3caea3faf49a84c7265666b5f79e3a7f2d77d8ff182173cb",
+      "actual-cleanup.json": "8ea08f76c357bd6e8320fca4fef525b2bd97febc1e552c552e5868c11e517d76",
+      "mac-benign.json": "e1fc6c68c74829d626213a28e69a15ee111944dfc4d3380afbe2bdc2848201ee",
+      "mac-unauthorized.json": "4399241112256e86ef479972063c27afb7e7385d399049269ca237a1ea5fd6a8"
+    }
+  },
+  "unified_cli_all_profiles_20261028": {
+    "finished_at_utc": "2026-10-28T14:21:38.169188+00:00",
+    "source_manifest_sha256": "0b4a58e082acdd3accc7e314c0dd1957c41b857bb004c212694e170eeec53edd",
+    "client_identity": {
+      "recorded_at_utc": "2026-10-28T13:16:33.410701+00:00",
+      "files_sha256": {
+        "cli.py": "6945d41bec604eac4bb5129ebf0c5f691e78c86d76cb09c7d3a4f63c51f79e1e",
+        "clients/query.py": "71eb6b5447885fe1d1a6755dad4eef397f8c21c8b5b78a81b8e81e1c9da54d6d",
+        "clients/validation.py": "cb3d7c2912203156f1edcb09bfaea12e284851a7ba0e4d553f23cdcafa3789d7",
+        "serve/RELEASE_MANIFEST.json": "0b4a58e082acdd3accc7e314c0dd1957c41b857bb004c212694e170eeec53edd"
+      }
+    },
+    "reviewed_actual_results": {
+      "phase": "passed",
+      "stages": {
+        "nemotron": {
+          "phase": "passed",
+          "job_id": "12320",
+          "gpus": 5,
+          "models": {
+            "ultra": {
+              "model": "nemotron-ultra-550b-b300",
+              "node_acceptance_checks": 7,
+              "mac_acceptance_checks": 7,
+              "node_recorded_completions": 8,
+              "mac_recorded_completions": 10,
+              "additional_glm_sse_requests_without_retained_ids": 0,
+              "response_ids": [
+                "chatcmpl-9844ed555e3c795e",
+                "chatcmpl-a18dfa924d3a0d4b",
+                "chatcmpl-8fbf72ca168b928f",
+                "chatcmpl-8ab0a75a05a84cd5",
+                "chatcmpl-85766db196842e04",
+                "chatcmpl-80749368c9773192",
+                "chatcmpl-8cf098d968028525",
+                "chatcmpl-9e419fcc875becf9",
+                "chatcmpl-9c8fb5342081dabc",
+                "chatcmpl-bef277a41a6f51d6",
+                "chatcmpl-bafb207f3f45277c",
+                "chatcmpl-baa96385029b1562",
+                "chatcmpl-bb0f706a776551f0",
+                "chatcmpl-8be970b582432792",
+                "chatcmpl-b2e5168487408946",
+                "chatcmpl-9e1736ef727ce939",
+                "chatcmpl-80072b3dd7d8152b",
+                "chatcmpl-ba4efcd4aaa5f84e"
+              ],
+              "returned_model_and_finish_checks_passed": true,
+              "cli_final_text": "42",
+              "source_revision": "02462641f13d3af838b904f48195b9bb8a1e4ebc"
+            },
+            "safety": {
+              "model": "nemotron-content-safety-reasoning-4b-b300",
+              "node_acceptance_checks": 4,
+              "mac_acceptance_checks": 4,
+              "node_recorded_completions": 2,
+              "mac_recorded_completions": 4,
+              "additional_glm_sse_requests_without_retained_ids": 0,
+              "response_ids": [
+                "chatcmpl-9454363ec4a638b3",
+                "chatcmpl-b0b0d38ef2ee3ed3",
+                "chatcmpl-afdd985a2d03724a",
+                "chatcmpl-98d77783dd5133be",
+                "chatcmpl-b4380e0185f2aa10",
+                "chatcmpl-bf452095987fcbcf"
+              ],
+              "returned_model_and_finish_checks_passed": true,
+              "cli_final_text": "Prompt harm: unharmful",
+              "source_revision": "29da6ec41d9c710d937afcd41f65e241ab822792"
+            }
+          },
+          "source_manifest_matches": true,
+          "cleanup_verified": true,
+          "evidence_sha256": {
+            "cleanup-evidence.json": "1a14195696b4a2cd4635f66c77cd7d4364774d3a9dbf183b12731774c5de0432",
+            "ready-server-evidence.json": "8a55fbf82952c7321294979686247560d67cb3ad8d645f88a85aa35db61d010e",
+            "safety-catalog.json": "808b584fcb152a9c8dc35a591cf0ef50cb4a6cf303df09c5a2473cf9b753fd97",
+            "safety-mac-acceptance.json": "c554e4ed293c033535cfa70561e95e286ee23b9c79fb982bb449205f23577f39",
+            "safety-paired-query.json": "5b8728a17de0293a3c7adff2d1e8d9e14c1e3ba44e99cf8a75a9d2871f6dca53",
+            "safety-query.json": "58cdf318ad948703896791a9949665fc6028b77b67e5fa0ffb3e0f588acae044",
+            "ultra-catalog.json": "c6061af192745e56f0ef3da357da43b13ddf20e6c97ab94fee0bb35b9b9c0413",
+            "ultra-mac-acceptance.json": "a92732cf57b4400e6d0daa152e9e04fe92de7603a954b6f730b8ae98f198a55f",
+            "ultra-paired-query.json": "a980587907b6043cd5716edde1cf29a55289496d8c69e5b377f274e194af525a",
+            "ultra-query.json": "aaa6789c436d28de921d53f8167f92388eebb7d5ca419678b9aee867e2295cfd"
+          },
+          "actual_slurm_gpus": 5
+        },
+        "ultra": {
+          "phase": "passed",
+          "job_id": "12334",
+          "gpus": 4,
+          "models": {
+            "ultra": {
+              "model": "nemotron-ultra-550b-b300",
+              "node_acceptance_checks": 7,
+              "mac_acceptance_checks": 7,
+              "node_recorded_completions": 8,
+              "mac_recorded_completions": 9,
+              "additional_glm_sse_requests_without_retained_ids": 0,
+              "response_ids": [
+                "chatcmpl-83e959357c010914",
+                "chatcmpl-9fd503d11c555cea",
+                "chatcmpl-8ca9952012b24dd4",
+                "chatcmpl-ac0156acaca6c27a",
+                "chatcmpl-96e458f79fafe3a1",
+                "chatcmpl-87ccbdc3398bead5",
+                "chatcmpl-832b2a4a953479e3",
+                "chatcmpl-86bd55bfa9b5d35f",
+                "chatcmpl-a0f1d9c44359a20e",
+                "chatcmpl-8cd2b2d72493877d",
+                "chatcmpl-ac49204071861150",
+                "chatcmpl-96893c7002a62785",
+                "chatcmpl-881dc6fce9872028",
+                "chatcmpl-8ae5f69f8ea66b1d",
+                "chatcmpl-8efd3aa89c8a891c",
+                "chatcmpl-acbe86b15a18798f",
+                "chatcmpl-9b2532c90155eb93"
+              ],
+              "returned_model_and_finish_checks_passed": true,
+              "cli_final_text": "42",
+              "source_revision": "02462641f13d3af838b904f48195b9bb8a1e4ebc"
+            }
+          },
+          "source_manifest_matches": true,
+          "cleanup_verified": true,
+          "evidence_sha256": {
+            "cleanup-evidence.json": "cfe06666f5e92d61e510ea842e34b252fba24120c3d227d53179fede153fa3ca",
+            "ready-server-evidence.json": "79573b28bd57eb964a36511120ce5d99e79e12f9e34c74376f5dd7abbf334125",
+            "ultra-catalog.json": "9db2800759bd4b0fa79c2d7ce7d2019ecc6f4f1a32ebec45d9fa6864f75cb88f",
+            "ultra-mac-acceptance.json": "d639fca485682fcf1396d8a8ce1fa32ecb695b3b4e4277cd7da4303c269463db",
+            "ultra-query.json": "b0edabf9d605936335288e417cde6d2ed42ea7b4e5217712a8e3283a6aa8fd86"
+          },
+          "actual_slurm_gpus": 4
+        },
+        "glm53": {
+          "phase": "passed",
+          "job_id": "12342",
+          "gpus": 8,
+          "models": {
+            "glm": {
+              "model": "glm-5.3-flash-leonardo",
+              "node_acceptance_checks": 7,
+              "mac_acceptance_checks": 7,
+              "node_recorded_completions": 7,
+              "mac_recorded_completions": 8,
+              "additional_glm_sse_requests_without_retained_ids": 2,
+              "response_ids": [
+                "chatcmpl-a66315e1f3ee2383",
+                "chatcmpl-b21dbe07e32e7d9c",
+                "chatcmpl-a302fe6fbb2a4b36",
+                "chatcmpl-beaeacda232b480e",
+                "chatcmpl-bebb6f604b8e0781",
+                "chatcmpl-a036b239d88be802",
+                "chatcmpl-9c497ff003e21841",
+                "chatcmpl-995d68af93dd34b4",
+                "chatcmpl-a39a5f63dee6ec82",
+                "chatcmpl-8286d9fe63ada020",
+                "chatcmpl-a1c50883649a08c8",
+                "chatcmpl-b7a21b36a2f20a86",
+                "chatcmpl-91af7282764b166a",
+                "chatcmpl-b1214aa87dace241",
+                "chatcmpl-86cdf2d7b79a6bfd"
+              ],
+              "returned_model_and_finish_checks_passed": true,
+              "cli_final_text": "42",
+              "source_revision": "91b69215804f2d2036a8867f6ce44848e278dcda"
+            }
+          },
+          "source_manifest_matches": true,
+          "cleanup_verified": true,
+          "evidence_sha256": {
+            "cleanup-evidence-recheck.json": "763b560a64b9d52cc32423a94d18217d17f14ead6dc22e2d3d1eb05520a913b6",
+            "cleanup-evidence.json": "763b560a64b9d52cc32423a94d18217d17f14ead6dc22e2d3d1eb05520a913b6",
+            "glm-catalog.json": "da105283fe907e0b51b1ea37ddc155eadf8ddd8e33368a7e59c2422fe0d0731b",
+            "glm-mac-acceptance.json": "1eb491347d6aa256977afebbf43f32a1e86ab86b084e876f9e38c8fec198ee9b",
+            "glm-query.json": "f22884c1846a0e5768018ee5c9d2814574002d2f052e649ec598cac52fc9117b",
+            "ready-server-evidence.json": "8984272844e545aff2a32e6de2342bef35e2a153e0452bc8ae3a1d2a0a14e1b0"
+          },
+          "actual_slurm_gpus": 8
+        },
+        "safeguard": {
+          "phase": "passed",
+          "job_id": "12360",
+          "gpus": 1,
+          "models": {
+            "safeguard": {
+              "model": "gpt-oss-safeguard-20b-b300",
+              "node_acceptance_checks": 4,
+              "mac_acceptance_checks": 4,
+              "node_recorded_completions": 2,
+              "mac_recorded_completions": 3,
+              "additional_glm_sse_requests_without_retained_ids": 0,
+              "response_ids": [
+                "chatcmpl-9ddfaef4c5b3cc3f",
+                "chatcmpl-890b4f18d2aac5e1",
+                "chatcmpl-96d79f031fbda042",
+                "chatcmpl-94c6a2b27e636b26",
+                "chatcmpl-9c59a7258fde1720"
+              ],
+              "returned_model_and_finish_checks_passed": true,
+              "cli_final_text": "{\"violation\":false}",
+              "source_revision": "8a11e17b25c973a24099d4016bf2e17dd7ec1574"
+            }
+          },
+          "source_manifest_matches": true,
+          "cleanup_verified": true,
+          "evidence_sha256": {
+            "cleanup-evidence.json": "5508b00df4b4c21dd9bd227c77c9f4bfb011bb000be4191c707e7a37c7ebfd1a",
+            "ready-server-evidence.json": "287cf4a3b38cf90250b97758150695bf3a1c8223dc4219c1ccd4d658a688737c",
+            "safeguard-catalog.json": "1a8c65b183337277d5b5546d02749f2837acb2e889988f2c09252402dd22f1d7",
+            "safeguard-mac-acceptance.json": "e23524bfe6fbb73178e3e7dcfd60fb367b0ce988dbb9995a017a507bdedc4542",
+            "safeguard-query.json": "ab7ea035b0be2abb11ad1f7f978c9dcc7098fa54cd3e29ad2daa521af3f212de"
+          },
+          "actual_slurm_gpus": 1
+        }
+      },
+      "notes": [
+        "Completion counts use response objects with model/choices/id, plus retained SSE response IDs; function/tool-call IDs are excluded.",
+        "The original GLM SSE suite records successful stream termination/content but not the response ID. These two requests are listed separately.",
+        "Ultra SSE summaries retain response IDs but not per-chunk model names; the stream model is attributed to the selected authenticated endpoint. Full completion objects carry verified returned-model identifiers.",
+        "Classifier checks reuse two simple synthetic inputs. They are functional checks, not independent security samples or a new benchmark."
+      ],
+      "recorded_distinct_completions": 61,
+      "all_recorded_completion_ids_distinct": true,
+      "pending_only_retry": [
+        {
+          "job_id": "12317",
+          "phase": "pending_cancelled_for_unpinned_retry",
+          "model_requests": 0,
+          "reason": "Cached node had only four free GPUs; no model process was started.",
+          "cleanup": {
+            "job_id": "12317",
+            "phase": "stopped",
+            "queue_empty": true,
+            "inactive_session_files_removed": true
+          }
+        }
+      ]
+    },
+    "owned_private_ssh_master_closed": true,
+    "raw_campaign_sha256": "039291bb939f716a9b76a4105303ce6ab6700e0f63c5842b3b8836764fc464f4",
+    "review_sha256": "5830585d7befb0a4ce54b7d55ff68da44391e76d9a158239ec056c7ee56ebb14",
+    "initial_ultra_before_atomic_client": {
+      "job_id": "12300",
+      "passed": true,
+      "kept_separate": true
+    },
+    "local_tests": {
+      "lifecycle": 9,
+      "client": 12
+    }
+  }
+}

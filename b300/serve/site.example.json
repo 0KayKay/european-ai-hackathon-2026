@@ -1,0 +1,7 @@
+{
+  "account": "eai-hackathon",
+  "partition": "hackathon",
+  "qos": "eai-team09",
+  "max_time_seconds": 14400,
+  "observed_team_gpu_limit": 8
+}

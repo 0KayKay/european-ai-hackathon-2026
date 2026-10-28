@@ -1,0 +1,190 @@
+{
+  "prepared_at_utc": "2026-10-28T14:21:48.170847+00:00",
+  "publication_state": "prepared_for_team_branch_review",
+  "manifest_self_excluded": true,
+  "checks": {
+    "local_lifecycle_tests_passed": 9,
+    "local_client_tests_passed": 12,
+    "actual_current_profile_jobs": {
+      "nemotron": "12320",
+      "ultra": "12334",
+      "glm53": "12342",
+      "safeguard": "12360"
+    },
+    "current_profile_cleanup_verified": true,
+    "recorded_distinct_completion_ids": 61,
+    "additional_glm_sse_requests_without_retained_ids": 2,
+    "source_and_links_checked": true,
+    "known_credential_scan_passed": true,
+    "shared_base_acl_live_tested": false
+  },
+  "files": {
+    ".gitignore": {
+      "bytes": 142,
+      "sha256": "759b4fc3360f90a5e263da920af7b6d56a758d966419db342e8392899e0633f5"
+    },
+    "GITHUB_PREPARATION.md": {
+      "bytes": 2711,
+      "sha256": "5a57c9b7b97576dc9b43fbf8fb4c1a5be7737169e5446c0223ac1f8179a43260"
+    },
+    "LICENSE": {
+      "bytes": 1078,
+      "sha256": "1c75540120334c9ed84599826cfe3f1c6a7da484d2f7549fc8c4b19b6857ced8"
+    },
+    "README.md": {
+      "bytes": 14208,
+      "sha256": "6da41873fff5a61a2e25bb5803ca92b391aba9cbe9c9572e2a8e9c51f0f0589c"
+    },
+    "cli.py": {
+      "bytes": 14370,
+      "sha256": "6945d41bec604eac4bb5129ebf0c5f691e78c86d76cb09c7d3a4f63c51f79e1e"
+    },
+    "clients/nemotron_client.py": {
+      "bytes": 5062,
+      "sha256": "94918d041baa8308abdecfc96c394364f17c175884a885ded6d2778b424eb85e"
+    },
+    "clients/query.py": {
+      "bytes": 7210,
+      "sha256": "71eb6b5447885fe1d1a6755dad4eef397f8c21c8b5b78a81b8e81e1c9da54d6d"
+    },
+    "clients/test_query.py": {
+      "bytes": 5007,
+      "sha256": "e70ef9fbcb3b8a5b88f37ccce03afacbcfa7126dc8b598849c7abedc0d8f4de2"
+    },
+    "clients/test_tunnel.py": {
+      "bytes": 1122,
+      "sha256": "81e546e30b444b2c642b8a9e07ee10a57efd994b8b690df973ee7182bc069e50"
+    },
+    "clients/validation.py": {
+      "bytes": 6496,
+      "sha256": "cb3d7c2912203156f1edcb09bfaea12e284851a7ba0e4d553f23cdcafa3789d7"
+    },
+    "docs/CLI_ALL_PROFILES_20261028.md": {
+      "bytes": 5335,
+      "sha256": "7c4529a6e0119938666f7e118949b991a82e9d9a688e9c5943d7d0213d78e689"
+    },
+    "docs/CLI_VALIDATION_20261028.md": {
+      "bytes": 4231,
+      "sha256": "662227be237f1c9f8afd854546a047d3a1ec10b7fe0d9d1b6c397cd9a57b5ed1"
+    },
+    "docs/MAC_CONNECTIVITY_20261028.md": {
+      "bytes": 5896,
+      "sha256": "6bf66fb65814833e4b40af2ede15e0f9d28f2cfb7e04887f619143903fd84705"
+    },
+    "docs/OPERATOR_NOTES.md": {
+      "bytes": 9106,
+      "sha256": "bea65e73c59debbe67e2bacfe64c1aa13aae36ff486620836b9314b94f65ea8e"
+    },
+    "docs/USER_GUIDE.md": {
+      "bytes": 10798,
+      "sha256": "0047780a421a52c4f0072fa4b28bc0fe201ff4cd1f00d5897a242a13cfd4e35b"
+    },
+    "docs/VERIFIED_RESULTS.md": {
+      "bytes": 4005,
+      "sha256": "7f3c6cfa19b957715a1658d8eebe6da2aa8109017b05723c0047d23c416bf1c9"
+    },
+    "docs/how-it-works.md": {
+      "bytes": 4961,
+      "sha256": "757b6054ecb9004a1244a3d163ac0eddccde4f91253cd7ecf8320aaa867bb88d"
+    },
+    "docs/slurm-jobs.md": {
+      "bytes": 3829,
+      "sha256": "3d02bcea83171079d120ac082fc28e4f9e1209246ed43e175e761c209e43da4d"
+    },
+    "docs/validation.md": {
+      "bytes": 3342,
+      "sha256": "dc76362998ddac0ae7911e2afee31d53ea8574856fd843e5e301b58ba2362160"
+    },
+    "evidence-summary.json": {
+      "bytes": 16889,
+      "sha256": "2269093cbe184b851f279d03c6418d97caf1c0f2acc2b2011f38825b38c226e7"
+    },
+    "examples/safety-policy.txt": {
+      "bytes": 309,
+      "sha256": "f079b6e7ec22eefe2b989d2038065ce1d5ae854425d087c1f911d7ed53854d57"
+    },
+    "profiles.json": {
+      "bytes": 1503,
+      "sha256": "c0c27c44daea0f45cfca50b147ddd7cf7624c412317be1981aad6680f2fc54ba"
+    },
+    "serve/RELEASE_MANIFEST.json": {
+      "bytes": 1415,
+      "sha256": "0b4a58e082acdd3accc7e314c0dd1957c41b857bb004c212694e170eeec53edd"
+    },
+    "serve/check_release.py": {
+      "bytes": 146,
+      "sha256": "2b738d89fd027dcee62694042e933965213f73989dfe4cc781bd08dd7eb2ff2e"
+    },
+    "serve/common.py": {
+      "bytes": 2362,
+      "sha256": "032a46f1685ce82d237790ff958c8f9f035726ae2a16998a2595a036df2373fa"
+    },
+    "serve/cubin_overlay.py": {
+      "bytes": 2987,
+      "sha256": "cba0dacdf2bfc0d858c1860c49433c48c766484b3014c746111b7dd9d8f0c873"
+    },
+    "serve/glm-client-profile.json": {
+      "bytes": 348,
+      "sha256": "60a77593ed8fab70371faa3cffc86e0e959873a0b980933fdaaf0806f40c05c0"
+    },
+    "serve/images.json": {
+      "bytes": 252,
+      "sha256": "8037c9bf0fd0d4b4673b2712d0f00a8efa9c068ba1323758c3b5f3e1d8c1d4e6"
+    },
+    "serve/manage.py": {
+      "bytes": 12538,
+      "sha256": "225feea9e0227bca2585bf2b58997f1734330b3a9ea616737d7ec47c56ea6526"
+    },
+    "serve/models.json": {
+      "bytes": 8679,
+      "sha256": "2b226c78321a92559a4565e8a61cf75b5037110e59fa448c91e6b746512fa7c7"
+    },
+    "serve/profiles.json": {
+      "bytes": 800,
+      "sha256": "12a33d2411d23d8bd4409d6dd97a63d2d721cb40bfa0f5373bf40f164f309b23"
+    },
+    "serve/run.sbatch": {
+      "bytes": 2398,
+      "sha256": "26b16a4f0f12b740cc65919efdbc15d917f00ca7153694be95f2cf6eb157f18b"
+    },
+    "serve/safeguard.py": {
+      "bytes": 1600,
+      "sha256": "3b47fc032aab84690ec6ad62199978d3e89900fd66215ff2c5696ef0527a9fef"
+    },
+    "serve/server.py": {
+      "bytes": 12279,
+      "sha256": "46796dcf375f777f3cc2f9bba241b748772e993773db1004e4879c96634f1c5c"
+    },
+    "serve/site.example.json": {
+      "bytes": 145,
+      "sha256": "d7526afce8905a67f2d47eaee6268c0913891075763e6543f9b13ca2b91b03fe"
+    },
+    "serve/validation.py": {
+      "bytes": 7496,
+      "sha256": "915b980088e4e93ae9aa7e52f4760c57809b1d678d279f1689ce7beb7a65f5f5"
+    },
+    "serve/vendor/inference.py": {
+      "bytes": 17099,
+      "sha256": "1baa3be119c80af637fcaea6fe8e40a3e9577745fb9d01c9534a26bed2b1c64a"
+    },
+    "serve/vendor/test_endpoint.py": {
+      "bytes": 8074,
+      "sha256": "a2609712000ce3a4ec1f65c8c6ac2f26a29141cf6dec998974935cb39ac56776"
+    },
+    "tests/test_lifecycle.py": {
+      "bytes": 7290,
+      "sha256": "886d4a528f42ec64bc44b3d49cd16d8251a32d02669b22203ceeb2ad0c9e7ed2"
+    },
+    "tools/check_repository.py": {
+      "bytes": 1928,
+      "sha256": "8f6b0f7e1b2f3688d9267b496bf67e967fecc4c77719f69a428af579fbb9dc36"
+    },
+    "tools/update_manifest.py": {
+      "bytes": 843,
+      "sha256": "286a1722550b54dc25e94eafcbc69b5f861bf46dcf438c0e042859ac8fd59629"
+    }
+  },
+  "branch": "codex/b300-cli-team-guide",
+  "base_commit": "c3c5dd44d3db472c13bb5de9b072b5822446f642",
+  "branch_prepared_at_utc": "2026-10-28T14:41:24.589792+00:00"
+}

@@ -1,0 +1,13 @@
+{
+  "served_model": "glm-5.3-flash-leonardo",
+  "client": {
+    "local_port": 18083,
+    "timeout_seconds": 300,
+    "chat_template_kwargs": {
+      "reasoning_effort": "low",
+      "clear_thinking": true
+    }
+  },
+  "checks": "chat_tools",
+  "scope": "Original GLM API-client settings only; native B300 engine configuration is in models.json."
+}

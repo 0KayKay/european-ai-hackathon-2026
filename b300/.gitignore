@@ -1,0 +1,15 @@
+.runtime/
+**/.runtime/
+__pycache__/
+*.pyc
+.DS_Store
+endpoint.json
+*.api-key
+axis-ssh-command*
+.env
+.env.*
+!.env.example
+runs/
+results/
+*.log
+

@@ -249,6 +249,7 @@ leonardo/
     client.py       direct client for one server
   install/        install job scripts (runtime, checkpoint, link client)
   diagnostics/    check job scripts (probe, reach, NCCL, compatibility)
+  curiosity/      first-hour checks for NVIDIA's Curiosity v2 cluster (docs/curiosity.md)
   validation/     evidence from GPU runs, hashes of the code that passed them
   docs/           how-it-works.md, slurm-jobs.md, research.md, deepseek16.md, history.md
   tools/          profiles add and listing, generators, the repository check
@@ -268,6 +269,8 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
 - [docs/cluster-link.md](docs/cluster-link.md): how the cluster reaches the router, and the alternatives.
 - [infrastructure/leonardo/README.md](../infrastructure/leonardo/README.md): the Kubernetes side of the
   cluster link, for the cluster's maintainers.
+- [docs/curiosity.md](docs/curiosity.md): moving to NVIDIA's Curiosity v2 cluster (DGX-B300) while Leonardo is
+  in maintenance: what carries over, what changes, and the scripts for the first hour there.
 
 ### Validation status
 

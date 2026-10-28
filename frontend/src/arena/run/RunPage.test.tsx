@@ -136,7 +136,7 @@ describe("run in progress", () => {
 		run.next();
 		await tick();
 		expect(
-			await screen.findByRole("region", { name: "Attack success rate" }),
+			await screen.findByTestId("rate-attack-success"),
 		).toBeInTheDocument();
 		expect(screen.getByRole("status")).toHaveTextContent(
 			"Completed · 20 cases · 04:51",
@@ -503,10 +503,46 @@ describe("results", () => {
 		const fpr = screen.getByTestId("rate-false-positive");
 		expect(fpr).toHaveTextContent("10%");
 		expect(fpr).toHaveTextContent("1 / 10");
-		expect(screen.getByTestId("defended")).toHaveTextContent("7/ 9");
-		expect(screen.getByTestId("errors")).toHaveTextContent(
-			"red 1 · green 0 · excluded from both rates",
+		expect(asr).toHaveTextContent("Attack success rate");
+		expect(fpr).toHaveTextContent("False positive rate");
+		// The rate cards and the decision panel are gone.
+		expect(screen.queryByTestId("defended")).toBeNull();
+		expect(screen.queryByTestId("errors")).toBeNull();
+		expect(
+			screen.queryByRole("region", { name: "Where it was decided" }),
+		).toBeNull();
+		expect(
+			screen.queryByRole("region", { name: "Attack success rate" }),
+		).toBeNull();
+
+		// The outcome donut next to the matrix, with the rates labelled in it.
+		const outcomes = screen.getByRole("region", { name: "Outcomes" });
+		expect(outcomes).toContainElement(asr);
+		expect(outcomes).toContainElement(fpr);
+		expect(within(outcomes).getByText("20 decided cases")).toBeVisible();
+		const chart = within(outcomes).getByRole("img");
+		expect(chart).toHaveAccessibleName(
+			"Outcomes: Red attack succeeded 2, Red defended 7, Green false positive 1, Green passed 9, Both errors 1",
 		);
+		expect(
+			[...chart.querySelectorAll("circle[data-outcome]")].map((c) =>
+				c.getAttribute("data-outcome"),
+			),
+		).toEqual(["succeeded", "defended", "false_positive", "passed", "error"]);
+		const counts = within(outcomes).getByRole("list", {
+			name: "Outcome counts",
+		});
+		expect(
+			within(counts)
+				.getAllByRole("listitem")
+				.map((li) => li.textContent),
+		).toEqual([
+			"Red · attack succeeded210%",
+			"Red · defended735%",
+			"Green · false positive15%",
+			"Green · passed945%",
+			"Both · errors15%",
+		]);
 
 		const matrix = screen.getByRole("region", { name: "Expected vs. outcome" });
 		expect(
@@ -522,16 +558,6 @@ describe("results", () => {
 				.getAllByRole("listitem")
 				.map((li) => li.textContent),
 		).toEqual(["prompt_injection1 / 5 · 1 error", "linear_jailbreaking1 / 5"]);
-
-		const decided = screen.getByRole("region", {
-			name: "Where it was decided",
-		});
-		expect(
-			within(decided).getByText("Input judge · UNSAFE"),
-		).toBeInTheDocument();
-		expect(
-			within(decided).getByText("4 attacks · 1 benign"),
-		).toBeInTheDocument();
 
 		// The models used stay visible after the run (AC-9).
 		fireEvent.click(screen.getByText("Models used"));

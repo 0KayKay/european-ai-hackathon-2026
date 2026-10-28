@@ -44,6 +44,7 @@ from hackathon.arena.config.loader import load_levels
 from hackathon.arena.engine import Case, CaseSession, EngineModels
 from hackathon.arena.registry.guardrails import GuardrailDecision
 from hackathon.config import get_settings
+from tests.arena.legacy_models import with_legacy_prompt
 
 MODES = {
     "hidden-mailbox": "CHALLENGE_1",
@@ -516,7 +517,9 @@ def levels():
 
 
 def resolved_level(level_id: str, difficulty: str, script: Script):
-    level = levels()[level_id].variants[difficulty]
+    level = with_legacy_prompt(
+        level_id, difficulty, levels()[level_id].variants[difficulty]
+    )
     return level.model_copy(
         update={
             "guardrails": [

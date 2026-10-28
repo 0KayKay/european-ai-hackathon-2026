@@ -78,6 +78,54 @@ def test_model_for_requests_json_and_keeps_gateway_key_private(monkeypatch):
     assert calls[-1]["default_headers"] == {}
 
 
+def test_model_for_maps_leonardo_spec_and_rejects_gateway_lookalikes(monkeypatch):
+    monkeypatch.setattr(
+        arena,
+        "get_settings",
+        lambda: SimpleNamespace(
+            AGENTGATEWAY_API_KEY="gateway-secret",
+            AGENTGATEWAY_BASE_URL="http://agentgateway:3000/v1",
+        ),
+    )
+    calls = []
+    monkeypatch.setattr(arena, "LocalModel", lambda **kwargs: calls.append(kwargs))
+    leonardo = {
+        "temperature": 0,
+        "max_tokens": 512,
+        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
+    }
+    arena.model_for(
+        arena.ModelSpec(
+            model="qwen3-235b-a22b-fp8-leonardo",
+            endpoint="http://agentgateway:3000/v1/",
+            params=leonardo,
+        ),
+        "run-1",
+    )
+    assert calls[-1]["model"] == "qwen3-235b-a22b-fp8-leonardo"
+    assert calls[-1]["api_key"] == "gateway-secret"
+    assert calls[-1]["temperature"] == 0
+    assert calls[-1]["generation_kwargs"] == {
+        "max_tokens": 512,
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+        "response_format": {"type": "json_object"},
+    }
+    for endpoint in (
+        "http://agentgateway:3001/v1",
+        "http://agentgateway:3000/v1/chat",
+        "http://agentgateway:3000/v1.example.org",
+        "http://agentgateway.example.org:3000/v1",
+        "http://user@agentgateway:3000/v1",
+        "https://agentgateway:3000/v1",
+        "http://agentgateway:3000/v1?next=http://example.org",
+    ):
+        arena.model_for(
+            arena.ModelSpec(model="test", endpoint=endpoint, params=leonardo), "run-1"
+        )
+        assert calls[-1]["api_key"] == "unused", endpoint
+        assert calls[-1]["default_headers"] == {}, endpoint
+
+
 def test_generate_streams_cases_with_contract_shape(monkeypatch):
     monkeypatch.setattr(
         arena, "get_settings", lambda: SimpleNamespace(AGENTGATEWAY_API_KEY="secret")

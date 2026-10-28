@@ -70,9 +70,6 @@ export function arenaHref(route: Exclude<ArenaRoute, { name: "not_found" }>) {
 	}
 }
 
-/** Hash of the non-arena app (playground and challenges). */
-export const PLAYGROUND_HREF = "#/";
-
 export function navigate(href: string) {
 	window.location.hash = href.replace(/^#/, "");
 }

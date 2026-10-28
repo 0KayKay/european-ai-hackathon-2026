@@ -103,8 +103,8 @@ The deployed service stays internal to the cluster. Set `LOG_FORMAT=json` for st
 
 ### DeepTeam scans
 
-After sign-in, use **Red team** in the frontend to start a scan. Enter a goal and AG-UI target URL. The default target
-is the backend's `/api/v1/ag-ui` endpoint. The same-origin `/api/deepteam/runs` API verifies your Better Auth session
+The frontend no longer has a **Red team** dialog (the arena uses the deepteam service for its red cases); start a
+standalone scan through the API with a goal and an AG-UI target URL. The default target is the backend's `/api/v1/ag-ui` endpoint. The same-origin `/api/deepteam/runs` API verifies your Better Auth session
 and forwards it to the backend target. The service accepts only target hosts listed in `ALLOWED_TARGET_HOSTS` in
 `infrastructure/base/local.yaml` (default: `backend`), and is reachable externally only through the frontend proxy. To
 call the API directly, send your session cookie:
@@ -148,7 +148,8 @@ status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPE
   (agent, tools and data, secret, guardrails and their positions, success check, red and green team, a model and
   parameters per LLM role). Edit the files and restart the backend; the UI is generated from them. Levels 1–3
   reproduce the legacy challenges; `hidden-mailbox-output-judge` is an example of a new level without code.
-- **Where.** After sign-in, **Arena** in the playground header (`#/arena`). Pick a level and difficulty to see the
+- **Where.** The arena is the whole frontend: after sign-in it opens on the level overview (`#/arena`; any other
+  hash lands there too), and the header shows the signed-in user with **Sign out**. Pick a level and difficulty to see the
   config source, the execution graph and a node inspector with prompts and models. **Run evaluation** starts a
   run; the run page shows progress, live counts, a live sample of the running case and the generated inputs; once
   finished it shows attack success rate, false-positive rate, breakdowns and a filterable case list. Every case
@@ -175,8 +176,8 @@ status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPE
 - **Limitations.** The deepteam arena endpoints (`/internal/arena/generate`,
   `/internal/arena/multi-turn`) are implemented, but still need a live model and cluster check (see
   [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)). Execution is serial per
-  run. Configs are edited as files, not in the UI; runs are not compared with each other. The manual challenge mode
-  keeps using the legacy levels.
+  run. Configs are edited as files, not in the UI; runs are not compared with each other. The playground and the manual
+  challenge pages were removed from the frontend; their backend stays as the parity reference.
 
 ## GKE
 
@@ -230,9 +231,11 @@ http://localhost:10350/r/deepteam/overview
 
 ### Challenge parity
 
+The frontend no longer has the playground or the manual challenge pages; the arena replaces them.
+The legacy challenge backend described here stays as the parity reference for arena levels 1–3.
+
 Challenges 1–3 have independent Easy, Medium, and Hard progress, saved in PostgreSQL's
-`challenge_attempts` table (created automatically on first use). The sidebar lists saved chats
-and submissions; choosing one restores its result or lets you resume challenge 1. Email and offer
+`challenge_attempts` table (created automatically on first use). Email and offer
 attacks are submitted only as untrusted tool data under a server-defined task. Email delivery and
 purchase approval are simulated. Failed email attempts mask credentials before returning them to
 the browser; completed attempts reveal the recovered secret.
@@ -249,11 +252,9 @@ window, or `CHALLENGE_CLOSED=true` to stop submissions. Defaults leave the exerc
 `/api/v1/challenges/admin` returns 404. Local backend mode retains its shared local identity while
 reading a signed-in user's name from the verified session when available.
 
-The frontend streams individual guardrail checks with their stage, applicable rule, and a short
-explanation. Failed email attempts also mask these explanations before they reach the browser.
-Saved attempts restore the runtime messages, model settings, submitted fields, results, and guardrail
-details. “Not solved” means the agent ran without the attacker achieving the objective. The offer
-preview embeds the original PDF with a separate open-PDF link.
+The backend streams individual guardrail checks with their stage, applicable rule, and a short
+explanation. Failed email attempts also mask these explanations before they leave the backend.
+Saved attempts keep the runtime messages, model settings, submitted fields, results, and guardrail
+details. “Not solved” means the agent ran without the attacker achieving the objective.
 
-The existing generic playground is unchanged; no challenge-specific practice playgrounds are added.
 The current model configuration is retained, so attack difficulty can differ from the archived models.

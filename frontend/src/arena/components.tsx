@@ -1,10 +1,11 @@
-import { AlertTriangleIcon, ArrowLeftIcon, ShieldIcon } from "lucide-react";
+import { AlertTriangleIcon, LogOutIcon, ShieldIcon } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { OUTCOME_LABELS } from "./format";
-import { arenaHref, PLAYGROUND_HREF } from "./router";
+import { arenaHref } from "./router";
 import type {
 	CaseOutcome,
 	Channel,
@@ -58,7 +59,29 @@ export function DifficultySwitch({
 	);
 }
 
-/** Full-screen arena frame: header with brand, breadcrumb, optional center/actions, back link. */
+/** Signed-in user's name and the sign-out button at the right end of the arena header. */
+function UserMenu() {
+	const { data: session } = authClient.useSession();
+	return (
+		<div className="flex shrink-0 items-center gap-2 border-l pl-3">
+			{session?.user.name && (
+				<span className="hidden max-w-40 truncate text-[13px] text-slate-600 md:inline">
+					{session.user.name}
+				</span>
+			)}
+			<button
+				type="button"
+				onClick={() => void authClient.signOut()}
+				className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-500"
+			>
+				<LogOutIcon className="size-3.5" aria-hidden="true" />
+				<span className="sr-only sm:not-sr-only">Sign out</span>
+			</button>
+		</div>
+	);
+}
+
+/** Full-screen arena frame: header with brand, breadcrumb, optional center/actions, user menu. */
 export function ArenaShell({
 	crumbs,
 	center,
@@ -120,13 +143,7 @@ export function ArenaShell({
 				)}
 				<div className="flex min-w-0 items-center justify-end gap-3">
 					{actions}
-					<a
-						href={PLAYGROUND_HREF}
-						className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-					>
-						<ArrowLeftIcon className="size-3.5" aria-hidden="true" />
-						<span className="sr-only sm:not-sr-only">Back to playground</span>
-					</a>
+					<UserMenu />
 				</div>
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col">{children}</div>

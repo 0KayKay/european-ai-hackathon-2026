@@ -490,6 +490,53 @@ describe("expandable text in the run view", () => {
 		fireEvent.click(entry);
 		expect(line).toHaveClass("truncate");
 	});
+
+	it("collapses the live events again when the next case starts", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const events = hiddenMailboxRunRunning.live?.events ?? [];
+		const last = events[events.length - 1];
+		const withLong = [
+			...events.slice(0, -1),
+			{
+				...last,
+				kind: "agent_reply" as const,
+				node: "agent",
+				data: { text: LONG },
+			},
+		];
+		// The next case records its own events with the same sequence numbers.
+		const run = snapshots(
+			{
+				...hiddenMailboxRunRunning,
+				live: { case_id: "hm-07", events: withLong },
+			},
+			{
+				...hiddenMailboxRunRunning,
+				live: { case_id: "hm-08", events: withLong },
+			},
+		);
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: run.route,
+		});
+		const live = await screen.findByRole("region", { name: "Live sample" });
+		const latest = () =>
+			within(live).getByRole("list", { name: "Latest events" });
+		fireEvent.click(
+			within(latest())
+				.getAllByRole("button", { name: "Show more" })
+				.at(-1) as HTMLElement,
+		);
+		expect(
+			within(latest()).getByRole("button", { name: "Show less" }),
+		).toBeVisible();
+
+		run.next();
+		await tick();
+		await waitFor(() => expect(live).toHaveTextContent("Case 08"));
+		expect(
+			within(latest()).queryByRole("button", { name: "Show less" }),
+		).toBeNull();
+	});
 });
 
 describe("results", () => {

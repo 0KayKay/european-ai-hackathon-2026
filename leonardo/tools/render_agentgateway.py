@@ -1,10 +1,11 @@
-"""Render infrastructure/leonardo/agentgateway.yaml: the base config plus one route per Leonardo model.
+"""Render infrastructure/leonardo/agentgateway.yaml: the base config plus Leonardo and B300 routes.
 
 agentgateway refuses to start when a key file it references is missing, so the Leonardo routes
 cannot live in the base config, which every local stack uses. The opt-in Kustomize component
-replaces the config with this rendered copy instead. Every served_model in serve/profiles/ gets an
-OpenAI-compatible route to the leonardo-router Service, the router token as its key and the
-same optional request guardrails as the default route. Challenge guardrails run in the backend.
+replaces the config with this rendered copy instead. Every served_model in serve/profiles/ and
+b300/serve/models.json gets an OpenAI-compatible route to the leonardo-router Service, with the
+router token as its key and the same optional request guardrails as the default route.
+Challenge guardrails run in the backend.
 Exact model names win over the "*" route.
 
     python3 tools/render_agentgateway.py          # write
@@ -20,6 +21,13 @@ BASE = LEONARDO.parent / 'infrastructure/base/agentgateway.yaml'
 OUTPUT = LEONARDO.parent / 'infrastructure/leonardo/agentgateway.yaml'
 UPSTREAM = 'http://leonardo-router:8080/v1'
 TOKEN_FILE = '/var/run/leonardo-router/token'
+
+
+def served_models():
+    models = {json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')}
+    models.update(model['served_model'] for model in
+                  json.loads((LEONARDO.parent / 'b300/serve/models.json').read_text()).values())
+    return sorted(models)
 
 
 def guardrails(lines):
@@ -38,9 +46,8 @@ def render():
     if lines.count('  models:') != 1:
         raise SystemExit('Expected exactly one "  models:" line in ' + str(BASE))
     # Profiles can share a served name (the same model on another runtime); one route each.
-    models = sorted({json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')})
     entries = []
-    for model in models:
+    for model in served_models():
         entries += ['    - name: ' + model, '      provider: openAI', '      params:', '        baseUrl: ' + UPSTREAM,
                     '      auth:', '        key:', '          file: ' + TOKEN_FILE] + guardrails(lines)
     position = lines.index('  models:') + 1
@@ -61,8 +68,7 @@ def main():
         return
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(text)
-    print('Wrote {} with routes for: {}'.format(OUTPUT, ', '.join(sorted(
-        {json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')}))))
+    print('Wrote {} with routes for: {}'.format(OUTPUT, ', '.join(served_models())))
 
 
 if __name__ == '__main__':

@@ -13,8 +13,9 @@ GPT-OSS-Safeguard, with verified owned-resource cleanup. The earlier
 standalone Safety smoke test is preserved, and Safety was also checked
 in the current pair. **21 local tests passed.** See the
 [actual all-profile report](docs/CLI_ALL_PROFILES_20261028.md) and
-[coverage matrix](docs/validation.md). Shared-base ACLs, preparation-only
-installation, another laptop and Kubernetes routing still need separate checks.
+[coverage matrix](docs/validation.md). GLM was also connected through the public GKE link
+and agentgateway using an overlapping step in existing job `12482`. Shared-base ACLs,
+preparation-only installation, another laptop and a fresh `up --link` still need separate checks.
 
 ## Get the team branch
 
@@ -324,12 +325,22 @@ curl -sS http://127.0.0.1:13000/v1/chat/completions -H "Authorization: Bearer $K
 ```
 
 `503` from agentgateway means the link is down; `404 model_not_found` from the
-relay means the link works but this run does not serve that model. Other B300
-aliases (Nemotron, Safeguard) also pass the relay, but need their own routes in
-`infrastructure/leonardo/agentgateway.yaml` first. Tested locally with the real
+relay means the link works but this run does not serve that model. All B300
+aliases (GLM, Nemotron and Safeguard) have routes in
+`infrastructure/leonardo/agentgateway.yaml`, generated from `serve/models.json`
+by `leonardo/tools/render_agentgateway.py`. Deploy the updated gateway config
+before using the Nemotron or Safeguard aliases. Tested locally with the real
 chisel 1.13.0 server and client (tunnel, token, streaming, reconnect after a
-server restart, shutdown with the endpoint) and in `tests/test_link.py`; not yet
-on Curiosity or through the GKE load balancer.
+server restart, shutdown with the endpoint) and in `tests/test_link.py`.
+
+On 28 October 2026, an overlapping Slurm step attached the link to the already-ready
+GLM job `12482` in `/storage/hackathon_teams/eai-team09/base`. The public GKE link
+connected, agentgateway rejected unauthenticated requests (401), and its authenticated
+catalog listed all four B300 aliases. A completion through agentgateway returned `4`
+for `2+2` in 1.29 seconds, with the expected GLM alias and `finish_reason: stop`.
+Streaming also returned `4` and the terminal `[DONE]` event.
+This verifies the deployed GLM route; a fresh `up --link`, other models through GKE,
+reconnection and sustained load still need live checks.
 
 ### Stop and troubleshoot
 

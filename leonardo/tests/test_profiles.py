@@ -84,13 +84,25 @@ class GatewayRendering(unittest.TestCase):
         self.assertIn('/api/auth/authorize-internal', config)
         self.assertIn('file: /var/run/leonardo-router/token', config)
 
+    def test_b300_models_have_unique_authenticated_routes_before_the_fallback(self):
+        config = (REPO / 'infrastructure/leonardo/agentgateway.yaml').read_text()
+        models = json.loads((REPO / 'b300/serve/models.json').read_text())
+        for model in models.values():
+            route = '    - name: ' + model['served_model'] + '\n'
+            self.assertEqual(config.count(route), 1)
+            self.assertLess(config.index(route), config.index('    - name: "*"'))
+            entry = config.split(route, 1)[1].split('    - name:', 1)[0]
+            self.assertIn('baseUrl: http://leonardo-router:8080/v1', entry)
+            self.assertIn('file: /var/run/leonardo-router/token', entry)
+
 
 class Profiles(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         for part in ('leonardo/cli.py', 'leonardo/serve', 'leonardo/tools', 'leonardo/validation',
-                     'leonardo/install', 'leonardo/diagnostics', 'infrastructure/base', 'infrastructure/leonardo'):
+                     'leonardo/install', 'leonardo/diagnostics', 'infrastructure/base', 'infrastructure/leonardo',
+                     'b300/serve/models.json'):
             source, target = REPO / part, self.root / part
             if source.is_dir():
                 shutil.copytree(str(source), str(target), ignore=shutil.ignore_patterns('__pycache__'))

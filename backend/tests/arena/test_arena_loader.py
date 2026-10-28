@@ -322,17 +322,17 @@ def test_variant_can_override_a_model_parameter_of_one_role():
     }
     assert hard.agent.model.params.compact() == {
         "max_tokens": 512,
-        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
+        "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}},
     }
     assert level.variants["easy"].agent.model.params.compact() == {
         "max_tokens": 512,
-        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
+        "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}},
         "top_p": 0.9,
     }
     assert hard.red_team.attacker.params.compact() == {
         "temperature": 0.7,
         "max_tokens": 512,
-        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
+        "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}},
     }
 
 
@@ -362,7 +362,7 @@ def test_templates():
         render("{{a}}", {})
 
 
-def test_every_llm_role_defaults_to_qwen_on_leonardo():
+def test_every_llm_role_defaults_to_glm_on_b300():
     roles = [
         role
         for level_set in load_levels().values()
@@ -378,11 +378,11 @@ def test_every_llm_role_defaults_to_qwen_on_leonardo():
     }
     assert any(r["role"].startswith("guardrail:") for r in roles)
     for role in roles:
-        assert role["model"] == "qwen3-235b-a22b-fp8-leonardo", role["role"]
+        assert role["model"] == "glm-5.3-flash-leonardo", role["role"]
         assert role["endpoint"] == "agentgateway", role["role"]
         # vLLM serves this model with a 2,048-token context and rejects Gemini-only settings.
         assert role["params"]["max_tokens"] <= 1024, role["role"]
         assert "reasoning_effort" not in role["params"], role["role"]
         assert role["params"]["extra"] == {
-            "chat_template_kwargs": {"enable_thinking": False}
+            "chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}
         }, role["role"]

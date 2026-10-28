@@ -83,9 +83,9 @@ def test_level_view():
     assert body["models"][0] == {
         "role": "agent",
         "node": "agent",
-        "model": "qwen3-235b-a22b-fp8-leonardo",
+        "model": "glm-5.3-flash-leonardo",
         "endpoint": "agentgateway",
-        "params": {"max_tokens": 512, "extra": {"chat_template_kwargs": {"enable_thinking": False}}},
+        "params": {"max_tokens": 512, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
     }
     files = body["source"]["files"]
     assert files[0]["path"] == "email-review/level.yaml"

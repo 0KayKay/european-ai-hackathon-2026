@@ -10,6 +10,7 @@ import httpx
 import structlog
 from deepeval.errors import DeepEvalError
 from deepeval.models import LocalModel
+from deepeval.models.llms.local_model import retry_local
 from deepteam.attacks import single_turn
 from deepteam.attacks.multi_turn import (
     BadLikertJudge,
@@ -139,6 +140,9 @@ class ProgressStopped(Exception):
 class ArenaLocalModel(LocalModel):
     """Constrain schema requests at the endpoint, not only after generation."""
 
+    # Keep LocalModel's retries for rate limits, timeouts and connection errors:
+    # the client disables SDK retries because this decorator owns them.
+    @retry_local
     async def a_generate(
         self, prompt: str, schema: type[BaseModel] | None = None
     ) -> tuple[BaseModel | str, float]:

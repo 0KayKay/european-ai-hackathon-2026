@@ -25,6 +25,12 @@ preparation, downloads, compilation and inference belong inside the allocation.
 
 ## GLM: verified functional configuration
 
+The table and command below record the **historical** 2,048-token run. The
+current launcher configures 65,536 tokens, 16 sequence slots and 16,384-token
+chunked prefill on the same TP8/PP1 layout; those settings are not yet
+GPU-validated. See [GLM context sizing](glm-context.md) for the KV cache
+estimate, the vLLM startup lines to check and the two-TP4-server option.
+
 | Setting | Actual successful job 11393 |
 | --- | --- |
 | Checkpoint | `zai-org/GLM-5.3-Flash` |

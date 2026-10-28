@@ -10,7 +10,7 @@ unless a different machine or working directory is stated.
 
 | Model | Choose it for | API alias | Recorded server port | Configured context |
 | --- | --- | --- | --- | --- |
-| GLM-5.3-Flash | General chat, reasoning, producing tool calls | `glm-5.3-flash-leonardo` | 8000, compute loopback | 2,048 tokens |
+| GLM-5.3-Flash | General chat, reasoning, producing tool calls | `glm-5.3-flash-leonardo` | 8000, compute loopback | 65,536 tokens (historical runs: 2,048) |
 | Nemotron Ultra 550B NVFP4 | Large general model; reasoning or policy judgments | `nemotron-ultra-550b-b300` | 18085, private compute IP | 8,192 tokens |
 | Nemotron safety 4B | Classify a message against an explicit safety policy | `nemotron-content-safety-reasoning-4b-b300` | 18086, private compute IP | 4,096 tokens |
 
@@ -82,7 +82,8 @@ gateway URL**. Do not treat the historical Leonardo client port `18083` as proof
 that a B300 tunnel exists. The client sends the B300-tested template settings
 `reasoning_effort=low` and `clear_thinking=true`, temperature zero and a
 1,024-token default output budget. Reduce the output budget with `--max-tokens`
-if your input approaches the 2,048-token context limit.
+if your input approaches the context limit: 2,048 tokens in the historical
+experiment, 65,536 in the current launcher ([sizing](glm-context.md)).
 
 The historical GLM API validation covered authentication, catalog, arithmetic,
 English output, streaming, tool-call JSON and four concurrent requests. A tool

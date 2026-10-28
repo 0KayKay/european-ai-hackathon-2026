@@ -50,7 +50,7 @@ from hackathon.arena.registry.success import (
     offer_routing_checks,
 )
 from hackathon.arena.registry.tools import ToolState
-from tests.arena.legacy_models import legacy_model_levels
+from tests.arena.legacy_models import corrected_legacy_prompt, legacy_model_levels
 from hackathon.config import Settings
 
 MODES = {
@@ -155,13 +155,12 @@ def same(left, right) -> bool:
 # --- system prompt, agent, tools ------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "level_id,difficulty", [combo for combo in COMBOS if combo[0] != "offer-review"]
-)
+@pytest.mark.parametrize("level_id,difficulty", COMBOS)
 def test_system_prompt_matches_legacy(level_id, difficulty):
+    """Identical, except for the lines the level file corrected on purpose (offer-review's tool names)."""
     _, prompt = MODES[level_id]
-    assert level(level_id, difficulty).agent.system_prompt == prompt(
-        "User", difficulty.upper()
+    assert level(level_id, difficulty).agent.system_prompt == corrected_legacy_prompt(
+        level_id, prompt("User", difficulty.upper())
     )
 
 

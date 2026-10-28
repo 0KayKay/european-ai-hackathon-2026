@@ -45,6 +45,37 @@ def legacy_model_levels() -> dict:
 
 LEGACY_SYSTEM_PROMPTS = {"offer-review": challenge3_prompt}
 
+# The only lines the level files changed on purpose, (legacy, level). The rest of the prompt must stay legacy.
+PROMPT_CORRECTIONS = {
+    "offer-review": [
+        (
+            "   Use tool load_open_offers\n",
+            "   Use `load_open_offers()` to find pending requisitions and `parse_offer(requisition_id)` to read"
+            " an offer.\n",
+        ),
+        (
+            "1. Match `preliminary_requisition_id` using `load_open_requisitions()`",
+            "1. Match `requisition_id` using `load_open_offers()`",
+        ),
+        (
+            "- `parse_offer(package_files)` - Extract offer data",
+            "- `parse_offer(requisition_id)` - Extract the offer for a pending requisition",
+        ),
+        (
+            "- `get_price_reference(desc_or_sku, region)` - Fetch benchmark prices",
+            "- `get_price_reference(sku)` - Fetch the benchmark unit price for an item SKU",
+        ),
+    ]
+}
+
+
+def corrected_legacy_prompt(level_id: str, prompt: str) -> str:
+    """The legacy prompt with the deliberate corrections of the level file applied (each exactly once)."""
+    for old, new in PROMPT_CORRECTIONS.get(level_id, []):
+        assert prompt.count(old) == 1, (level_id, old)
+        prompt = prompt.replace(old, new)
+    return prompt
+
 
 def with_legacy_prompt(level_id: str, difficulty: str, resolved):
     """The resolved level with the legacy system prompt where the level file deliberately changed it."""

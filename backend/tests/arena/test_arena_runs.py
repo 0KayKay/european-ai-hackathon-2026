@@ -722,10 +722,24 @@ async def test_a_second_stop_does_not_interrupt_saving_the_stopped_run():
         return any(event["kind"] == "tool_result" for event in live["events"])
 
     await until(blocked)
+    active = harness.runs.active[run_id]
+    cancels: list[str] = []
+    cancel = active.cancel
+
+    def counted_cancel(status: str) -> None:
+        cancels.append(status)
+        cancel(status)
+
+    active.cancel = counted_cancel
     first = asyncio.create_task(harness.http.post(f"/api/v1/arena/runs/{run_id}/stop"))
     await asyncio.wait_for(store.held.wait(), 10)  # the first stop is saving the run
+
+    async def second_stop_cancelled():
+        return len(cancels) == 2
+
     second = asyncio.create_task(harness.http.post(f"/api/v1/arena/runs/{run_id}/stop"))
-    await asyncio.sleep(0.05)  # let the second stop reach the orchestrator while the save is held
+    # The second stop has tried to cancel while the save is held.
+    await until(second_stop_cancelled)
     release.set()
     assert (await first).status_code == (await second).status_code == 200
     assert (await store.get_run(run_id))["status"] == "stopped"

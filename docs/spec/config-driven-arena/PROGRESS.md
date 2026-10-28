@@ -36,7 +36,22 @@ sub-agents) → E (clean-up).
   2,048, judges and evaluator 1,024. The Leonardo `glm53` profile still has 2,048 tokens: lower them there.
 - New CI job `b300` (repository check, unit tests, vermin ≥ 3.9).
 
-## D · UI — in progress
+## D · UI — done
+
+- **Runs overview** on the start page below the levels: running/generating runs first with live Red/Green
+  progress (polled every 2 s while something runs), then finished runs newest first with ASR and FPR; start time
+  as date and time, duration; a row opens the live view or the results. The level view shows its latest 5 runs.
+  Runs were always stored; only the list was missing. The run summary API now also returns `title` and `rates`.
+- **← Back** at the top left of every sub-page (replay → results, run → level, level → overview).
+- **Generation is visible:** while a run generates, a panel with a spinner and "x of y cases generated" per team
+  replaces the empty live sample; new cases slide into the list.
+- **Truncated texts expand** inline (case inputs, live events, error texts).
+- **Absolute times:** Started / Ended / Duration on the run and results page, case start time in the replay,
+  absolute time as tooltip on the event log's relative times.
+- **Results page:** the four rate cards and "Where it was decided" are gone; an outcome donut sits next to the
+  confusion matrix with both rates (value + numerator/denominator as returned) below it.
+- Screenshots (mocked API) from the sub-agent: `01-overview-runs`, `03-run-generating`, `05-results`, … in the
+  session scratchpad (not in the repository).
 
 ## C · DeepTeam — multi-turn prompts done (see A)
 

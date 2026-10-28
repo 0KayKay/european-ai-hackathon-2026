@@ -1,0 +1,53 @@
+{
+  "glm53": {
+    "models": [
+      "glm"
+    ],
+    "image": "glm",
+    "gpus": 8,
+    "cpus": 64,
+    "memory": "960G",
+    "time": "04:00:00"
+  },
+  "nemotron": {
+    "models": [
+      "ultra",
+      "safety"
+    ],
+    "image": "nemotron",
+    "gpus": 5,
+    "cpus": 64,
+    "memory": "960G",
+    "time": "04:00:00"
+  },
+  "ultra": {
+    "models": [
+      "ultra"
+    ],
+    "image": "nemotron",
+    "gpus": 4,
+    "cpus": 64,
+    "memory": "960G",
+    "time": "04:00:00"
+  },
+  "safety": {
+    "models": [
+      "safety"
+    ],
+    "image": "nemotron",
+    "gpus": 1,
+    "cpus": 16,
+    "memory": "128G",
+    "time": "02:00:00"
+  },
+  "safeguard": {
+    "models": [
+      "safeguard"
+    ],
+    "image": "glm",
+    "gpus": 1,
+    "cpus": 16,
+    "memory": "128G",
+    "time": "02:00:00"
+  }
+}

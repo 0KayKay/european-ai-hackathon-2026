@@ -14,6 +14,7 @@ saved. See the [full CLI report](CLI_ALL_PROFILES_20261028.md).
 | Same-owner, same-image cache reuse | Safety → initial Ultra; paired cache → current Ultra; GLM → Safeguard | Exercised live. Reuse pins a node and does not skip all tuning. |
 | Preparation-only `install` | Implemented; not used as a separate job in this campaign | Not live-validated. |
 | Shared-base ACL management / a second user using this full launcher | Implemented ownership/private-folder rules | Not live-validated. |
+| Cluster link to agentgateway (`up --link`) | Local: real chisel 1.13.0 server and client, relay, token, streaming, reconnect, shutdown; `tests/test_link.py` | Not yet run on Curiosity or through the GKE load balancer. |
 | Kubernetes, another physical laptop, Windows, sustained load and natural time-limit expiry | Outside this campaign | Not validated. |
 
 ## Executed source

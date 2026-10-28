@@ -60,8 +60,9 @@ stay under the remote base's private `users/LOGIN/` folders.
 APIs listen on a private compute IP with a fresh key per model. The endpoint is
 published only after real API acceptance checks. `forward` adds every model port
 to one already-authenticated private SSH connection. This B300 laptop workflow
-does not need Leonardo's separate CPU router or CPU-queue installer, and does
-not automatically configure Kubernetes/agentgateway.
+does not need Leonardo's separate CPU router or CPU-queue installer. With
+`up --link`, the run also offers its models to the app's agentgateway in GKE
+through the existing cluster link; see [Connect to agentgateway](#connect-to-agentgateway-cluster-link).
 
 ## Installation
 
@@ -132,6 +133,7 @@ uses their own AXIS login and starts/manages their own allocations.
 | `forward TARGET` | Forwards all APIs in that run over one existing private SSH connection. |
 | `query TARGET` | Calls an API through an already-open local forward. |
 | `down TARGET` | Cancels only a matching owned job and checks the actual queue. |
+| `link setup`, `link token` | Configures the cluster link to agentgateway in GKE; prints or installs its router token. |
 
 `install`/`up` accept `--time HH:MM:SS`, `--node NODE`, `--reuse-job JOB_ID`.
 Maximum four hours; safety and Safeguard default to two, other profiles four.
@@ -260,6 +262,74 @@ If ports are occupied, match explicit forward/query overrides:
 Use `--output b300/.runtime/response.json` on a query to save final-response
 evidence without keys/hidden reasoning. Truncated or malformed classifier output
 is an error, not an accepted safe verdict.
+
+### Connect to agentgateway (cluster link)
+
+The app's agentgateway in GKE can call a B300 run's models, for example GLM as
+`glm-5.3-flash-leonardo`, which already has a route there. It uses Leonardo's
+cluster link unchanged ([design](../leonardo/docs/cluster-link.md),
+[Kubernetes side](../infrastructure/leonardo/README.md)): agentgateway calls the
+`leonardo-router` Service with a fixed router token, and the chisel server in GKE
+forwards that to reverse port 9000.
+
+On B300, `up PROFILE --link` starts `serve/link.py` in the serving job, on the
+batch host next to the model servers. Once the run's endpoint is published, it
+starts a relay on `127.0.0.1` and an outbound chisel client to the link server
+(`R:9000` → relay). The relay checks the router token, picks the model server by
+the request's `model` and calls it with that run's per-model key, which never
+leaves the node. It stops when the run's endpoint disappears or the job ends.
+`status` shows the link state (`waiting_for_models`, `connecting`, `connected`,
+`retrying` with chisel's error, `off`); the log is `link.log` in the run folder.
+The settings, the router token and the chisel password are kept in your private
+`users/LOGIN/link/`. The pinned chisel 1.13.0 is downloaded there on first use and
+checked against its SHA-256.
+
+One person's run holds the link: the GKE server accepts one client on port 9000,
+and the CLI refuses a second linked run of yours while one is active. The
+outbound connection needs internet on the compute node, which Curiosity has.
+Confirm with the organisers that a long-lived outbound connection is acceptable.
+
+**Kubernetes side, once** (see [deployment](../docs/deployment.md#4-activate-leonardo-only-after-cineca-approval)):
+create the `leonardo-link` Secret (chisel server key and `users.json` with the
+`leonardo:PASSWORD` user) and the `leonardo-router` Secret (router token), set
+the GitHub variable `LEONARDO_ENABLED=true` and deploy. Get the router token from
+B300 so the two match:
+
+```bash
+./b300/cli.py link token > "$HACKATHON_LINK_PRIVATE/router-token"   # creates it once, then prints it
+# If the Secret already exists, install its token on B300 instead:
+#   kubectl get secret leonardo-router -o jsonpath='{.data.token}' | base64 -d > token-file
+#   ./b300/cli.py link token --token-file token-file
+```
+
+**B300 side:**
+
+```bash
+FINGERPRINT=$(kubectl logs deployment/leonardo-link | grep -o 'Fingerprint .*' | cut -d' ' -f2)
+./b300/cli.py link setup --server https://european-ai-hackathon-2026.codify.ch/leonardo-link \
+  --fingerprint "$FINGERPRINT" --auth-file "$HACKATHON_LINK_PRIVATE/link_auth"
+./b300/cli.py up glm53 --link
+./b300/cli.py status          # ready, then cluster_link: connected
+```
+
+`link_auth` holds `leonardo:PASSWORD`, the same user as in `users.json`. It is
+sent over SSH stdin, never on a command line. Then, from your machine:
+
+```bash
+kubectl port-forward svc/agentgateway 13000:3000 &
+KEY=$(kubectl get secret gateway-internal -o jsonpath='{.data.key}' | base64 -d)
+curl -sS http://127.0.0.1:13000/v1/chat/completions -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' -d '{"model":"glm-5.3-flash-leonardo",
+  "messages":[{"role":"user","content":"Hi"}],"chat_template_kwargs":{"reasoning_effort":"low"}}'
+```
+
+`503` from agentgateway means the link is down; `404 model_not_found` from the
+relay means the link works but this run does not serve that model. Other B300
+aliases (Nemotron, Safeguard) also pass the relay, but need their own routes in
+`infrastructure/leonardo/agentgateway.yaml` first. Tested locally with the real
+chisel 1.13.0 server and client (tunnel, token, streaming, reconnect after a
+server restart, shutdown with the endpoint) and in `tests/test_link.py`; not yet
+on Curiosity or through the GKE load balancer.
 
 ### Stop and troubleshoot
 

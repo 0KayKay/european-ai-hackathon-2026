@@ -37,6 +37,58 @@ def mine(base):
     return private(base / 'users' / identifier(getpass.getuser()))
 
 
+def link_dir(base):
+    """users/LOGIN/link: cluster link settings, router token and chisel password. Never shared."""
+    return private(mine(base) / 'link')
+
+
+def write_secret(path, value):
+    fd = os.open(str(path) + '.tmp', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, 'w') as handle:
+        handle.write(value + '\n')
+    os.replace(str(path) + '.tmp', str(path))
+
+
+def link(base, args, secret):
+    """setup: server URL, fingerprint, optional proxy, chisel user:password (stdin).
+    token: print the router token for agentgateway, creating it once; with a token on stdin, install it."""
+    folder = link_dir(base)
+    if args['link_action'] == 'setup':
+        server, fingerprint = args.get('server') or '', args.get('fingerprint') or ''
+        if not re.fullmatch(r'https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?', server):
+            raise ValueError('Server must be the https:// URL of the chisel server, e.g. https://HOST/leonardo-link')
+        if not re.fullmatch(r'[A-Za-z0-9+/=:]{20,}', fingerprint):
+            raise ValueError('Fingerprint must be the chisel server fingerprint (kubectl logs deploy/leonardo-link)')
+        if args.get('proxy') and not re.fullmatch(r'https?://[A-Za-z0-9.:@-]+/?', args['proxy']):
+            raise ValueError('Invalid proxy URL')
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+:[^\s]+', secret or ''):
+            raise ValueError('Expected the chisel user:password on stdin')
+        write_secret(folder / 'link_auth', secret)
+        write_secret(folder / 'link.json', json.dumps({'server': server, 'fingerprint': fingerprint,
+            'proxy': args.get('proxy'), 'remote_port': 9000}))
+        return {'phase': 'link_configured', 'server': server}
+    if args['link_action'] == 'token':
+        path = folder / 'router_token'
+        if secret:
+            if len(secret) < 32 or any(c.isspace() for c in secret):
+                raise ValueError('Router token must be at least 32 characters without whitespace')
+            write_secret(path, secret)
+        elif not path.exists():
+            write_secret(path, secrets.token_urlsafe(32))
+        return {'token': path.read_text().strip()}
+    raise ValueError('Unknown link action')
+
+
+def link_ready(base):
+    folder = link_dir(base)
+    missing = [n for n in ('link.json', 'link_auth', 'router_token') if not (folder / n).exists()]
+    if missing:
+        raise ValueError('Cluster link not configured (missing {}); run: cli.py link setup and cli.py link token'
+                         .format(', '.join(missing)))
+    return folder
+
+
 def jobs():
     text = execute(['squeue', '--noheader', '--user', str(os.getuid()), '--format=%i|%T|%u|%j|%R'])
     output = {}
@@ -134,6 +186,16 @@ def start(base, args):
                 raise RuntimeError('Uncertain submission exists; inspect its run and Slurm before resubmitting')
             if str(receipt.get('job_id')) in live:
                 return {'phase': 'already_active', 'run_id': path.name, 'job_id': receipt['job_id']}
+        linked = None
+        if args.get('link'):
+            if args['mode'] != 'serve':
+                raise ValueError('--link applies to up only')
+            linked = str(link_ready(base))
+            # Only one client can hold the reverse port in GKE: one linked run at a time.
+            for path, config in runs(base):
+                receipt = load(path / 'submission.json') if (path / 'submission.json').exists() else {}
+                if config.get('link_dir') and str(receipt.get('job_id')) in live:
+                    raise ValueError('Run {} already holds the cluster link; down it first'.format(path.name))
         image = load(ROOT / 'images.json')[profile['image']]
         reuse = None
         node = args.get('node')
@@ -157,6 +219,8 @@ def start(base, args):
         shutil.copytree(ROOT, path / 'serve', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         config = {'profile': profile_id, 'mode': args['mode'], 'owner_uid': os.getuid(),
             'image': image, 'reuse_scratch': reuse, 'created_at_utc': now()}
+        if linked:
+            config['link_dir'] = linked
         save(path / 'RUN_CONFIG.json', config)
         name = 'b300-' + profile_id + '-' + run_id[-6:]
         duration = args.get('time') or profile['time']
@@ -189,6 +253,9 @@ def status(base):
             'queue_reason_or_node': live.get(job, {}).get('reason'),
             'phase': state.get('phase', receipt.get('phase')),
             'ready': ready_session(job, state, endpoint, os.getuid(), live)})
+        if config.get('link_dir'):
+            link_state = load(path / 'link-state.json') if (path / 'link-state.json').exists() else {}
+            rows[-1]['cluster_link'] = {k: link_state.get(k) for k in ('state', 'error', 'since')}
     return {'runs': rows}
 
 
@@ -242,6 +309,8 @@ def main():
         elif action in ('up', 'install'):
             args['mode'] = 'install' if action == 'install' else 'serve'
             result = start(base, args)
+        elif action == 'link':
+            result = link(base, args, sys.stdin.read().strip() if args.get('stdin') else None)
         elif action == 'status':
             result = status(base)
         elif action == 'fetch':

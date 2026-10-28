@@ -107,10 +107,13 @@ def sync(transport):
     return target
 
 
-def remote(transport, release, base, action, **fields):
+def remote(transport, release, base, action, data=None, **fields):
+    """Run serve/manage.py; `data` (secrets) goes over stdin, never onto a command line."""
+    if data is not None:
+        fields['stdin'] = True
     message = json.dumps(dict(action=action, base=base, **fields))
     output = transport.call('source /etc/profile.d/modules.sh; module load slurm; python3 ' +
-        release + '/serve/manage.py ' + shlex.quote(message), timeout=120)
+        release + '/serve/manage.py ' + shlex.quote(message), data=data, timeout=120)
     data = json.loads(output)
     if not data['ok']:
         raise RuntimeError(data.get('message', 'Private run management failed'))
@@ -216,6 +219,16 @@ def parser():
         p.add_argument('--time')
         p.add_argument('--node')
         p.add_argument('--reuse-job', help='Reuse verified owned scratch from a finished job; pins its node')
+        if name == 'up':
+            p.add_argument('--link', action='store_true',
+                           help='Also offer the models to agentgateway in GKE through the cluster link (see link)')
+    p = commands.add_parser('link', help='Configure the cluster link to agentgateway in GKE, or print its router token')
+    p.add_argument('link_action', choices=['setup', 'token'])
+    p.add_argument('--server', help='setup: chisel server URL, e.g. https://european-ai-hackathon-2026.codify.ch/leonardo-link')
+    p.add_argument('--fingerprint', help='setup: chisel server fingerprint (kubectl logs deployment/leonardo-link)')
+    p.add_argument('--proxy', help='setup: HTTP proxy for the outbound connection, if one is required')
+    p.add_argument('--auth-file', help='setup: private file with the chisel user:password (link_auth)')
+    p.add_argument('--token-file', help='token: install this router token instead of creating one')
     for name in ('fetch', 'down'):
         p = commands.add_parser(name)
         p.add_argument('target', help='Your profile, run ID or recorded job ID')
@@ -269,6 +282,17 @@ def main():
                     if getattr(args, flag) is not None:
                         command += ['--' + flag.replace('_', '-'), getattr(args, flag)]
                 return subprocess.run(command).returncode
+        elif args.command == 'link':
+            if args.link_action == 'setup':
+                if not (args.server and args.fingerprint and args.auth_file):
+                    raise ValueError('link setup needs --server, --fingerprint and --auth-file')
+                result = remote(transport, release, args.base, 'link', link_action='setup', server=args.server,
+                    fingerprint=args.fingerprint, proxy=args.proxy, data=Path(args.auth_file).expanduser().read_bytes())
+                print('Cluster link configured for ' + result['server'] + '. Start a run with: up PROFILE --link')
+            else:
+                data = Path(args.token_file).expanduser().read_bytes() if args.token_file else None
+                # Only the token on stdout, so it can be piped into a Kubernetes Secret.
+                print(remote(transport, release, args.base, 'link', link_action='token', data=data)['token'])
         elif args.command == 'logs':
             previous = None
             while True:

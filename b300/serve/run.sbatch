@@ -9,6 +9,8 @@ cd "$B300_RUN"
 B300_ROOT="$B300_RUN/serve"
 B300_IMAGE=$(python3 -c 'import json; print(json.load(open("RUN_CONFIG.json"))["image"])')
 B300_REUSE=$(python3 -c 'import json; print(json.load(open("RUN_CONFIG.json")).get("reuse_scratch") or "")')
+B300_LINK_DIR=$(python3 -c 'import json; print(json.load(open("RUN_CONFIG.json")).get("link_dir") or "")')
+B300_LINK_PID=''
 if [[ -n "$B300_REUSE" ]]; then
   [[ "$B300_REUSE" == /tmp/b300-models.* && -O "$B300_REUSE" && -r "$B300_REUSE/vllm.sqsh" ]]
   B300_SCRATCH="$B300_REUSE"
@@ -18,6 +20,7 @@ fi
 printf '%s\n' "$B300_SCRATCH" > scratch-path
 cleanup() {
   # This private run's files only. Slurm terminates the owned step itself.
+  if [[ -n "$B300_LINK_PID" ]]; then kill "$B300_LINK_PID" 2>/dev/null || true; fi
   rm -f "$B300_RUN/endpoint.json" "$B300_RUN/glm.api-key" \
     "$B300_RUN/ultra.api-key" "$B300_RUN/safety.api-key" "$B300_RUN/safeguard.api-key"
 }
@@ -33,6 +36,11 @@ export VLLM_ENGINE_READY_TIMEOUT_S=5400
 scontrol show job -d "$SLURM_JOB_ID" > slurm-allocation.txt
 if [[ ! -r "$B300_SCRATCH/vllm.sqsh" ]]; then
   enroot import --output "$B300_SCRATCH/vllm.sqsh" "docker://$B300_IMAGE"
+fi
+# up --link: the cluster link (relay + outbound chisel client) waits for the endpoint, on this host.
+if [[ -n "$B300_LINK_DIR" ]]; then
+  python3 "$B300_ROOT/link.py" --run "$B300_RUN" --link-dir "$B300_LINK_DIR" > link.log 2>&1 &
+  B300_LINK_PID=$!
 fi
 # Keep the event's mandatory prolog and Python hook; never bypass them.
 env -u TMPDIR srun --container-image="$B300_SCRATCH/vllm.sqsh" \

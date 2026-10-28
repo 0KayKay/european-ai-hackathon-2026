@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FILES = ('common.py', 'manage.py', 'server.py', 'run.sbatch', 'validation.py',
-    'cubin_overlay.py', 'check_release.py', 'profiles.json', 'models.json', 'images.json',
+    'cubin_overlay.py', 'check_release.py', 'link.py', 'profiles.json', 'models.json', 'images.json',
     'site.example.json', 'glm-client-profile.json', 'safeguard.py', 'vendor/inference.py', 'vendor/test_endpoint.py')
 
 

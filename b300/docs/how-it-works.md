@@ -65,8 +65,10 @@ workflow and was exercised with a distinct account.
 
 The default remote ports are preferred, not guaranteed: if a shared node already
 uses one, the server chooses an available private port and records it. Laptop
-ports remain explicit and are overrideable. No permanent public endpoint,
-unbounded allocation renewal or Kubernetes route is created.
+ports remain explicit and are overrideable. No permanent public endpoint or
+unbounded allocation renewal is created. Only `up --link` connects a run to
+Kubernetes: an outbound chisel tunnel to the app's existing link server, which
+ends with the run ([README](../README.md#connect-to-agentgateway-cluster-link)).
 
 ## Important B300 differences
 

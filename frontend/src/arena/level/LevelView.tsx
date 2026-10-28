@@ -173,6 +173,10 @@ export function LevelView({
 				{ label: "Levels", href: arenaHref({ name: "levels" }) },
 				{ label: title },
 			]}
+			back={{
+				href: arenaHref({ name: "levels" }),
+				label: "Back to the level overview",
+			}}
 			center={
 				<DifficultySwitch
 					value={difficulty}

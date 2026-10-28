@@ -1,4 +1,9 @@
-import { AlertTriangleIcon, LogOutIcon, ShieldIcon } from "lucide-react";
+import {
+	AlertTriangleIcon,
+	ArrowLeftIcon,
+	LogOutIcon,
+	ShieldIcon,
+} from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -85,11 +90,14 @@ function UserMenu() {
 /** Full-screen arena frame: header with brand, breadcrumb, optional center/actions, user menu. */
 export function ArenaShell({
 	crumbs,
+	back,
 	center,
 	actions,
 	children,
 }: {
 	crumbs: Crumb[];
+	/** "← Back" at the top left: to the parent page (`label` names it for screen readers). */
+	back?: { href: string; label: string };
 	center?: ReactNode;
 	actions?: ReactNode;
 	children: ReactNode;
@@ -98,6 +106,17 @@ export function ArenaShell({
 		<div className="flex h-dvh w-full flex-col bg-slate-50 text-slate-900">
 			<header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b bg-white px-4 py-2.5 lg:h-14 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:py-0">
 				<div className="flex min-w-0 items-center gap-3">
+					{back && (
+						<a
+							href={back.href}
+							aria-label={back.label}
+							title={back.label}
+							className="flex h-8 shrink-0 items-center gap-1 rounded-md border bg-white px-2.5 text-[13px] font-medium text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-500"
+						>
+							<ArrowLeftIcon className="size-3.5" aria-hidden="true" />
+							Back
+						</a>
+					)}
 					<a
 						href={arenaHref({ name: "levels" })}
 						className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-blue-500"

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { runExportUrl, stopRun } from "../api";
 import {
 	ArenaShell,
+	difficultyLabel,
 	ErrorState,
 	LoadingState,
 	RUN_STATUS_TONES,
@@ -126,6 +127,21 @@ export function RunPage({ runId }: { runId: string }) {
 	return (
 		<ArenaShell
 			crumbs={runCrumbs(run, runId, true)}
+			back={
+				run
+					? {
+							href: arenaHref({
+								name: "level",
+								level: run.level,
+								difficulty: run.difficulty,
+							}),
+							label: `Back to ${run.title ?? run.level} · ${difficultyLabel(run.difficulty)}`,
+						}
+					: {
+							href: arenaHref({ name: "levels" }),
+							label: "Back to the level overview",
+						}
+			}
 			center={run && <StatusPill run={run} />}
 			actions={
 				run &&

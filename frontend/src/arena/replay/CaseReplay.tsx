@@ -9,10 +9,14 @@ import {
 	OutcomeBadge,
 	runCrumbs,
 } from "../components";
-import { formatDuration } from "../format";
+import { formatDateTime, formatDuration } from "../format";
 import { ArenaGraph } from "../graph/ArenaGraph";
 import { arenaHref } from "../router";
-import type { CaseDetail, CaseSummary } from "../types";
+import {
+	ACTIVE_RUN_STATUSES,
+	type CaseDetail,
+	type CaseSummary,
+} from "../types";
 import { useArenaQuery } from "../useArenaQuery";
 import { EventLog } from "./EventLog";
 import { highlightAt } from "./events";
@@ -206,11 +210,29 @@ export function CaseReplay({
 				...runCrumbs(run.data, runId),
 				{ label: `Case ${data?.label ?? caseId}` },
 			]}
+			back={{
+				href: arenaHref({ name: "run", runId }),
+				label:
+					run.data && ACTIVE_RUN_STATUSES.includes(run.data.status)
+						? "Back to the run"
+						: "Back to the results",
+			}}
 			center={
 				data && (
-					<div className="flex min-w-0 items-center gap-2.5 text-[13px] text-slate-600">
+					<div className="flex max-w-[min(34rem,42vw)] min-w-0 items-center gap-2.5 text-[13px] text-slate-600 max-lg:max-w-full">
 						{data.outcome && <OutcomeBadge outcome={data.outcome} />}
 						<span className="truncate">{caseFacts(data)}</span>
+						{data.started_at && (
+							<span className="shrink-0 whitespace-nowrap">
+								· started{" "}
+								<time
+									dateTime={data.started_at}
+									className="font-medium text-slate-900 tabular-nums"
+								>
+									{formatDateTime(data.started_at, { seconds: true })}
+								</time>
+							</span>
+						)}
 					</div>
 				)
 			}

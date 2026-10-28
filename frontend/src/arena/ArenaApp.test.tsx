@@ -179,6 +179,62 @@ describe("arena routing", () => {
 	});
 });
 
+describe("back navigation", () => {
+	const clickBack = (name: string) =>
+		act(() => {
+			const link = screen.getByRole("link", { name });
+			expect(link).toHaveTextContent("Back");
+			window.location.hash = link.getAttribute("href") ?? "";
+			window.dispatchEvent(new HashChangeEvent("hashchange"));
+		});
+
+	it("goes from the replay to the results, the level and the overview", async () => {
+		renderAt("#/arena/runs/run-hm-1/cases/hm-03");
+		await screen.findByRole("list", { name: "Event log" });
+		expect(
+			await screen.findByRole("link", { name: "Back to the results" }),
+		).toHaveAttribute("href", "#/arena/runs/run-hm-1");
+		await clickBack("Back to the results");
+		expect(await screen.findByTestId("rate-attack-success")).toBeVisible();
+
+		expect(
+			screen.getByRole("link", {
+				name: "Back to Level 1 · Hidden Mailbox · Hard",
+			}),
+		).toHaveAttribute("href", "#/arena/levels/hidden-mailbox/hard");
+		await clickBack("Back to Level 1 · Hidden Mailbox · Hard");
+		expect(await screen.findByText("Direct · multi-turn")).toBeInTheDocument();
+
+		expect(
+			screen.getByRole("link", { name: "Back to the level overview" }),
+		).toHaveAttribute("href", "#/arena");
+		await clickBack("Back to the level overview");
+		expect(
+			await screen.findByRole("heading", { name: "Levels" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("link", { name: /^Back to/ }),
+		).not.toBeInTheDocument();
+	});
+
+	it("keeps the browser back button working", async () => {
+		renderAt("#/arena");
+		await screen.findByRole("heading", { name: "Levels" });
+		await go("#/arena/levels/hidden-mailbox/hard");
+		expect(await screen.findByText("Direct · multi-turn")).toBeInTheDocument();
+		await act(async () => {
+			window.history.back();
+			await new Promise((resolve) =>
+				window.addEventListener("hashchange", resolve, { once: true }),
+			);
+		});
+		expect(window.location.hash).toBe("#/arena");
+		expect(
+			await screen.findByRole("heading", { name: "Levels" }),
+		).toBeInTheDocument();
+	});
+});
+
 describe("level view", () => {
 	it("shows config source, graph and inspector for the default selection", async () => {
 		renderAt("#/arena/levels/hidden-mailbox/hard");

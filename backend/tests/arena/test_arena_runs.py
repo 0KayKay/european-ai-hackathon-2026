@@ -722,8 +722,12 @@ async def test_a_second_stop_does_not_interrupt_saving_the_stopped_run():
     run_id = summary["id"]
 
     async def blocked():
-        live = (await harness.get(f"/runs/{run_id}"))["live"] or {"events": []}
-        return any(event["kind"] == "tool_result" for event in live["events"])
+        # Case 02 (gated) must be the one holding, not case 01 passing by on a slow machine.
+        run = await harness.get(f"/runs/{run_id}")
+        live = run["live"] or {"case_id": None, "events": []}
+        return live["case_id"] == by_label(run["cases"])["02"]["id"] and any(
+            event["kind"] == "tool_result" for event in live["events"]
+        )
 
     await until(blocked)
     active = harness.runs.active[run_id]

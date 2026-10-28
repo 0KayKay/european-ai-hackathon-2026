@@ -382,6 +382,8 @@ function LiveSample({ run }: { run: RunDetail }) {
 							</p>
 						)}
 						<EventLog
+							// Event seqs restart with each case: a new case must not inherit expanded entries.
+							key={live.case_id}
 							events={shown}
 							team={item?.team ?? "red"}
 							graph={graph}

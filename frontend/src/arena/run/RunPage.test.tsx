@@ -36,7 +36,6 @@ vi.mock("../../lib/auth-client", () => ({
 		signOut: vi.fn(),
 	},
 }));
-vi.mock("../../AGUIPlayground", () => ({ default: () => null }));
 
 beforeAll(mockReactFlow);
 afterEach(() => {

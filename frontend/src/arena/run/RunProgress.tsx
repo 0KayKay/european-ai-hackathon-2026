@@ -1,8 +1,8 @@
 import { AlertTriangleIcon, CheckIcon, Loader2Icon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getLevel } from "../api";
-import { OutcomeBadge } from "../components";
+import { ExpandableText, OutcomeBadge } from "../components";
 import { formatParams } from "../format";
 import { ArenaGraph } from "../graph/ArenaGraph";
 import { EventLog } from "../replay/EventLog";
@@ -110,6 +110,81 @@ function caseStatus(item: CaseSummary, liveId: string | undefined) {
 	);
 }
 
+/** One generated case: header (links to the replay once decided) and its input, expandable. */
+function CaseQueueRow({
+	runId,
+	item,
+	liveId,
+}: {
+	runId: string;
+	item: CaseSummary;
+	liveId: string | undefined;
+}) {
+	const [open, setOpen] = useState(false);
+	const header = (
+		<>
+			<span className="font-mono text-slate-500">
+				{item.team === "green" ? item.label : `#${item.label}`}
+			</span>
+			<span
+				className={cn(
+					"truncate",
+					item.team === "red" ? "text-slate-700" : "text-emerald-700",
+				)}
+			>
+				{item.attack_type ?? "benign"}
+			</span>
+			<span className="ml-auto shrink-0">{caseStatus(item, liveId)}</span>
+		</>
+	);
+	const headerClass = "flex items-center gap-2 text-xs";
+	return (
+		<li
+			data-case={item.label}
+			className={cn(
+				// New cases slide in as they are generated.
+				"flex flex-col gap-1 border-b border-slate-100 px-4 py-2.5 animate-in fade-in-0 slide-in-from-top-1 duration-300",
+				item.id === liveId && "bg-blue-50/50",
+			)}
+		>
+			{item.outcome !== null ? (
+				<a
+					href={arenaHref({ name: "case", runId, caseId: item.id })}
+					aria-label={`Replay case ${item.label}`}
+					className={cn(
+						headerClass,
+						"-mx-1 rounded px-1 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-500",
+					)}
+				>
+					{header}
+				</a>
+			) : (
+				<span className={headerClass}>{header}</span>
+			)}
+			{item.input_preview ? (
+				// biome-ignore lint/a11y/useKeyWithClickEvents: "Show more" is the keyboard target.
+				// biome-ignore lint/a11y/noStaticElementInteractions: see above.
+				<div
+					onClick={() => setOpen((o) => !o)}
+					className="cursor-pointer text-[13px] text-slate-600"
+				>
+					<ExpandableText
+						text={item.input_preview}
+						open={open}
+						onOpenChange={setOpen}
+					/>
+				</div>
+			) : (
+				<span className="truncate text-[13px] text-slate-400 italic">
+					{item.team === "red"
+						? "Generated when the case starts"
+						: "Not generated yet"}
+				</span>
+			)}
+		</li>
+	);
+}
+
 /** Generated cases with their input, visible as soon as they exist (R-RED-4). */
 function CaseQueue({ run }: { run: RunDetail }) {
 	const liveId = run.live?.case_id;
@@ -132,70 +207,14 @@ function CaseQueue({ run }: { run: RunDetail }) {
 				</p>
 			) : (
 				<ul aria-label="Cases" className="min-h-0 flex-1 overflow-y-auto">
-					{run.cases.map((item) => {
-						const decided = item.outcome !== null;
-						const body = (
-							<>
-								<span className="flex items-center gap-2 text-xs">
-									<span className="font-mono text-slate-500">
-										{item.team === "green" ? item.label : `#${item.label}`}
-									</span>
-									<span
-										className={cn(
-											"truncate",
-											item.team === "red"
-												? "text-slate-700"
-												: "text-emerald-700",
-										)}
-									>
-										{item.attack_type ?? "benign"}
-									</span>
-									<span className="ml-auto shrink-0">
-										{caseStatus(item, liveId)}
-									</span>
-								</span>
-								<span
-									className={cn(
-										"truncate text-[13px]",
-										item.input_preview
-											? "text-slate-600"
-											: "text-slate-400 italic",
-									)}
-								>
-									{item.input_preview ??
-										(item.team === "red"
-											? "Generated when the case starts"
-											: "Not generated yet")}
-								</span>
-							</>
-						);
-						return (
-							<li
-								key={item.id}
-								data-case={item.label}
-								className={cn(
-									// New cases slide in as they are generated.
-									"border-b border-slate-100 animate-in fade-in-0 slide-in-from-top-1 duration-300",
-									item.id === liveId && "bg-blue-50/50",
-								)}
-							>
-								{decided ? (
-									<a
-										href={arenaHref({
-											name: "case",
-											runId: run.id,
-											caseId: item.id,
-										})}
-										className="flex flex-col gap-1 px-4 py-2.5 hover:bg-slate-50"
-									>
-										{body}
-									</a>
-								) : (
-									<div className="flex flex-col gap-1 px-4 py-2.5">{body}</div>
-								)}
-							</li>
-						);
-					})}
+					{run.cases.map((item) => (
+						<CaseQueueRow
+							key={item.id}
+							runId={run.id}
+							item={item}
+							liveId={liveId}
+						/>
+					))}
 				</ul>
 			)}
 		</section>

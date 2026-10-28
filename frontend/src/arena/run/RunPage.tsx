@@ -8,6 +8,7 @@ import {
 	ArenaShell,
 	difficultyLabel,
 	ErrorState,
+	ExpandableText,
 	LoadingState,
 	RUN_STATUS_TONES,
 	runCrumbs,
@@ -58,8 +59,8 @@ function StopButton({
 	return (
 		<>
 			{error && (
-				<span role="alert" className="max-w-56 truncate text-xs text-red-600">
-					{error}
+				<span role="alert" className="max-w-72 text-xs text-red-600">
+					<ExpandableText text={error} threshold={40} />
 				</span>
 			)}
 			<Button

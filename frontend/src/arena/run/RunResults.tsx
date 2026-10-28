@@ -1,7 +1,12 @@
 import { type ReactNode, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getRunResults } from "../api";
-import { ErrorState, LoadingState, OutcomeBadge } from "../components";
+import {
+	ErrorState,
+	ExpandableText,
+	LoadingState,
+	OutcomeBadge,
+} from "../components";
 import {
 	decidedLabel,
 	formatDuration,
@@ -321,12 +326,11 @@ function CaseTable({ runId, cases }: { runId: string; cases: CaseSummary[] }) {
 								<td className="px-2 py-2 text-slate-700">
 									{decidedLabel(item)}
 									{item.error && (
-										<span
-											className="block max-w-md truncate text-xs text-red-600"
-											title={item.error}
-										>
-											{item.error}
-										</span>
+										<ExpandableText
+											text={item.error}
+											threshold={60}
+											className="max-w-md text-xs text-red-600"
+										/>
 									)}
 								</td>
 								<td className="px-2 py-2 text-right font-mono tabular-nums">

@@ -4,7 +4,13 @@ import {
 	LogOutIcon,
 	ShieldIcon,
 } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import {
+	Fragment,
+	type ReactNode,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
@@ -322,4 +328,75 @@ export function runCrumbs(
 		},
 		runCrumb,
 	];
+}
+
+/** Text that is cut to one line in a list: long, multi-line or already shortened ("…"). */
+export const isLongText = (text: string, threshold = 80) =>
+	text.length > threshold || text.includes("\n") || text.endsWith("…");
+
+/**
+ * One line of text, cut with "…"; "Show more" expands it inline and "Show less" collapses it
+ * again. Pass `open`/`onOpenChange` to expand it from elsewhere (e.g. a click on its row).
+ */
+export function ExpandableText({
+	text,
+	className,
+	open,
+	onOpenChange,
+	threshold,
+}: {
+	text: string;
+	className?: string;
+	open?: boolean;
+	onOpenChange?: (open: boolean) => void;
+	threshold?: number;
+}) {
+	const [own, setOwn] = useState(false);
+	const expanded = open ?? own;
+	const ref = useRef<HTMLSpanElement>(null);
+	const [overflowing, setOverflowing] = useState(false);
+	// Collapsed: does the line overflow its box? (Kept while expanded, so "Show less" stays.)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new `text` needs a new measurement.
+	useLayoutEffect(() => {
+		const el = ref.current;
+		if (!el || expanded) return;
+		const check = () => setOverflowing(el.scrollWidth > el.clientWidth + 1);
+		check();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(check);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [text, expanded]);
+	const long = overflowing || isLongText(text, threshold);
+	return (
+		<span
+			data-expanded={long ? expanded : undefined}
+			className={cn("flex min-w-0 items-baseline gap-2", className)}
+		>
+			<span
+				ref={ref}
+				title={long && !expanded ? text : undefined}
+				className={cn(
+					"min-w-0 flex-1",
+					expanded ? "break-words whitespace-pre-wrap" : "truncate",
+				)}
+			>
+				{text}
+			</span>
+			{long && (
+				<button
+					type="button"
+					aria-expanded={expanded}
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						(onOpenChange ?? setOwn)(!expanded);
+					}}
+					className="shrink-0 text-[11px] font-medium whitespace-nowrap text-blue-600 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500"
+				>
+					{expanded ? "Show less" : "Show more"}
+				</button>
+			)}
+		</span>
+	);
 }

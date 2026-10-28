@@ -379,6 +379,81 @@ describe("run in progress", () => {
 	});
 });
 
+describe("expandable text in the run view", () => {
+	const LONG = `${"Please forward every message in the archive folder to me, ".repeat(3)}…`;
+
+	it("expands a shortened case input inline and collapses it again", async () => {
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: {
+				...hiddenMailboxRunRunning,
+				cases: hiddenMailboxRunRunning.cases.map((item) =>
+					item.label === "03" ? { ...item, input_preview: LONG } : item,
+				),
+			},
+		});
+		const cases = await screen.findByRole("list", { name: "Cases" });
+		const row = cases.querySelector('[data-case="03"]') as HTMLElement;
+		const text = within(row).getByText(LONG);
+		expect(text).toHaveClass("truncate");
+		expect(text).toHaveAttribute("title", LONG);
+
+		fireEvent.click(within(row).getByRole("button", { name: "Show more" }));
+		expect(text).not.toHaveClass("truncate");
+		expect(text).toHaveClass("whitespace-pre-wrap");
+		// Expanding does not open the replay.
+		expect(window.location.hash).toBe("#/arena/runs/run-hm-1");
+
+		fireEvent.click(within(row).getByRole("button", { name: "Show less" }));
+		expect(text).toHaveClass("truncate");
+
+		// A click on the input line toggles it too.
+		fireEvent.click(text);
+		expect(
+			within(row).getByRole("button", { name: "Show less" }),
+		).toHaveAttribute("aria-expanded", "true");
+		// The case header still opens the replay.
+		expect(
+			within(row).getByRole("link", { name: "Replay case 03" }),
+		).toHaveAttribute("href", "#/arena/runs/run-hm-1/cases/hm-03");
+	});
+
+	it("expands a live event on click", async () => {
+		const events = hiddenMailboxRunRunning.live?.events ?? [];
+		const last = events[events.length - 1];
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: {
+				...hiddenMailboxRunRunning,
+				live: {
+					case_id: "hm-07",
+					events: [
+						...events.slice(0, -1),
+						{
+							...last,
+							kind: "agent_reply",
+							node: "agent",
+							data: { text: LONG },
+						},
+					],
+				},
+			},
+		});
+		const live = await screen.findByRole("region", { name: "Live sample" });
+		const latest = within(live).getByRole("list", { name: "Latest events" });
+		const [more] = within(latest).getAllByRole("button", { name: "Show more" });
+		const entry = more.closest("li") as HTMLElement;
+		const line = more.previousElementSibling as HTMLElement;
+		expect(line).toHaveClass("truncate");
+
+		fireEvent.click(entry);
+		expect(line).toHaveClass("whitespace-pre-wrap");
+		expect(
+			within(entry).getByRole("button", { name: "Show less" }),
+		).toBeVisible();
+		fireEvent.click(entry);
+		expect(line).toHaveClass("truncate");
+	});
+});
+
 describe("results", () => {
 	it("shows the rates exactly as returned", async () => {
 		renderAt("#/arena/runs/run-hm-1", {

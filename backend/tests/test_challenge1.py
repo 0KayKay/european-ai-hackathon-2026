@@ -697,7 +697,7 @@ def test_challenge_deadline_cancels_and_saves_failed_attempt(api, monkeypatch):
     from hackathon.config import get_settings
 
     app, rows = api
-    monkeypatch.setattr(get_settings(), "CHALLENGE_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(get_settings(), "CHALLENGE_TIMEOUT_SECONDS", 0.5)
     cancelled = []
 
     async def prepare(run_input, user):

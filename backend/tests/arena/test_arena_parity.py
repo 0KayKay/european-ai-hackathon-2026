@@ -169,8 +169,16 @@ def test_agent_identity_and_model_settings_match_legacy(level_id, difficulty):
     legacy = legacy_agent(mode, difficulty, legacy_deps(mode, difficulty))
     resolved = level(level_id, difficulty)
     assert resolved.agent.name == legacy.name
-    assert resolved.agent.model.model == "gemini-3.8-flash"
-    assert agent_model_settings(resolved.agent.model) == legacy.model.settings
+    if level_id == "hidden-mailbox":
+        assert resolved.agent.model.model == "qwen3:8b"
+        assert resolved.agent.model.endpoint == "http://host.docker.internal:11434/v1"
+        assert agent_model_settings(resolved.agent.model) == {
+            "openai_reasoning_effort": "none",
+            "max_tokens": 4096,
+        }
+    else:
+        assert resolved.agent.model.model == "gemini-3.8-flash"
+        assert agent_model_settings(resolved.agent.model) == legacy.model.settings
 
 
 @pytest.mark.parametrize("level_id,difficulty", COMBOS)
@@ -398,10 +406,12 @@ async def test_guardrails_match_legacy(level_id, difficulty, monkeypatch):
             _FakeOpenAI.calls.clear()
             legacy_decision = await legacy_guardrails.judge(prompt)
             [legacy_request] = _FakeOpenAI.calls
-            assert (
-                judge_request(guardrail.model, guardrail.system_prompt.text, prompt)
-                == legacy_request
-            )
+            request = judge_request(guardrail.model, guardrail.system_prompt.text, prompt)
+            if level_id == "hidden-mailbox":
+                assert request["model"] == "qwen3:8b"
+                assert request["reasoning_effort"] == "none"
+                request = {**request, "model": "gemini-3.8-flash", "reasoning_effort": "low"}
+            assert request == legacy_request
             decision = parse_judge_content(
                 '```json\n{"decision":"UNSAFE","rule":"r","reason":"x"}\n```'
             )

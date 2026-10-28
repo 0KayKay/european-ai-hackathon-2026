@@ -459,7 +459,7 @@ async def test_guardrail_decisions_are_recorded_exactly_pending_then_final():
     assert pending.data["check_id"] == final.data["check_id"]
     assert (
         final.data["position"] == "user->agent"
-        and final.data["model"] == "gemini-3.8-flash"
+        and final.data["model"] == "qwen3:8b"
     )
     assert [e.kind for e in result.events][-1] == "success_check"
 
@@ -676,13 +676,13 @@ def test_gateway_agent_model_uses_the_role_spec_and_headers():
         model = gateway_agent_model(tuned, ModelIdentity(user_id="u", case_id="c"))
     finally:
         structlog.contextvars.unbind_contextvars("correlation_id")
-    assert model.model_name == "gemini-3.8-flash"
+    assert model.model_name == "qwen3:8b"
     assert model.settings == agent_model_settings(tuned)
     assert model.settings["temperature"] == 0.4
     client = model.client
-    assert str(client.base_url).rstrip("/") == get_settings().AGENTGATEWAY_URL
+    assert str(client.base_url).rstrip("/") == "http://host.docker.internal:11434/v1"
     headers = client.default_headers
-    assert headers["x-model"] == "gemini-3.8-flash"
+    assert headers["x-model"] == "qwen3:8b"
     assert headers["x-user-id"] == "u" and headers["x-correlation-id"] == "corr-1"
 
 

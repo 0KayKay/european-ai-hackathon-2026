@@ -163,9 +163,9 @@ def test_node_details_show_settings_full_prompts_and_models():
     g = build_graph(level)
     agent = g.node("agent")
     assert agent.details.model == {
-        "model": "gemini-3.8-flash",
-        "endpoint": "agentgateway",
-        "params": {"thinking": False, "reasoning_effort": "low", "max_tokens": 65536},
+        "model": "qwen3:8b",
+        "endpoint": "http://host.docker.internal:11434/v1",
+        "params": {"reasoning_effort": "none", "max_tokens": 4096},
     }
     prompts = {prompt.name: prompt for prompt in agent.details.prompts}
     assert prompts["System prompt"].text == challenge1_prompt("User", "HARD")
@@ -178,7 +178,7 @@ def test_node_details_show_settings_full_prompts_and_models():
     judge = g.node("guardrail:input-judge")
     assert judge.details.model["params"] == {
         "temperature": 0,
-        "reasoning_effort": "low",
+        "reasoning_effort": "none",
         "max_tokens": 2048,
     }
     judge_prompts = {prompt.name: prompt for prompt in judge.details.prompts}
@@ -276,4 +276,4 @@ def test_guardrail_labels_are_readable_and_configurable():
 def test_model_parameters_are_shown_as_json_values():
     agent = graph("hidden-mailbox", "easy").node("agent")
     settings = {s.label: s.value for s in agent.details.settings}
-    assert "thinking false" in settings["Model parameters"]
+    assert "reasoning_effort none" in settings["Model parameters"]

@@ -321,14 +321,12 @@ def test_variant_can_override_a_model_parameter_of_one_role():
         "seed": 7,
     }
     assert hard.agent.model.params.compact() == {
-        "thinking": False,
-        "reasoning_effort": "low",
-        "max_tokens": 65536,
+        "reasoning_effort": "none",
+        "max_tokens": 4096,
     }
     assert level.variants["easy"].agent.model.params.compact() == {
-        "thinking": False,
-        "reasoning_effort": "low",
-        "max_tokens": 65536,
+        "reasoning_effort": "none",
+        "max_tokens": 4096,
         "top_p": 0.9,
     }
     assert hard.red_team.attacker.params.compact() == {

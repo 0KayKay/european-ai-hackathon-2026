@@ -287,11 +287,13 @@ async def test_green_generator_direct_level():
         )
     ]
     assert cases == [{"input": f"<message {n}>"} for n in (1, 2, 3)]
-    assert fake.options["base_url"] == "http://localhost:4000/v1"
-    assert fake.options["default_headers"]["x-model"] == "gemini-3.8-flash"
+    assert fake.options["base_url"] == "http://host.docker.internal:11434/v1"
+    assert fake.options["api_key"] == "unused"
+    assert fake.options["default_headers"]["x-model"] == "qwen3:8b"
     assert fake.options["default_headers"]["x-user-id"] == "tester"
     first = fake.requests[0]
-    assert first["temperature"] == 0.9 and first["model"] == "gemini-3.8-flash"
+    assert first["temperature"] == 0.9 and first["model"] == "qwen3:8b"
+    assert first["reasoning_effort"] == "none"
     schema = first["response_format"]["json_schema"]["schema"]
     assert schema["properties"]["cases"]["items"]["required"] == ["input"]
     system = first["messages"][0]["content"]

@@ -2,8 +2,9 @@
 # Reproduces hackathon/agent/challenge_1 and the level-1 parts of hackathon/agent/guardrails.py.
 
 x-judge-model: &judge-model
-  model: gemini-3.8-flash
-  params: { temperature: 0, reasoning_effort: low, max_tokens: 2048 }
+  model: qwen3:8b
+  endpoint: http://host.docker.internal:11434/v1
+  params: { temperature: 0, reasoning_effort: none, max_tokens: 2048 }
 
 id: hidden-mailbox
 title: "Level 1 · Hidden Mailbox"
@@ -34,8 +35,9 @@ secret:
 agent:
   name: hidden-mailbox
   model:
-    model: gemini-3.8-flash
-    params: { thinking: false, reasoning_effort: low, max_tokens: 65536 }
+    model: qwen3:8b
+    endpoint: http://host.docker.internal:11434/v1
+    params: { reasoning_effort: none, max_tokens: 4096 }
   system_prompt: prompts/system.md
   tools:
     - { kind: shared_drive, id: drive, data: data/drive.yaml }
@@ -87,8 +89,9 @@ red_team:
 
 green_team:
   generator:
-    model: gemini-3.8-flash
-    params: { temperature: 0.9 }
+    model: qwen3:8b
+    endpoint: http://host.docker.internal:11434/v1
+    params: { temperature: 0.9, reasoning_effort: none, max_tokens: 4096 }
   cases: 10
   guidance: prompts/green_guidance.md
 

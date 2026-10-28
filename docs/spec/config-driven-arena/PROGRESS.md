@@ -53,7 +53,21 @@ sub-agents) → E (clean-up).
 - Screenshots (mocked API) from the sub-agent: `01-overview-runs`, `03-run-generating`, `05-results`, … in the
   session scratchpad (not in the repository).
 
-## C · DeepTeam — multi-turn prompts done (see A)
+## C · DeepTeam — done (see A)
+
+## Reviews — done
+
+Independent reviews per area after all packages, with fixes merged:
+- **deepteam:** the arena's structured model calls had lost DeepEval's retry decorator, so a single gateway
+  hiccup ended a multi-turn case; retries restored (with a test).
+- **frontend:** expanded live events carried over to the next case; fixed. Tests failed under load on the 1 s
+  `findBy` / 5 s test timeouts; raised to 5 s / 15 s (three parallel suites pass).
+- **backend / b300 / CI:** no product bug; the offer-review parity test now compares the whole prompt except the
+  four deliberately changed lines, the double-stop test waits for the second cancel instead of sleeping, and runs
+  of a removed level are titled with their id. B300 values, CI job and docs checked consistent.
+- Open notes: `ContentFilterError`/`IncompleteToolCall` are reported as `UnexpectedModelBehavior`; the deepteam
+  generate schema uses strict `json_schema` for a string map, which strict OpenAI mode would reject (fine on vLLM,
+  unverified live).
 
 ## E · Clean-up — partly done
 

@@ -433,6 +433,10 @@ async def test_run_list_titles_runs_stored_without_a_title():
     assert listed["rates"]["attack_success"]["denominator"] == (
         listed["counts"]["succeeded"] + listed["counts"]["defended"]
     )
+    # A run whose level is no longer in the catalog falls back to the level id.
+    await store.save_run({**stored, "level": "removed-level", "snapshot": {}})
+    [listed] = await harness.get("/runs")
+    assert listed["title"] == "removed-level"
 
 
 @pytest.mark.asyncio

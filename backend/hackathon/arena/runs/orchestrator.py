@@ -741,7 +741,7 @@ class Orchestrator:
     @staticmethod
     def summary(run: dict[str, Any], *, title: str | None = None) -> dict[str, Any]:
         """Run summary. `title` is the level title at run time (recorded with the run, else from its
-        snapshot, else the given fallback); `rates` follow R-RES-1 from the recorded `counts`."""
+        snapshot, else the given fallback, else the level id); `rates` follow R-RES-1 from the recorded `counts`."""
         snapshot = run.get("snapshot") or {}
         return {
             "id": run["id"],
@@ -749,7 +749,8 @@ class Orchestrator:
             "difficulty": run["difficulty"],
             "title": run.get("title")
             or snapshot.get("level", {}).get("title")
-            or title,
+            or title
+            or run["level"],
             "status": run["status"],
             "started_at": run["started_at"],
             "finished_at": run["finished_at"],

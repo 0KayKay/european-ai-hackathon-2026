@@ -8,6 +8,7 @@ import {
 	SurfaceBadge,
 } from "./components";
 import { arenaHref } from "./router";
+import { RunList } from "./run/RunList";
 import type { LevelSummary } from "./types";
 import { useArenaQuery } from "./useArenaQuery";
 
@@ -90,6 +91,9 @@ function LevelCard({ level }: { level: LevelSummary }) {
 
 export function LevelList() {
 	const query = useArenaQuery((signal) => listLevels({ signal }), []);
+	const levelTitles = Object.fromEntries(
+		(query.data ?? []).map((level) => [level.id, level.title]),
+	);
 	return (
 		<ArenaShell crumbs={[{ label: "Levels" }]}>
 			<div className="min-h-0 flex-1 overflow-y-auto">
@@ -124,6 +128,26 @@ export function LevelList() {
 					{query.data?.length === 0 && (
 						<p className="text-sm text-slate-500">No levels are configured.</p>
 					)}
+					<section
+						aria-labelledby="runs-heading"
+						className="flex flex-col gap-3"
+					>
+						<div className="flex flex-col gap-1">
+							<h2
+								id="runs-heading"
+								className="text-base font-semibold tracking-tight"
+							>
+								Runs
+							</h2>
+							<p className="text-sm text-slate-600">
+								Running evaluations first, then finished ones, newest first.
+								Open a run to watch it live or see its results.
+							</p>
+						</div>
+						<div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+							<RunList levelTitles={levelTitles} />
+						</div>
+					</section>
 				</div>
 			</div>
 		</ArenaShell>

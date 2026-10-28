@@ -61,6 +61,10 @@ function savedWithMovedJudge(content: string): LevelDetail {
 	return level;
 }
 
+/** Requests of the level and its source; the level view also lists its recent runs. */
+const levelRequests = (fetch: ReturnType<typeof mockArenaFetch>) =>
+	requests(fetch).filter(([, url]) => !String(url).includes("/runs"));
+
 const json = (status: number, body: unknown) =>
 	new Response(JSON.stringify(body), { status });
 
@@ -299,7 +303,9 @@ describe("editing level files", () => {
 		expect(
 			await screen.findByText("Reset to the repository version"),
 		).toBeInTheDocument();
-		expect(requests(fetch).map(([method, url]) => `${method} ${url}`)).toEqual([
+		expect(
+			levelRequests(fetch).map(([method, url]) => `${method} ${url}`),
+		).toEqual([
 			`GET ${LEVEL_URL}`,
 			`DELETE ${SOURCE_URL}?difficulty=hard&base_version=1`,
 		]);
@@ -326,7 +332,7 @@ describe("editing level files", () => {
 				name: "Reset to repository version",
 			}),
 		);
-		expect(requests(fetch).map(([method]) => method)).toEqual(["GET"]);
+		expect(levelRequests(fetch).map(([method]) => method)).toEqual(["GET"]);
 	});
 
 	it("shows saved edits that no longer load and lets them be fixed", async () => {

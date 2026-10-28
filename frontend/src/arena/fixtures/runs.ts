@@ -1298,3 +1298,59 @@ export const newRunSummary: RunSummary = {
 		green: { status: "pending", error: null },
 	},
 };
+
+// Run list (GET /runs) ---------------------------------------------------------
+
+/** The summary part of a run detail, as `GET /runs` lists it (with recorded title and rates). */
+export function runSummaryOf(run: RunDetail): RunSummary {
+	const c = run.counts;
+	const rate = (numerator: number, denominator: number) => ({
+		value: denominator ? numerator / denominator : null,
+		numerator,
+		denominator,
+	});
+	return {
+		id: run.id,
+		level: run.level,
+		difficulty: run.difficulty,
+		title: run.title,
+		status: run.status,
+		started_at: run.started_at,
+		finished_at: run.finished_at,
+		elapsed: run.elapsed,
+		progress: run.progress,
+		counts: c,
+		rates: {
+			attack_success: rate(c.succeeded, c.succeeded + c.defended),
+			false_positive: rate(c.false_positive, c.false_positive + c.passed),
+		},
+		error: run.error,
+		generation: run.generation,
+	};
+}
+
+/** Two finished runs, one running, one generating and an older failed one; in no particular order. */
+export const runListFixture: RunSummary[] = [
+	runSummaryOf(hiddenMailboxRunCompleted),
+	{
+		...runSummaryOf(hiddenMailboxRunRunning),
+		id: "run-hm-2",
+		started_at: "2026-10-27T20:30:00.000Z",
+	},
+	{
+		...runSummaryOf(hiddenMailboxRunCompleted),
+		id: "run-hm-0",
+		status: "failed",
+		started_at: "2026-10-26T09:00:00.000Z",
+		finished_at: "2026-10-26T09:00:04.000Z",
+		elapsed: 4,
+		error: "The run failed (RuntimeError).",
+	},
+	// Stored before the title was recorded: the UI names it from the level list.
+	{ ...runSummaryOf(emailReviewRunCompleted), title: null },
+	{
+		...runSummaryOf(emailReviewRunGenerating),
+		id: "run-er-2",
+		started_at: "2026-10-27T20:40:00.000Z",
+	},
+];

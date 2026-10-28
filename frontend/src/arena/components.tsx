@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import { OUTCOME_LABELS } from "./format";
+import { OUTCOME_LABELS, STATUS_LABELS } from "./format";
 import { arenaHref } from "./router";
 import type {
 	CaseOutcome,
 	Channel,
 	Difficulty,
 	RunDetail,
+	RunStatus,
 	Turns,
 } from "./types";
 import { ACTIVE_RUN_STATUSES, DIFFICULTIES } from "./types";
@@ -213,6 +214,36 @@ export function ErrorState({
 				)}
 			</div>
 		</div>
+	);
+}
+
+export const RUN_STATUS_TONES: Record<RunStatus, string> = {
+	generating: "border-blue-200 bg-blue-50 text-blue-700",
+	running: "border-emerald-200 bg-emerald-50 text-emerald-700",
+	completed: "border-slate-200 bg-slate-50 text-slate-700",
+	stopped: "border-amber-200 bg-amber-50 text-amber-800",
+	failed: "border-red-200 bg-red-50 text-red-700",
+	interrupted: "border-amber-200 bg-amber-50 text-amber-800",
+};
+
+/** Small run status badge; pulses while the run is generating or running. */
+export function RunStatusBadge({ status }: { status: RunStatus }) {
+	return (
+		<span
+			data-status={status}
+			className={cn(
+				"inline-flex h-5 items-center gap-1.5 rounded-md border px-1.5 text-[11px] font-semibold whitespace-nowrap",
+				RUN_STATUS_TONES[status],
+			)}
+		>
+			{ACTIVE_RUN_STATUSES.includes(status) && (
+				<span
+					aria-hidden="true"
+					className="size-1.5 animate-pulse rounded-full bg-current"
+				/>
+			)}
+			{STATUS_LABELS[status]}
+		</span>
 	);
 }
 

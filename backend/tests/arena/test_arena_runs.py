@@ -411,6 +411,28 @@ async def test_direct_level_full_run():
     runs = await harness.get("/runs", params={"level": "hidden-mailbox"})
     assert [r["id"] for r in runs] == [run["id"]]
     assert await harness.get("/runs", params={"level": "email-review"}) == []
+    # The list carries what the runs overview shows: level title, end time and both rates as recorded.
+    listed = runs[0]
+    assert listed["title"] == run["title"] and listed["title"]
+    assert listed["finished_at"] == run["finished_at"]
+    assert listed["rates"] == results["rates"]
+    assert summary["title"] == run["title"]
+
+
+@pytest.mark.asyncio
+async def test_run_list_titles_runs_stored_without_a_title():
+    """Runs stored before the title was recorded (and listed without the snapshot) get the level title."""
+    store = MemoryRunStore()
+    harness = Harness(store=store)
+    run = await harness.run("email-review", "easy")
+    stored = await store.get_run(run["id"])
+    del stored["title"]
+    await store.save_run({**stored, "snapshot": {}})
+    [listed] = await harness.get("/runs")
+    assert listed["title"] == run["title"]
+    assert listed["rates"]["attack_success"]["denominator"] == (
+        listed["counts"]["succeeded"] + listed["counts"]["defended"]
+    )
 
 
 @pytest.mark.asyncio

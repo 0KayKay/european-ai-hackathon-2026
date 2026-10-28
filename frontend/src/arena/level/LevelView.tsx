@@ -13,6 +13,7 @@ import {
 import { ArenaGraph, GraphLegend } from "../graph/ArenaGraph";
 import { nodeKind } from "../graph/layout";
 import { arenaHref, replaceHash } from "../router";
+import { RunList } from "../run/RunList";
 import { StartRunDialog } from "../run/StartRunDialog";
 import type {
 	ArenaGraph as ArenaGraphData,
@@ -23,6 +24,9 @@ import { useArenaQuery } from "../useArenaQuery";
 import { ConfigSource, configLinesFor } from "./ConfigSource";
 import { NodeInspector } from "./NodeInspector";
 import { useSourceEditor } from "./useSourceEditor";
+
+/** Runs listed under "Recent runs" (newest first, active ones on top). */
+const RECENT_RUNS = 5;
 
 export const LEAVE_CONFIRM =
 	"You have unsaved changes to this level. Leave and discard them?";
@@ -270,6 +274,33 @@ export function LevelView({
 								}}
 							/>
 						</div>
+						<section
+							aria-labelledby="recent-runs-heading"
+							className="flex max-h-[45%] shrink-0 flex-col border-t bg-white"
+						>
+							<div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b px-4">
+								<h2
+									id="recent-runs-heading"
+									className="text-[13px] font-semibold"
+								>
+									Recent runs
+								</h2>
+								<a
+									href={arenaHref({ name: "levels" })}
+									className="text-xs font-medium text-blue-600 hover:underline"
+								>
+									All runs
+								</a>
+							</div>
+							<div className="min-h-0 overflow-y-auto">
+								<RunList
+									level={level}
+									limit={RECENT_RUNS}
+									compact
+									label="Recent runs"
+								/>
+							</div>
+						</section>
 					</aside>
 				</div>
 			)}

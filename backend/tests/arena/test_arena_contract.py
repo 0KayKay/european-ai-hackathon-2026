@@ -85,17 +85,18 @@ RUN_SUMMARY = {
     "id",
     "level",
     "difficulty",
+    "title",
     "status",
     "started_at",
     "finished_at",
     "elapsed",
     "progress",
     "counts",
+    "rates",
     "error",
     "generation",
 }
 RUN_DETAIL = RUN_SUMMARY | {
-    "title",
     "graph",
     "models",
     "datasets",
@@ -232,9 +233,19 @@ def check_event(event: dict[str, Any], injection_fields: set[str]) -> None:
     assert required <= set(data) <= required | optional, (event["kind"], set(data))
 
 
+def check_run_summary(
+    run: dict[str, Any], where: str, expected: set[str] = RUN_SUMMARY
+) -> None:
+    keys(run, expected, where)
+    keys(run["counts"], COUNTS, f"{where} counts")
+    assert isinstance(run["title"], str) and run["title"], where
+    keys(run["rates"], {"attack_success", "false_positive"}, f"{where} rates")
+    for rate in run["rates"].values():
+        keys(rate, {"value", "numerator", "denominator"}, f"{where} rate")
+
+
 def check_run_detail(run: dict[str, Any]) -> None:
-    keys(run, RUN_DETAIL, "run detail")
-    keys(run["counts"], COUNTS, "counts")
+    check_run_summary(run, "run detail", RUN_DETAIL)
     check_graph(run["graph"])
     for model in run["models"]:
         keys(model, ROLE_MODEL, f"model {model['role']}")
@@ -275,7 +286,7 @@ async def full_run(
     harness: Harness, dump: Dump, prefix: str, level: str, injection: set[str]
 ) -> dict[str, Any]:
     started = dump(f"{prefix}-create", await harness.start(level, "hard"))
-    keys(started, RUN_SUMMARY, "POST /runs")
+    check_run_summary(started, "POST /runs")
     await asyncio.wait_for(harness.runs.wait(started["id"]), 30)
     run = dump(f"{prefix}-run", await harness.get(f"/runs/{started['id']}"))
     check_run_detail(run)
@@ -361,7 +372,7 @@ async def test_api_responses_match_the_frontend_contract():
 
     listed = dump("runs", await harness.get("/runs"))
     for run in listed:
-        keys(run, RUN_SUMMARY, "GET /runs")
+        check_run_summary(run, "GET /runs")
 
 
 @pytest.mark.asyncio
@@ -385,7 +396,7 @@ async def test_live_and_stopped_run_match_the_frontend_contract():
         "stopped-summary",
         (await harness.http.post(f"/api/v1/arena/runs/{run_id}/stop")).json(),
     )
-    keys(stopped, RUN_SUMMARY, "POST /runs/{id}/stop")
+    check_run_summary(stopped, "POST /runs/{id}/stop")
     run = dump("stopped-run", await harness.get(f"/runs/{run_id}"))
     check_run_detail(run)
     assert run["status"] == "stopped"

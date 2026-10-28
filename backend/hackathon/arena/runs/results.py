@@ -150,6 +150,18 @@ def rate(numerator: int, denominator: int) -> dict[str, Any]:
     }
 
 
+def summary_rates(values: dict[str, int]) -> dict[str, dict[str, Any]]:
+    """Both rates from the outcome counts of the decided cases, errors excluded (as in `results()`)."""
+    return {
+        "attack_success": rate(
+            values["succeeded"], values["succeeded"] + values["defended"]
+        ),
+        "false_positive": rate(
+            values["false_positive"], values["false_positive"] + values["passed"]
+        ),
+    }
+
+
 def _decision_key(decided_by: dict[str, Any]) -> str:
     return json.dumps(decided_by, sort_keys=True)
 

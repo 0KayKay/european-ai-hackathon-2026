@@ -4,22 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { runExportUrl, stopRun } from "../api";
-import { ArenaShell, ErrorState, LoadingState, runCrumbs } from "../components";
+import {
+	ArenaShell,
+	ErrorState,
+	LoadingState,
+	RUN_STATUS_TONES,
+	runCrumbs,
+} from "../components";
 import { formatClock, STATUS_LABELS } from "../format";
 import { arenaHref } from "../router";
 import type { RunDetail } from "../types";
 import { RunProgress } from "./RunProgress";
 import { RunResultsView } from "./RunResults";
 import { isActiveRun, useRunPolling } from "./useRunPolling";
-
-const STATUS_TONES: Record<RunDetail["status"], string> = {
-	generating: "border-blue-200 bg-blue-50 text-blue-700",
-	running: "border-emerald-200 bg-emerald-50 text-emerald-700",
-	completed: "border-slate-200 bg-slate-50 text-slate-700",
-	stopped: "border-amber-200 bg-amber-50 text-amber-800",
-	failed: "border-red-200 bg-red-50 text-red-700",
-	interrupted: "border-amber-200 bg-amber-50 text-amber-800",
-};
 
 function StatusPill({ run }: { run: RunDetail }) {
 	const active = isActiveRun(run);
@@ -29,7 +26,7 @@ function StatusPill({ run }: { run: RunDetail }) {
 			data-status={run.status}
 			className={cn(
 				"inline-flex h-7 items-center gap-2 rounded-full border px-3 text-[13px] font-medium",
-				STATUS_TONES[run.status],
+				RUN_STATUS_TONES[run.status],
 			)}
 		>
 			{active && (

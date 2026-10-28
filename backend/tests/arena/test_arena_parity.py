@@ -155,12 +155,28 @@ def same(left, right) -> bool:
 # --- system prompt, agent, tools ------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("level_id,difficulty", COMBOS)
+@pytest.mark.parametrize(
+    "level_id,difficulty", [combo for combo in COMBOS if combo[0] != "offer-review"]
+)
 def test_system_prompt_matches_legacy(level_id, difficulty):
     _, prompt = MODES[level_id]
     assert level(level_id, difficulty).agent.system_prompt == prompt(
         "User", difficulty.upper()
     )
+
+
+@pytest.mark.parametrize("difficulty", ["easy", "medium", "hard"])
+def test_offer_prompt_names_the_actual_tool_arguments(difficulty):
+    prompt = level("offer-review", difficulty).agent.system_prompt
+    for signature in (
+        "load_open_offers()",
+        "parse_offer(requisition_id)",
+        "list_routing_targets()",
+        "get_price_reference(sku)",
+    ):
+        assert signature in prompt
+    assert "load_open_requisitions" not in prompt
+    assert "parse_offer(package_files)" not in prompt
 
 
 @pytest.mark.parametrize("level_id,difficulty", COMBOS)

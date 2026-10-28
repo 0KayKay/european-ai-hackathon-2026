@@ -20,7 +20,21 @@ sub-agents) → E (clean-up).
 - deepteam (via sub-agent): ruff formatting that failed CI, and multi-turn opening/follow-up prompts now come from
   the request's objective instead of being written for Level 1 only.
 
-## B · GLM-5.3-Flash on B300 with a larger context — in progress
+## B · GLM-5.3-Flash on B300 with a larger context — done (needs a GPU start to confirm)
+
+- `b300` profile `glm53` (8 × B300, TP8): `--max-model-len 65536`, `--max-num-seqs 16`,
+  `--max-num-batched-tokens 16384`; release manifest regenerated; marked "not yet GPU-validated".
+- Sizing and what to check on the next start: [b300/docs/glm-context.md](../../../b300/docs/glm-context.md).
+  Rough numbers: 288 GB per GPU × 0.90 ≈ 259 GB, weights ≈ 41 GB per GPU, ≈ 200 GB per GPU for the KV cache;
+  at an estimated 100–160 KB per token (MLA cache replicated per TP rank) that is ≈ 1.3–1.9 M cached tokens, so
+  16 × 65,536 fits. Public sources report a 1,048,576-token `max_position_embeddings`; `config.json` could not be
+  read from here.
+- **Next start:** `./b300/cli.py up glm53`, then send back from `BASE/users/LOGIN/runs/RUN_ID/glm.server.log`
+  the lines `GPU KV cache size: N tokens` and `Maximum concurrency for 65536 tokens per request: Nx`
+  (≥ 32x → 131,072 tokens with 16 slots fits).
+- Level defaults raised for that context: agent and green generator `max_tokens` 4,096, attacker and simulator
+  2,048, judges and evaluator 1,024. The Leonardo `glm53` profile still has 2,048 tokens: lower them there.
+- New CI job `b300` (repository check, unit tests, vermin ≥ 3.9).
 
 ## D · UI — in progress
 

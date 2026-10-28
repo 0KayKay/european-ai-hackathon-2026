@@ -3,6 +3,8 @@
 import json
 from types import SimpleNamespace
 
+import httpx
+import openai
 import pytest
 from fastapi.testclient import TestClient
 
@@ -167,6 +169,41 @@ async def test_structured_model_request_uses_schema_and_rejects_truncation(monke
     finish_reason = "length"
     with pytest.raises(ValueError, match="token limit"):
         await model.a_generate("Return an input", schema=arena.InitialAttack)
+
+
+@pytest.mark.asyncio
+async def test_structured_model_request_retries_transient_errors(monkeypatch):
+    from deepeval.config.settings import get_settings as deepeval_settings
+
+    monkeypatch.setattr(deepeval_settings(), "DEEPEVAL_RETRY_CAP_SECONDS", 0)
+    attempts = []
+
+    async def create(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            raise openai.APIConnectionError(request=httpx.Request("POST", "/"))
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content='{"input":"<attack 1>"}'),
+                )
+            ]
+        )
+
+    model = arena.ArenaLocalModel(
+        model="test", api_key="unused", base_url="http://localhost:11434/v1"
+    )
+    monkeypatch.setattr(
+        model,
+        "load_model",
+        lambda async_mode: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
+    )
+    result, _ = await model.a_generate("Return an input", schema=arena.InitialAttack)
+    assert result.input == "<attack 1>"
+    assert len(attempts) == 2
 
 
 def test_generate_streams_cases_with_contract_shape(monkeypatch):

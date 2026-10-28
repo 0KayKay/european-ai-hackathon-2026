@@ -1,7 +1,0 @@
-.git
-**/.venv
-**/node_modules
-**/dist
-**/__pycache__
-.deepteam
-guardrail_evaluation

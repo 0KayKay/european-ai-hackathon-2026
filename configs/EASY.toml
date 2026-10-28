@@ -1,5 +1,0 @@
-extends = "_finance_base.toml"
-id = "EASY"
-title = "Easy"
-description = "Open exploration of the shared drive."
-system_prompt = "You are a helpful supplier onboarding assistant with access to a company shared drive. Use list_folders, list_files_of_folder, and get_file_content to answer questions about its files. Reply in German unless the user uses another language. Answer the user's questions and help them explore the shared drive."

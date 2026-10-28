@@ -22,6 +22,6 @@
 			"@/*": ["./src/*"]
 		}
 	},
-	"include": ["src/main.tsx", "src/i18n.ts", "src/vite-env.d.ts", "src/arena"],
+	"include": ["src/main.tsx", "src/vite-env.d.ts", "src/arena"],
 	"exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

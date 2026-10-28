@@ -17,7 +17,18 @@ PLACEHOLDER = re.compile(
 
 
 class TemplateError(ValueError):
-    """A template references an unknown or malformed placeholder."""
+    """A template references an unknown or malformed placeholder; `line` (1-based) is where, if known."""
+
+    def __init__(
+        self, message: str, line: int | None = None, placeholder: str | None = None
+    ) -> None:
+        super().__init__(message)
+        self.line = line
+        self.placeholder = placeholder
+
+
+def _line_at(text: str, index: int) -> int:
+    return text.count("\n", 0, index) + 1
 
 
 def placeholders(text: str) -> list[str]:
@@ -25,8 +36,11 @@ def placeholders(text: str) -> list[str]:
     names = [match.group(1) for match in PLACEHOLDER.finditer(text)]
     rest = PLACEHOLDER.sub("", text)
     if "{{" in rest or "}}" in rest:
-        line = next(line for line in rest.splitlines() if "{{" in line or "}}" in line)
-        raise TemplateError(f"malformed placeholder near {line.strip()[:60]!r}")
+        lines = rest.splitlines()
+        number, line = next(
+            (n, line) for n, line in enumerate(lines, 1) if "{{" in line or "}}" in line
+        )
+        raise TemplateError(f"malformed placeholder near {line.strip()[:60]!r}", number)
     return names
 
 
@@ -37,9 +51,15 @@ def render_partial(
 
     Substitution is a single pass, so substituted text is never scanned again.
     """
-    for name in placeholders(text):
+    placeholders(text)  # malformed placeholders
+    for match in PLACEHOLDER.finditer(text):
+        name = match.group(1)
         if name not in values and name not in runtime:
-            raise TemplateError(f"unknown placeholder {{{{{name}}}}}")
+            raise TemplateError(
+                f"unknown placeholder {{{{{name}}}}}",
+                _line_at(text, match.start()),
+                name,
+            )
 
     def replace(match: re.Match[str]) -> str:
         name = match.group(1)

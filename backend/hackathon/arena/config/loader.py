@@ -13,14 +13,20 @@ File conventions:
   and `args.<parameter>` in tool-authorization policies, `secret` and `user_email` in tool data) are kept for the
   engine; anything else is a load error;
 - top-level keys starting with `x-` are ignored (room for YAML anchors).
+
+`overrides` (path relative to the levels root -> content) replace or add files of one level without touching the
+repository; the level editor of the UI validates and stores them (`hackathon.arena.config.overrides`).
 """
 
+import re
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 from pydantic import BaseModel, ValidationError
 
 from hackathon.arena.config.resolved import (
@@ -57,11 +63,24 @@ BUILTIN_VARIABLES = frozenset({"security_prompt", "user_task"})
 
 
 class LevelConfigError(ValueError):
-    """An invalid level config; the message starts with the offending file."""
+    """An invalid level config; the message starts with the offending file.
 
-    def __init__(self, file: str, problem: str) -> None:
+    `path` is the file relative to the levels root (`email-review/level.yaml`) and `line` the 1-based line of
+    the problem when the YAML parser or the validator can tell.
+    """
+
+    def __init__(
+        self,
+        file: str,
+        problem: str,
+        *,
+        path: str | None = None,
+        line: int | None = None,
+    ) -> None:
         self.file = file
         self.problem = problem
+        self.path = path if path is not None else (file.partition("/")[2] or file)
+        self.line = line
         super().__init__(f"{file}: {problem}")
 
 
@@ -125,6 +144,88 @@ def _validation_problem(error: ValidationError, prefix: str = "") -> str:
     return "; ".join(problems)
 
 
+# --- line numbers of problems ---------------------------------------------------------------------------------
+
+_LOCATION_PART = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
+
+
+def location_parts(where: str) -> list[str | int]:
+    """`guardrails[3].at` -> `["guardrails", 3, "at"]`."""
+    return [
+        int(index) if index else name for name, index in _LOCATION_PART.findall(where)
+    ]
+
+
+def _find(node: Node | None, parts: list[str | int]) -> tuple[int, int | None]:
+    """Walk `parts` into a composed YAML node: (matched depth, 1-based line of the deepest match)."""
+    depth, line = 0, None
+    for part in parts:
+        if isinstance(node, MappingNode):
+            entry = next(
+                (
+                    (key, value)
+                    for key, value in node.value
+                    if isinstance(key, ScalarNode) and key.value == str(part)
+                ),
+                None,
+            )
+            if entry is None:
+                break
+            line, node = entry[0].start_mark.line + 1, entry[1]
+        elif isinstance(node, SequenceNode) and isinstance(part, int):
+            if part >= len(node.value):
+                break
+            node = node.value[part]
+            line = node.start_mark.line + 1
+        else:
+            break
+        depth += 1
+    return depth, line
+
+
+def _compose(text: str) -> Node | None:
+    try:
+        return yaml.compose(text)
+    except yaml.YAMLError:
+        return None
+
+
+def yaml_line(text: str, parts: list[str | int]) -> int | None:
+    """Line of the deepest existing key of `parts` in a YAML text, if any key matches."""
+    depth, line = _find(_compose(text), parts)
+    return line if depth else None
+
+
+def level_line(text: str, difficulty: str | None, parts: list[str | int]) -> int | None:
+    """Line in a level file of a location in a resolved difficulty.
+
+    A difficulty deep-merges over the base, so the location is looked up under `difficulties.<name>` and in the
+    base; the deeper match wins, the difficulty on a tie.
+    """
+    root = _compose(text)
+    candidates = []
+    if difficulty is not None:
+        depth, line = _find(root, ["difficulties", difficulty, *parts])
+        if depth > 2:
+            candidates.append((depth - 2, 1, line))
+    depth, line = _find(root, parts)
+    if depth:
+        candidates.append((depth, 0, line))
+    return max(candidates)[2] if candidates else None
+
+
+def _yaml_error_line(exc: yaml.YAMLError) -> int | None:
+    mark = getattr(exc, "problem_mark", None) or getattr(exc, "context_mark", None)
+    return mark.line + 1 if mark is not None else None
+
+
+def _placeholder_line(text: str, name: str | None) -> int | None:
+    if name is None:
+        return None
+    match = re.search(r"\{\{\s*" + re.escape(name) + r"\s*\}\}", text)
+    return text.count("\n", 0, match.start()) + 1 if match else None
+
+
 def _display(path: Path, root: Path) -> str:
     """Error-message path, e.g. `levels/email-review/level.yaml`."""
     try:
@@ -137,18 +238,36 @@ class _Resolver:
     """Resolves one difficulty of one level file."""
 
     def __init__(
-        self, root: Path, level_dir: Path, difficulty: str, source: str
+        self,
+        root: Path,
+        level_dir: Path,
+        difficulty: str,
+        source: str,
+        overrides: Mapping[str, str] | None = None,
     ) -> None:
         self.root = root.resolve()
         self.level_dir = level_dir.resolve()
         self.difficulty = difficulty
         self.level_file = _display(level_dir / LEVEL_FILE, root)
-        level_path = self.level_dir / LEVEL_FILE
-        self.sources: dict[str, str] = {str(level_path.relative_to(self.root)): source}
+        self.level_path = str((self.level_dir / LEVEL_FILE).relative_to(self.root))
+        self.sources: dict[str, str] = {self.level_path: source}
+        self.overrides = overrides or {}
 
     def fail(self, where: str, problem: str) -> LevelConfigError:
         return LevelConfigError(
-            self.level_file, f"[{self.difficulty}] {where}: {problem}"
+            self.level_file,
+            f"[{self.difficulty}] {where}: {problem}",
+            path=self.level_path,
+            line=level_line(
+                self.sources[self.level_path], self.difficulty, location_parts(where)
+            ),
+        )
+
+    def file_error(
+        self, path: Path, problem: str, line: int | None = None
+    ) -> LevelConfigError:
+        return LevelConfigError(
+            _display(path, self.root), problem, path=self.relative(path), line=line
         )
 
     # --- files -------------------------------------------------------------------------------------------
@@ -162,8 +281,11 @@ class _Resolver:
                 raise self.fail(
                     where, f"file is outside the levels directory: {reference}"
                 )
+            relative = str(candidate.relative_to(self.root))
+            if relative in self.overrides:
+                self.sources.setdefault(relative, self.overrides[relative])
+                return candidate
             if candidate.is_file():
-                relative = str(candidate.relative_to(self.root))
                 if relative not in self.sources:
                     self.sources[relative] = candidate.read_text(encoding="utf-8")
                 return candidate
@@ -189,10 +311,11 @@ class _Resolver:
                 )
             )
         except TemplateError as exc:
-            raise LevelConfigError(
-                _display(path, self.root),
+            raise self.file_error(
+                path,
                 f"{exc} (used by {self.level_file} [{self.difficulty}] {where}; "
                 f"allowed: {', '.join(sorted({*values, *runtime})) or 'none'})",
+                exc.line,
             ) from None
         return PromptFile(file=self.relative(path), text=rendered, runtime=kept)
 
@@ -200,11 +323,13 @@ class _Resolver:
         self, reference: str, where: str, values: dict[str, str]
     ) -> tuple[str, Any]:
         path = self.path(reference, where)
-        display = _display(path, self.root)
+        text = self.sources[self.relative(path)]
         try:
-            data = yaml.safe_load(self.sources[self.relative(path)])
+            data = yaml.safe_load(text)
         except yaml.YAMLError as exc:
-            raise LevelConfigError(display, f"invalid YAML: {exc}") from None
+            raise self.file_error(
+                path, f"invalid YAML: {exc}", _yaml_error_line(exc)
+            ) from None
 
         def walk(value: Any) -> Any:
             if isinstance(value, str):
@@ -218,10 +343,11 @@ class _Resolver:
         try:
             return self.relative(path), walk(data)
         except TemplateError as exc:
-            raise LevelConfigError(
-                display,
+            raise self.file_error(
+                path,
                 f"{exc} (used by {self.level_file} [{self.difficulty}] {where}; allowed: "
                 f"{', '.join(sorted({*values, *TOOL_DATA_RUNTIME}))})",
+                _placeholder_line(text, exc.placeholder),
             ) from None
 
     # --- sections -----------------------------------------------------------------------------------------
@@ -256,8 +382,11 @@ class _Resolver:
             try:
                 kind.data_model.model_validate(data)
             except ValidationError as exc:
-                raise LevelConfigError(
-                    _display(self.root / data_file, self.root), _validation_problem(exc)
+                loc = list(exc.errors(include_url=False)[0]["loc"])
+                raise self.file_error(
+                    self.root / data_file,
+                    _validation_problem(exc),
+                    yaml_line(self.sources[data_file], loc),
                 ) from None
         elif config.data:
             raise self.fail(
@@ -270,9 +399,7 @@ class _Resolver:
                 f"unknown tool(s) {', '.join(unknown)} (kind '{kind.name}' has {', '.join(kind.tool_names)})",
             )
         if data is not None and (problems := kind.check(data, injection_fields)):
-            raise LevelConfigError(
-                _display(self.root / data_file, self.root), "; ".join(problems)
-            )
+            raise self.file_error(self.root / data_file, "; ".join(problems))
         toolset_id = config.id or kind.name
         bound = build_toolset(
             kind,
@@ -448,8 +575,8 @@ class _Resolver:
             frozenset({"security_prompt"}),
         )
         if security and "security_prompt" not in system_template.runtime:
-            raise LevelConfigError(
-                _display(self.root / system_template.file, self.root),
+            raise self.file_error(
+                self.root / system_template.file,
                 f"has no {{{{security_prompt}}}} placeholder but {self.level_file} "
                 f"[{self.difficulty}] sets agent.security_prompt",
             )
@@ -547,62 +674,89 @@ def load_level_document(
     root: Path = LEVELS_ROOT,
     *,
     source: str | None = None,
+    overrides: Mapping[str, str] | None = None,
 ) -> LevelSet:
     """Resolve every difficulty of a level document (parsed YAML) as if it were `<level_dir>/level.yaml`.
 
     `source` is the raw file text shown in the config pane; in-memory documents are dumped as YAML instead.
+    `overrides` replace or add referenced files (path relative to `root` -> content).
     """
     file = _display(level_dir / LEVEL_FILE, root)
+    path = str((level_dir / LEVEL_FILE).resolve().relative_to(root.resolve()))
     if source is None:
         source = yaml.safe_dump(document, allow_unicode=True, sort_keys=False)
+
+    def error(problem: str, *parts: str | int) -> LevelConfigError:
+        return LevelConfigError(
+            file, problem, path=path, line=yaml_line(source, list(parts))
+        )
+
     if not isinstance(document, dict):
-        raise LevelConfigError(file, "a level file must be a mapping")
+        raise error("a level file must be a mapping")
     base = {
         key: value for key, value in document.items() if not str(key).startswith("x-")
     }
     difficulties = base.pop("difficulties", None)
     if not isinstance(difficulties, dict) or not difficulties:
-        raise LevelConfigError(
-            file, "difficulties: at least one difficulty is required"
-        )
+        raise error("difficulties: at least one difficulty is required", "difficulties")
     if base.get("id") != level_dir.name:
-        raise LevelConfigError(
-            file, f"id: must equal the directory name '{level_dir.name}'"
-        )
+        raise error(f"id: must equal the directory name '{level_dir.name}'", "id")
     level = LevelSet(id=level_dir.name, file=file)
     names = [str(name) for name in difficulties]
     for name, override in difficulties.items():
         if override is None:
             override = {}
         if not isinstance(override, dict):
-            raise LevelConfigError(file, f"difficulties.{name}: must be a mapping")
+            raise error(
+                f"difficulties.{name}: must be a mapping", "difficulties", str(name)
+            )
         if "id" in override:
-            raise LevelConfigError(
-                file, f"difficulties.{name}.id: a difficulty cannot change the level id"
+            raise error(
+                f"difficulties.{name}.id: a difficulty cannot change the level id",
+                "difficulties",
+                str(name),
+                "id",
             )
         try:
             variant = LevelVariant.model_validate(deep_merge(base, override))
         except ValidationError as exc:
+            loc = list(exc.errors(include_url=False)[0]["loc"])
             raise LevelConfigError(
-                file, _validation_problem(exc, f"[{name}] ")
+                file,
+                _validation_problem(exc, f"[{name}] "),
+                path=path,
+                line=level_line(source, str(name), loc),
             ) from None
         level.variants[str(name)] = _Resolver(
-            root, level_dir, str(name), source
+            root, level_dir, str(name), source, overrides
         ).resolve(variant, names)
     return level
 
 
-def load_level(level_dir: Path, root: Path = LEVELS_ROOT) -> LevelSet:
+def load_level(
+    level_dir: Path,
+    root: Path = LEVELS_ROOT,
+    overrides: Mapping[str, str] | None = None,
+) -> LevelSet:
+    """Load `<level_dir>/level.yaml`; `overrides` replace or add files (path relative to `root` -> content)."""
     path = level_dir / LEVEL_FILE
     file = _display(path, root)
+    relative = str(path.resolve().relative_to(root.resolve()))
     try:
-        source = path.read_text(encoding="utf-8")
+        if overrides and relative in overrides:
+            source = overrides[relative]
+        else:
+            source = path.read_text(encoding="utf-8")
         document = yaml.safe_load(source)
     except FileNotFoundError:
-        raise LevelConfigError(file, "file not found") from None
+        raise LevelConfigError(file, "file not found", path=relative) from None
     except yaml.YAMLError as exc:
-        raise LevelConfigError(file, f"invalid YAML: {exc}") from None
-    return load_level_document(document, level_dir, root, source=source)
+        raise LevelConfigError(
+            file, f"invalid YAML: {exc}", path=relative, line=_yaml_error_line(exc)
+        ) from None
+    return load_level_document(
+        document, level_dir, root, source=source, overrides=overrides
+    )
 
 
 def load_levels(root: Path = LEVELS_ROOT) -> dict[str, LevelSet]:

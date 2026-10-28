@@ -8,6 +8,11 @@ export default defineConfig({
 		proxy: {
 			"/api/auth": "http://localhost:3005",
 			"/api/deepteam": "http://localhost:5002",
+			// Internal deepteam callback: not served to the browser (as in the Caddyfile).
+			"/api/v1/arena/internal": {
+				target: "http://localhost:8000",
+				bypass: () => false,
+			},
 			"/api": "http://localhost:8000",
 		},
 	},

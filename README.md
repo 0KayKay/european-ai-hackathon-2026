@@ -103,8 +103,8 @@ The deployed service stays internal to the cluster. Set `LOG_FORMAT=json` for st
 
 ### DeepTeam scans
 
-After sign-in, use **Red team** in the frontend to start a scan. Enter a goal and AG-UI target URL. The default target
-is the backend's `/api/v1/ag-ui` endpoint. The same-origin `/api/deepteam/runs` API verifies your Better Auth session
+The frontend no longer has a **Red team** dialog (the arena uses the deepteam service for its red cases); start a
+standalone scan through the API with a goal and an AG-UI target URL. The default target is the backend's `/api/v1/ag-ui` endpoint. The same-origin `/api/deepteam/runs` API verifies your Better Auth session
 and forwards it to the backend target. The service accepts only target hosts listed in `ALLOWED_TARGET_HOSTS` in
 `infrastructure/base/local.yaml` (default: `backend`), and is reachable externally only through the frontend proxy. To
 call the API directly, send your session cookie:
@@ -135,6 +135,49 @@ configuration lives in [infrastructure/base/agentgateway.yaml](infrastructure/ba
 packages it into a ConfigMap for Tilt.
 Backend agent traces use the AG-UI `threadId` as Phoenix `session.id` and the verified Better Auth user ID as `user.id`,
 including on nested agent and model spans.
+
+## Guardrail Arena
+
+The arena evaluates the prompt-injection levels automatically: an attacker generates attacks against a level, a
+benign-case generator produces normal requests, every case runs to completion, and the results show how many
+attacks got through and how many legitimate requests the guardrails wrongly blocked. Specification, contracts and
+status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPEC.md); the manual test checklist is
+[TESTING.md](docs/spec/config-driven-arena/TESTING.md).
+
+- **Levels are config.** Each level × difficulty is described in [backend/levels/](backend/levels/README.md)
+  (agent, tools and data, secret, guardrails and their positions, success check, red and green team, a model and
+  parameters per LLM role). Edit the files and restart the backend; the UI is generated from them. Levels 1–3
+  reproduce the legacy challenges; `hidden-mailbox-output-judge` is an example of a new level without code.
+- **Where.** The arena is the whole frontend: after sign-in it opens on the level overview (`#/arena`; any other
+  hash lands there too), and the header shows the signed-in user with **Sign out**. Pick a level and difficulty to see the
+  config source, the execution graph and a node inspector with prompts and models. **Run evaluation** starts a
+  run; the run page shows progress, live counts, a live sample of the running case and the generated inputs; once
+  finished it shows attack success rate, false-positive rate, breakdowns and a filterable case list. Every case
+  opens a step-by-step replay on the graph. Runs can be stopped and exported as JSON.
+- **Runs and datasets.** Red cases come from the deepteam service (single-turn types are generated up front;
+  multi-turn types are driven turn by turn through an internal backend callback). Green cases come from the
+  level's generator model. The single-turn cases of a run (indirect red cases, all green cases) are stored as
+  datasets; a new run can reuse a stored dataset of the same level unchanged to compare guardrail changes on the
+  same data. Runs, cases with all events and datasets are stored in Postgres and survive reloads and restarts
+  (a run that was active when the backend stopped is marked *interrupted*).
+- **Settings** (backend; set in `infrastructure/base/local.yaml`, see `backend/.env.example`):
+  `ARENA_STORE` (`postgres` default, `memory` for a backend without database), `DEEPTEAM_URL`
+  (`http://deepteam:8080`), `ARENA_CALLBACK_URL` (base URL under which deepteam reaches the backend,
+  `http://backend:8000`). Models with the default endpoint go through agentgateway with the backend's internal key;
+  models with an explicit URL call that endpoint directly. The callback path
+  `/api/v1/arena/internal/` is answered with 404 by the frontend proxy and refused by the backend when a request
+  arrives through a proxy; only in-cluster calls reach it.
+- **Default models.** Every LLM role of every level (agent, judges, attacker, simulator, evaluator, green
+  generator) uses `qwen3-235b-a22b-fp8-leonardo` through agentgateway, with thinking switched off via
+  `chat_template_kwargs`. This needs the Leonardo cluster link (`infrastructure/gke-leonardo`) and a running
+  `qwen235b` server. The server has a 2,048-token context, so `max_tokens` is kept small (384–1,024). For local
+  runs without Leonardo, change the roles in the level files (or in the UI) to a model you have, e.g.
+  `gemini-3.8-flash` or a local Ollama endpoint.
+- **Limitations.** The deepteam arena endpoints (`/internal/arena/generate`,
+  `/internal/arena/multi-turn`) are implemented, but still need a live model and cluster check (see
+  [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)). Execution is serial per
+  run. Configs are edited as files, not in the UI; runs are not compared with each other. The playground and the manual
+  challenge pages were removed from the frontend; their backend stays as the parity reference.
 
 ## GKE
 
@@ -188,9 +231,11 @@ http://localhost:10350/r/deepteam/overview
 
 ### Challenge parity
 
+The frontend no longer has the playground or the manual challenge pages; the arena replaces them.
+The legacy challenge backend described here stays as the parity reference for arena levels 1–3.
+
 Challenges 1–3 have independent Easy, Medium, and Hard progress, saved in PostgreSQL's
-`challenge_attempts` table (created automatically on first use). The sidebar lists saved chats
-and submissions; choosing one restores its result or lets you resume challenge 1. Email and offer
+`challenge_attempts` table (created automatically on first use). Email and offer
 attacks are submitted only as untrusted tool data under a server-defined task. Email delivery and
 purchase approval are simulated. Failed email attempts mask credentials before returning them to
 the browser; completed attempts reveal the recovered secret.
@@ -207,11 +252,9 @@ window, or `CHALLENGE_CLOSED=true` to stop submissions. Defaults leave the exerc
 `/api/v1/challenges/admin` returns 404. Local backend mode retains its shared local identity while
 reading a signed-in user's name from the verified session when available.
 
-The frontend streams individual guardrail checks with their stage, applicable rule, and a short
-explanation. Failed email attempts also mask these explanations before they reach the browser.
-Saved attempts restore the runtime messages, model settings, submitted fields, results, and guardrail
-details. “Not solved” means the agent ran without the attacker achieving the objective. The offer
-preview embeds the original PDF with a separate open-PDF link.
+The backend streams individual guardrail checks with their stage, applicable rule, and a short
+explanation. Failed email attempts also mask these explanations before they leave the backend.
+Saved attempts keep the runtime messages, model settings, submitted fields, results, and guardrail
+details. “Not solved” means the agent ran without the attacker achieving the objective.
 
-The existing generic playground is unchanged; no challenge-specific practice playgrounds are added.
 The current model configuration is retained, so attack difficulty can differ from the archived models.

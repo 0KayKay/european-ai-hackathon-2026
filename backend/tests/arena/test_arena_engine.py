@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 import structlog
 import yaml
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -253,6 +254,23 @@ async def test_run_timeout_is_an_error():
     case = await session.finish()
     assert case.outcome == "error" and case.decided_by == {"kind": "error"}
     assert case.error == result.error
+
+
+@pytest.mark.asyncio
+async def test_model_behavior_error_reports_its_reason():
+    def fail(messages, info):
+        raise UnexpectedModelBehavior("Tool 'get_price_reference' exceeded max retries")
+
+    result = await run_case(
+        level("offer-review", "easy"),
+        CaseInput(case=Case(team="green"), content=OFFER),
+        models=models(fail),
+    )
+    assert result.outcome == "error"
+    assert result.error == (
+        "The run could not finish (UnexpectedModelBehavior: "
+        "Tool 'get_price_reference' exceeded max retries)."
+    )
 
 
 # --- indirect, single-turn -----------------------------------------------------------------------------------
@@ -655,6 +673,8 @@ async def test_gateway_key_is_only_sent_to_agentgateway():
         guardrails = document["difficulties"]["hard"]["guardrails"]
         judge = next(g for g in guardrails if g["id"] == "send-email-judge")
         judge["model"] = {"model": "judge-b", "endpoint": "https://example.com/v1"}
+        other = next(g for g in guardrails if g["id"] == "output-judge")
+        other["model"] = {"model": "judge-a", "endpoint": "agentgateway"}
 
     tuned, _ = await judge_requests(
         variant("email-review", "hard", explicit_endpoint)
@@ -692,7 +712,14 @@ async def test_events_never_contain_headers_or_credentials(monkeypatch):
     monkeypatch.setattr(get_settings(), "AGENTGATEWAY_API_KEY", key)
     structlog.contextvars.bind_contextvars(correlation_id="corr-secret-42")
     try:
-        details, calls = await judge_requests(level("email-review", "hard"))
+        def use_gateway(document):
+            for guardrail in document["difficulties"]["hard"]["guardrails"]:
+                if "model" in guardrail:
+                    guardrail["model"] = {"model": "test-judge", "endpoint": "agentgateway"}
+
+        details, calls = await judge_requests(
+            variant("email-review", "hard", use_gateway)
+        )
     finally:
         structlog.contextvars.unbind_contextvars("correlation_id")
     assert calls and all(call["options"]["api_key"] == key for call in calls)

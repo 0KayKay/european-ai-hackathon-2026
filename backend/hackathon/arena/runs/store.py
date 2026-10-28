@@ -1,4 +1,7 @@
-"""Persistence of arena runs, cases (with their events) and datasets (IMPLEMENTATION.md §7).
+"""Persistence of arena runs, cases (with their events), datasets and level overrides (IMPLEMENTATION.md §7).
+
+Level overrides are the level files edited in the UI; they are stored on top of the repository files in
+`backend/levels/`, per level with a version that grows with every save or reset (optimistic concurrency).
 
 Records are plain JSON documents (dicts). `RunStore` is the interface; `PostgresRunStore` keeps them as JSONB in
 the style of `hackathon.challenge_store` (over a connection pool), `MemoryRunStore` keeps them in process (tests, `ARENA_STORE=memory`).
@@ -69,6 +72,25 @@ def dumps(value: Any) -> str:
     return json.dumps(storable(value))
 
 
+class VersionConflict(Exception):
+    """A level's overrides changed since `base_version`; `version` is the stored one."""
+
+    def __init__(self, version: int) -> None:
+        super().__init__(f"level overrides are at version {version}")
+        self.version = version
+
+
+def empty_overrides(level: str) -> dict[str, Any]:
+    """Overrides record of a level that was never edited."""
+    return {
+        "level": level,
+        "version": 0,
+        "updated_at": None,
+        "updated_by": None,
+        "files": {},
+    }
+
+
 class RunStore(Protocol):
     async def setup(self) -> int:
         """Prepare the store; runs left `generating`/`running` become `interrupted` (their running case
@@ -107,6 +129,22 @@ class RunStore(Protocol):
         """Datasets of a level without their cases, newest first."""
         ...
 
+    async def level_override_versions(self) -> dict[str, int]:
+        """Current overrides version of every level that was ever edited (a cheap check for changes)."""
+        ...
+
+    async def get_level_overrides(self, level: str) -> dict[str, Any]:
+        """`{level, version, updated_at, updated_by, files: {path: {content, updated_at, updated_by, version}}}`."""
+        ...
+
+    async def save_level_overrides(
+        self, level: str, files: dict[str, str], *, base_version: int, user_id: str
+    ) -> dict[str, Any]:
+        """Replace the level's overrides with `files` (path -> content; `{}` drops them all) and raise the
+        version by one. Raises `VersionConflict` if the stored version is not `base_version`. Files whose
+        content did not change keep their `version` and `updated_*`. Returns the new record."""
+        ...
+
 
 class MemoryRunStore:
     """In-process store. Records are copied in and out, like a database would, and kept `storable()`."""
@@ -115,6 +153,7 @@ class MemoryRunStore:
         self.runs: dict[str, dict[str, Any]] = {}
         self.cases: dict[str, dict[str, Any]] = {}
         self.datasets: dict[str, dict[str, Any]] = {}
+        self.overrides: dict[str, dict[str, Any]] = {}
 
     async def setup(self) -> int:
         active = [run for run in self.runs.values() if run["status"] in ACTIVE_STATUSES]
@@ -171,6 +210,41 @@ class MemoryRunStore:
             dataset_meta(d) for d in copy.deepcopy(newest_first(datasets, "created_at"))
         ]
 
+    async def level_override_versions(self) -> dict[str, int]:
+        return {level: record["version"] for level, record in self.overrides.items()}
+
+    async def get_level_overrides(self, level: str) -> dict[str, Any]:
+        return copy.deepcopy(self.overrides.get(level) or empty_overrides(level))
+
+    async def save_level_overrides(
+        self, level: str, files: dict[str, str], *, base_version: int, user_id: str
+    ) -> dict[str, Any]:
+        current = self.overrides.get(level) or empty_overrides(level)
+        if current["version"] != base_version:
+            raise VersionConflict(current["version"])
+        version, at = current["version"] + 1, now_iso()
+        stored = {}
+        for path, content in storable(files).items():
+            old = current["files"].get(path)
+            stored[path] = (
+                old
+                if old and old["content"] == content
+                else {
+                    "content": content,
+                    "updated_at": at,
+                    "updated_by": user_id,
+                    "version": version,
+                }
+            )
+        self.overrides[level] = {
+            "level": level,
+            "version": version,
+            "updated_at": at,
+            "updated_by": user_id,
+            "files": stored,
+        }
+        return copy.deepcopy(self.overrides[level])
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS arena_runs (
@@ -203,7 +277,32 @@ CREATE TABLE IF NOT EXISTS arena_datasets (
     data JSONB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS arena_datasets_level ON arena_datasets(level, created_at DESC);
+-- Level files edited in the UI, on top of the repository files (path relative to backend/levels/).
+CREATE TABLE IF NOT EXISTS arena_level_overrides (
+    level TEXT NOT NULL,
+    path TEXT NOT NULL,
+    content TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    PRIMARY KEY (level, path)
+);
+-- The overrides version per level. It only grows (a reset keeps the row), so a stale editor always conflicts.
+CREATE TABLE IF NOT EXISTS arena_level_versions (
+    level TEXT PRIMARY KEY,
+    version INTEGER NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by TEXT
+);
 """
+
+
+def iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return (
+        value.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    )
 
 
 def encode_case(case: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
@@ -407,6 +506,92 @@ class PostgresRunStore:
                 level,
             )
         return [json.loads(row["data"]) for row in rows]
+
+    # --- level overrides -----------------------------------------------------------------------------------
+
+    async def level_override_versions(self) -> dict[str, int]:
+        async with self.connection() as conn:
+            rows = await conn.fetch("SELECT level, version FROM arena_level_versions")
+        return {row["level"]: row["version"] for row in rows}
+
+    async def _level_overrides(self, conn, level: str) -> dict[str, Any]:
+        head = await conn.fetchrow(
+            "SELECT version, updated_at, updated_by FROM arena_level_versions WHERE level=$1",
+            level,
+        )
+        if head is None:
+            return empty_overrides(level)
+        rows = await conn.fetch(
+            "SELECT path, content, updated_at, updated_by, version FROM arena_level_overrides "
+            "WHERE level=$1 ORDER BY path",
+            level,
+        )
+        return {
+            "level": level,
+            "version": head["version"],
+            "updated_at": iso(head["updated_at"]),
+            "updated_by": head["updated_by"],
+            "files": {
+                row["path"]: {
+                    "content": row["content"],
+                    "updated_at": iso(row["updated_at"]),
+                    "updated_by": row["updated_by"],
+                    "version": row["version"],
+                }
+                for row in rows
+            },
+        }
+
+    async def get_level_overrides(self, level: str) -> dict[str, Any]:
+        async with self.connection() as conn:
+            return await self._level_overrides(conn, level)
+
+    async def save_level_overrides(
+        self, level: str, files: dict[str, str], *, base_version: int, user_id: str
+    ) -> dict[str, Any]:
+        files = storable(files)
+        async with self.connection() as conn, conn.transaction():
+            await conn.execute(
+                "INSERT INTO arena_level_versions(level, version) VALUES($1, 0) ON CONFLICT DO NOTHING",
+                level,
+            )
+            version = await conn.fetchval(
+                "SELECT version FROM arena_level_versions WHERE level=$1 FOR UPDATE",
+                level,
+            )
+            if version != base_version:
+                raise VersionConflict(version)
+            version += 1
+            rows = await conn.fetch(
+                "SELECT path, content FROM arena_level_overrides WHERE level=$1", level
+            )
+            current = {row["path"]: row["content"] for row in rows}
+            await conn.execute(
+                "DELETE FROM arena_level_overrides WHERE level=$1 AND NOT (path = ANY($2::text[]))",
+                level,
+                list(files),
+            )
+            for path, content in files.items():
+                if current.get(path) == content:
+                    continue
+                await conn.execute(
+                    "INSERT INTO arena_level_overrides(level,path,content,updated_by,version) "
+                    "VALUES($1,$2,$3,$4,$5) ON CONFLICT (level, path) DO UPDATE SET "
+                    "content=EXCLUDED.content, updated_at=now(), updated_by=EXCLUDED.updated_by, "
+                    "version=EXCLUDED.version",
+                    level,
+                    path,
+                    content,
+                    user_id,
+                    version,
+                )
+            await conn.execute(
+                "UPDATE arena_level_versions SET version=$2, updated_at=now(), updated_by=$3 WHERE level=$1",
+                level,
+                version,
+                user_id,
+            )
+            return await self._level_overrides(conn, level)
 
 
 def create_store(kind: str | None = None) -> RunStore:

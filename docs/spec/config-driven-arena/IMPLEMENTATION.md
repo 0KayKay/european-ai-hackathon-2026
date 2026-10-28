@@ -257,8 +257,11 @@ Layout is the frontend's job (deterministic, n8n/Langflow style, see `design/`).
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/levels` | `[{ id, title, description, channel, turns, difficulties: ["easy","medium","hard"] }]` |
+| GET | `/levels` | `[{ id, title, description, channel, turns, difficulties: ["easy","medium","hard"], version, modified, override_error }]` |
 | GET | `/levels/{level}/{difficulty}` | `{ level, difficulty, difficulties, title, description, surface, graph, models: [{role, node, model, endpoint, params}], source: { files: [{ path, content }] }, red_team: { attacker, simulator, evaluator, objective, attacks: [{type, title, turns, attempts}], cases, max_turns }, green_team: { generator, cases, guidance: {file, text} } }` — `source.files[0]` is the level.yaml; paths relative to `backend/levels/` |
+| GET | `/levels/{level}/source` | every file of the level as served (all difficulties): `{ level, version, modified, updated_at, updated_by, override_error, files: [{ path, content, modified, editable, updated_at?, updated_by?, version? }] }` — to copy UI edits into git |
+| PUT | `/levels/{level}/source` | body `{ files: [{ path, content }], base_version, difficulty? }` → level detail of `difficulty` (default: first) with the new `version`; **422** `{ detail, errors: [{ path, message, line? }] }` (nothing stored); **409** `{ detail, version, current: <level detail> }` when `base_version` is stale; 503 without a store |
+| DELETE | `/levels/{level}/source?difficulty=&base_version=` | drops the level's overrides → level detail (repository version); 409 on a stale `base_version` (optional) |
 | GET | `/levels/{level}/datasets` | `[{ id, name, level, team, created_at, size, run_id }]` |
 | GET | `/datasets/{id}` | `{ …meta, cases: [{ id, team, attack_type?, input?, content? }] }` |
 | POST | `/runs` | body `{ level, difficulty, red: { source: "generate" \| "dataset", dataset_id? }, green: { source, dataset_id? } }` → run summary (201) |
@@ -279,6 +282,25 @@ Internal (not behind the session dependency; not routed by the gateway; token-au
 target callback for multi-turn attacks.
 
 Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active. SSE is optional.
+
+**Level editing (overrides, `hackathon/arena/catalog.py`, `config/overrides.py`):**
+
+- The level detail adds `version` (overrides version, 0 = never edited), `modified` (served with saved edits),
+  `override_error` (`null`, or `{ message, errors: [{path, message, line?}], files: [{path, content}] }` when the
+  stored edits no longer load; the repository version is served meanwhile) and per source file `modified` and
+  `editable`.
+- Editable: `<level>/level.yaml` and files in `<level>/` that the level (any difficulty) references; a new file
+  must be referenced by the `level.yaml` of the same save. Rejected: `..`, absolute paths, empty or `.` segments,
+  `shared/` (used by every level), other levels' directories, files the level does not use, more than 50 files or
+  500,000 characters per file.
+- A save merges the files over the overrides in effect (broken overrides are replaced), validates the whole level
+  with the loader (all difficulties; errors name file, problem and, where the YAML parser or validator can tell,
+  the line), and stores the level's override set: files equal to the repository version or no longer referenced
+  are dropped. Overrides are per level: another level that reuses a file by path (e.g. the example level's
+  `hidden-mailbox/prompts/system.md`) keeps reading the repository file.
+- Every level request and `POST /runs` first compares the stored overrides versions (one query on
+  `arena_level_versions`) and reloads changed levels, so all replicas serve a save on their next request. A run
+  keeps its snapshot; earlier runs and replays are unaffected.
 
 **Details the frontend relies on (WP3, refines the shapes above; TypeScript in `frontend/src/arena/types.ts`):**
 
@@ -386,7 +408,15 @@ Never hand-written attack content anywhere (SPEC §10): tests use mocked model c
 
 Postgres via `asyncpg` in the style of `challenge_store.py` (JSONB documents) over a small connection pool:
 tables `arena_runs` (the config `snapshot` in its own column, written once), `arena_cases` (events JSONB),
-`arena_datasets`. A store interface with a Postgres implementation and an in-memory implementation
+`arena_datasets`, and for level edits made in the UI:
+
+| Table | Columns | Notes |
+|---|---|---|
+| `arena_level_overrides` | `level`, `path` (relative to `backend/levels/`), `content` TEXT, `updated_at`, `updated_by` (user id), `version` (level version of the last change of this file); PK `(level, path)` | the level's override set; the repository files stay the defaults |
+| `arena_level_versions` | `level` PK, `version`, `updated_at`, `updated_by` | grows with every save and reset (a reset keeps the row), so a stale editor always gets 409; a save locks the row (`FOR UPDATE`), checks `base_version` and replaces the set in one transaction |
+
+At startup the app loads every level's overrides; one that no longer validates is logged and reported as
+`override_error` while the level is served from its repository files, so the app always starts. A store interface with a Postgres implementation and an in-memory implementation
 (tests; `ARENA_STORE=memory` for local runs without DB). Runs found `running`/`generating` at startup become
 `interrupted` (finished at their last update) and their running case `stopped`. `tests/arena/test_arena_store.py`
 runs the store tests against Postgres when `ARENA_TEST_DATABASE_URL` is set. JSONB cannot hold NUL characters or

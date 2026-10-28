@@ -236,7 +236,12 @@ class Orchestrator:
         *,
         user_id: str = "arena",
     ) -> dict[str, Any]:
+        # Saved level edits (possibly from another replica) apply to every new run; a run keeps the snapshot
+        # of the level it started with.
+        await self.catalog.refresh()
         level = self._variant(level_id, difficulty)
+        # Taken together with the level: a save during the awaits below must not mix two versions.
+        graph = self.catalog.graphs[(level.id, level.difficulty)]
         datasets = {
             "red": await self._source_dataset(level, "red", red),
             "green": await self._source_dataset(level, "green", green),
@@ -281,9 +286,7 @@ class Orchestrator:
             },
             "snapshot": {
                 "level": level.model_dump(mode="json"),
-                "graph": self.catalog.graphs[(level.id, level.difficulty)].model_dump(
-                    mode="json"
-                ),
+                "graph": graph.model_dump(mode="json"),
             },
         }
         await self.store.save_run(run)

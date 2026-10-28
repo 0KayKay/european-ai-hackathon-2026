@@ -10,6 +10,7 @@ import type {
 	RunExport,
 	RunResults,
 	RunSummary,
+	SaveSourceRequest,
 } from "./types";
 
 export const ARENA_API_BASE = "/api/v1/arena";
@@ -18,12 +19,20 @@ export const ARENA_API_BASE = "/api/v1/arena";
 export class ArenaApiError extends Error {
 	readonly status: number;
 	readonly detail: unknown;
+	/** The whole response body (e.g. `errors` of a 422, `current` of a 409). */
+	readonly body: unknown;
 
-	constructor(message: string, status: number, detail?: unknown) {
+	constructor(
+		message: string,
+		status: number,
+		detail?: unknown,
+		body?: unknown,
+	) {
 		super(message);
 		this.name = "ArenaApiError";
 		this.status = status;
 		this.detail = detail;
+		this.body = body ?? detail;
 	}
 }
 
@@ -84,6 +93,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 			messageFor(response.status, detail),
 			response.status,
 			detail,
+			body,
 		);
 	}
 	return body as T;
@@ -108,6 +118,38 @@ export const getLevel = (
 		`/levels/${segment(level)}/${segment(difficulty)}`,
 		opts,
 	);
+
+/**
+ * Saves edited level files (validated with every difficulty). Rejects with an `ArenaApiError`:
+ * 422 `body.errors: SourceProblem[]`, 409 `body.current: LevelDetail` (someone else saved).
+ */
+export const saveLevelSource = (
+	level: string,
+	body: SaveSourceRequest,
+	opts?: RequestOptions,
+) =>
+	request<LevelDetail>(`/levels/${segment(level)}/source`, {
+		method: "PUT",
+		body: JSON.stringify(body),
+		...opts,
+	});
+
+/** Drops the level's saved edits: it is served from the repository files again. */
+export const resetLevelSource = (
+	level: string,
+	params: { difficulty?: Difficulty; base_version?: number } = {},
+	opts?: RequestOptions,
+) => {
+	const query = new URLSearchParams();
+	if (params.difficulty) query.set("difficulty", params.difficulty);
+	if (params.base_version !== undefined)
+		query.set("base_version", String(params.base_version));
+	const search = query.toString();
+	return request<LevelDetail>(
+		`/levels/${segment(level)}/source${search ? `?${search}` : ""}`,
+		{ method: "DELETE", ...opts },
+	);
+};
 
 // Datasets -------------------------------------------------------------------
 

@@ -9,6 +9,7 @@ steps focus on what a browser and real models add. Current state per criterion: 
   · [AC-4 Red team](#ac-4-red-team) · [AC-5 Green team](#ac-5-green-team) · [AC-6 Run](#ac-6-run)
   · [AC-7 Results](#ac-7-results) · [AC-8 Replay](#ac-8-replay) · [AC-9 Models](#ac-9-models-per-role)
   · [AC-10 Datasets](#ac-10-dataset-reuse)
+- [Editing levels in the UI](#editing-levels-in-the-ui)
 - [Security checks](#security-checks)
 - [Connecting real models](#connecting-real-models)
 - [What still needs a live check](#what-still-needs-a-live-check)
@@ -151,6 +152,35 @@ Automated: `tests/arena/test_arena_runs_units.py::test_results_rates_and_labels`
 3. Level 1: the red team offers no stored dataset ("Red cases are generated during each run"); green datasets can
    be reused.
 
+## Editing levels in the UI
+
+Automated: `backend/tests/arena/test_arena_editing.py` (API, store, runs, startup fallback; Postgres with
+`ARENA_TEST_DATABASE_URL`) and `frontend/src/arena/level/SourceEditing.test.tsx` (edit, save, errors, conflict,
+reset, leave warning). Use a level you can reset afterwards (e.g. the example level); the parity levels 1–3 stay
+the reference in git.
+
+1. Level view → **Edit**. The level's own files become editable (line numbers, monospace); files in `shared/` and
+   in other levels' directories show **read-only**.
+2. In `level.yaml` on **Hard**, change a guardrail's `at:` (e.g. `"agent->output"`), **Save**. Expected: "Saved ·
+   version N", the graph shows the guardrail in its new group, `level.yaml` and the level carry **Modified**
+   (also in the level list).
+3. Reload the page and open the level in a second browser: both show the saved version. With two backend replicas,
+   the other replica serves it on its next request.
+4. Errors: break the YAML (e.g. an unclosed `[`), use an unknown key, or put `{{nope}}` into a prompt file, **Save**.
+   Expected: "The level config is invalid; nothing was saved." with `file:line message`; the file opens with the
+   line marked red; the edits stay.
+5. New file: **New file** `prompts/strict.md`, reference it from `level.yaml` in the same edit, **Save** → works;
+   saving the reference without the file names `file not found`.
+6. Conflict: open the editor in two tabs, save in the first, then save in the second. Expected: "Someone else saved
+   this level"; **Load their version** shows the first tab's content.
+7. **Cancel** with changes asks first; clicking a breadcrumb or another difficulty with unsaved changes asks
+   first; closing the tab warns.
+8. Start a run after a save: its graph and export snapshot show the saved config; replays of earlier runs keep
+   their old graph.
+9. **Reset to repository version** (asks first) → the badges disappear and the repository files are shown again.
+10. Copy edits back into git: `GET /api/v1/arena/levels/<level>/source` (see
+    [levels README](../../../backend/levels/README.md#editing-levels-in-the-ui)).
+
 ## Security checks
 
 1. `curl -i https://<host>/api/v1/arena/internal/cases/x/turn -X POST` (or `http://localhost:5000/…` locally)
@@ -159,6 +189,8 @@ Automated: `tests/arena/test_arena_runs_units.py::test_results_rates_and_labels`
    `kubectl exec deploy/deepteam -- python -c "import urllib.request as u; print(u.urlopen(u.Request('http://backend:8000/api/v1/arena/internal/cases/x/turn', b'{\"message\":\"m\"}', {'content-type': 'application/json'})).status)"`
    fails with **403** (missing token), not 404 — the route is reachable in-cluster.
 3. Export a run and search it for `x-arena-token`, cookies or the gateway key: none appear (R-EXE-8).
+4. Level editing: `PUT /api/v1/arena/levels/<level>/source` without a session answers 401; paths with `..`, an
+   absolute path, `shared/…` or another level's directory answer 422 and nothing is stored.
 
 ## Connecting real models
 

@@ -1,5 +1,5 @@
 import { PlayIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { getLevel } from "../api";
@@ -22,6 +22,46 @@ import type {
 import { useArenaQuery } from "../useArenaQuery";
 import { ConfigSource, configLinesFor } from "./ConfigSource";
 import { NodeInspector } from "./NodeInspector";
+import { useSourceEditor } from "./useSourceEditor";
+
+export const LEAVE_CONFIRM =
+	"You have unsaved changes to this level. Leave and discard them?";
+
+/**
+ * Asks before leaving with unsaved edits: a hash change (links, difficulty switch, back button)
+ * is undone unless confirmed, and closing or reloading the tab shows the browser's warning.
+ * Registered by the level view, so it runs before the app's route listener.
+ */
+function useUnsavedChangesGuard(dirty: boolean, onLeave: () => void) {
+	const latest = useRef({ dirty, onLeave });
+	latest.current = { dirty, onLeave };
+	useEffect(() => {
+		let current = window.location.hash;
+		const onHashChange = () => {
+			const next = window.location.hash;
+			if (next === current) return;
+			if (latest.current.dirty) {
+				if (!window.confirm(LEAVE_CONFIRM)) {
+					window.history.replaceState(window.history.state, "", current);
+					return;
+				}
+				latest.current.onLeave();
+			}
+			current = next;
+		};
+		const onBeforeUnload = (event: BeforeUnloadEvent) => {
+			if (!latest.current.dirty) return;
+			event.preventDefault();
+			event.returnValue = "";
+		};
+		window.addEventListener("hashchange", onHashChange);
+		window.addEventListener("beforeunload", onBeforeUnload);
+		return () => {
+			window.removeEventListener("hashchange", onHashChange);
+			window.removeEventListener("beforeunload", onBeforeUnload);
+		};
+	}, []);
+}
 
 /** First LLM guardrail if there is one (the interesting part of a hard level), else the agent. */
 export function defaultSelection(graph: ArenaGraphData): string | null {
@@ -113,6 +153,14 @@ export function LevelView({
 		detail?.level === level && detail.difficulty === difficulty
 			? detail
 			: undefined;
+	// A save or reset answers with the new level view: graph, inspector and badges render from it.
+	const editor = useSourceEditor({
+		level,
+		difficulty,
+		detail: runnable,
+		onDetail: query.setData,
+	});
+	useUnsavedChangesGuard(editor.dirty, editor.discard);
 	const surface = detail?.surface ?? graph?.surface;
 
 	return (
@@ -170,6 +218,9 @@ export function LevelView({
 							activePath={activePath}
 							onSelectPath={setActivePath}
 							highlight={highlight}
+							editor={runnable ? editor : undefined}
+							modified={detail.modified ?? false}
+							overrideError={detail.override_error}
 						/>
 					</div>
 

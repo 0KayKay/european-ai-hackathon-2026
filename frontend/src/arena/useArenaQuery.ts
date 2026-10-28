@@ -5,6 +5,8 @@ export interface QueryState<T> {
 	error: Error | undefined;
 	loading: boolean;
 	reload: () => void;
+	/** Replaces the data, e.g. with the response of a save. */
+	setData: (data: T) => void;
 }
 
 /**
@@ -43,5 +45,5 @@ export function useArenaQuery<T>(
 	}, [run, attempt]);
 
 	const reload = useCallback(() => setAttempt((n) => n + 1), []);
-	return { data, error, loading, reload };
+	return { data, error, loading, reload, setData };
 }

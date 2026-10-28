@@ -32,15 +32,20 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     normalize_external_loggers()
     logger.info("Starting application", app=settings.APP_NAME, environment=settings.ENV)
     # Fail fast on an invalid level config (R-CFG-5) instead of on the first arena request.
-    get_level_catalog()
+    catalog = get_level_catalog()
     runs = get_orchestrator()
+    # Saved level overrides (edited in the UI) live in the run store. A broken override does not stop the
+    # app: that level falls back to its repository files and reports `override_error`.
+    catalog.store = runs.store
     try:
         await runs.startup()
+        await catalog.refresh()
     except Exception:
         # The arena store is optional for the rest of the app; arena requests report the problem themselves.
         logger.exception("Arena run store unavailable at startup")
     yield None
     await runs.shutdown()
+    catalog.store = None
 
 
 app = FastAPI(title=get_settings().APP_NAME, lifespan=lifespan)

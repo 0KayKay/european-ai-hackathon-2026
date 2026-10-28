@@ -17,6 +17,22 @@ function LevelCard({ level }: { level: LevelSummary }) {
 		<li className="flex flex-col gap-4 rounded-xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
 			<div className="flex flex-wrap items-center gap-2">
 				<SurfaceBadge channel={level.channel} turns={level.turns} />
+				{level.modified && (
+					<span
+						title="Served with edits saved in the UI"
+						className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+					>
+						Modified
+					</span>
+				)}
+				{level.override_error && (
+					<span
+						title={level.override_error}
+						className="rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
+					>
+						Saved edits do not load
+					</span>
+				)}
 			</div>
 			<div className="flex flex-col gap-1.5">
 				<h2 className="text-base font-semibold tracking-tight">

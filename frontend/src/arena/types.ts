@@ -148,12 +148,46 @@ export interface LevelSummary {
 	channel: Channel;
 	turns: Turns;
 	difficulties: Difficulty[];
+	/** Overrides version; grows with every save or reset in the UI (0: never edited). */
+	version?: number;
+	/** The level is served with edits saved in the UI (overrides of the repository files). */
+	modified?: boolean;
+	/** Saved edits that no longer load; the repository version is served meanwhile. */
+	override_error?: string | null;
 }
 
 export interface SourceFile {
 	/** Path relative to `backend/levels/`, e.g. `hidden-mailbox/level.yaml`, `shared/prompts/refusal.md`. */
 	path: string;
 	content: string;
+	/** The content is an edit saved in the UI, not the repository file. */
+	modified?: boolean;
+	/** The file lies in the level's own directory and can be edited (`shared/` and other levels cannot). */
+	editable?: boolean;
+}
+
+/** One problem of a rejected save (`PUT /levels/{level}/source` → 422). */
+export interface SourceProblem {
+	/** File relative to `backend/levels/`. */
+	path: string;
+	message: string;
+	/** 1-based line, when the YAML parser or validator can tell. */
+	line?: number;
+}
+
+/** Saved edits that no longer load (e.g. after a schema change). */
+export interface OverrideError {
+	message: string;
+	errors: SourceProblem[];
+	/** The stored (broken) files, to fix them in the editor. */
+	files: SourceFile[];
+}
+
+/** `PUT /levels/{level}/source` body. */
+export interface SaveSourceRequest {
+	files: { path: string; content: string }[];
+	base_version: number;
+	difficulty?: Difficulty;
 }
 
 export interface AttackSummary {
@@ -217,6 +251,10 @@ export interface LevelDetail {
 	source: { files: SourceFile[] };
 	red_team: RedTeamSummary;
 	green_team: GreenTeamSummary;
+	/** Overrides version the editor saves against (`base_version`). */
+	version?: number;
+	modified?: boolean;
+	override_error?: OverrideError | null;
 }
 
 // ---------------------------------------------------------------------------

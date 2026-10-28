@@ -24,7 +24,17 @@ from tests.arena.test_arena_runs import (
     until,
 )
 
-LEVEL_SUMMARY = {"id", "title", "description", "channel", "turns", "difficulties"}
+LEVEL_SUMMARY = {
+    "id",
+    "title",
+    "description",
+    "channel",
+    "turns",
+    "difficulties",
+    "version",
+    "modified",
+    "override_error",
+}
 LEVEL_DETAIL = {
     "level",
     "difficulty",
@@ -37,6 +47,9 @@ LEVEL_DETAIL = {
     "source",
     "red_team",
     "green_team",
+    "version",
+    "modified",
+    "override_error",
 }
 GRAPH = {"surface", "nodes", "edges"}
 NODE = {"id", "kind", "label", "subtitle", "group", "details"}
@@ -310,7 +323,7 @@ async def test_api_responses_match_the_frontend_contract():
         for model in detail["models"]:
             keys(model, ROLE_MODEL, f"model {model['role']}")
         for file in detail["source"]["files"]:
-            keys(file, {"path", "content"}, "source file")
+            keys(file, {"path", "content", "modified", "editable"}, "source file")
 
     direct = await full_run(harness, dump, "direct", "hidden-mailbox", set())
     cases = by_label(direct["cases"])

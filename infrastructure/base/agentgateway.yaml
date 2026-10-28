@@ -21,6 +21,42 @@ routes:
       - host: backend:8000
 llm:
   policies:
+    guardrails:
+      streaming: Enabled
+      request:
+        - webhook:
+            target:
+              host: guardrail:8000
+            headers:
+              x-model: llmRequest.model
+              x-user-id: 'request.headers["x-user-id"]'
+              x-request-id: 'request.headers["x-request-id"]'
+              x-run-id: 'request.headers["x-run-id"]'
+              x-thread-id: 'request.headers["x-thread-id"]'
+              x-correlation-id: 'request.headers["x-correlation-id"]'
+              x-tenant-id: 'request.headers["x-tenant-id"]'
+              user-agent: 'request.headers["user-agent"]'
+              traceparent: 'request.headers["traceparent"]'
+              tracestate: 'request.headers["tracestate"]'
+              x-original-path: request.path
+              x-original-method: request.method
+      response:
+        - webhook:
+            target:
+              host: guardrail:8000
+            headers:
+              x-model: 'request.headers["x-model"]'
+              x-user-id: 'request.headers["x-user-id"]'
+              x-request-id: 'request.headers["x-request-id"]'
+              x-run-id: 'request.headers["x-run-id"]'
+              x-thread-id: 'request.headers["x-thread-id"]'
+              x-correlation-id: 'request.headers["x-correlation-id"]'
+              x-tenant-id: 'request.headers["x-tenant-id"]'
+              user-agent: 'request.headers["user-agent"]'
+              traceparent: 'request.headers["traceparent"]'
+              tracestate: 'request.headers["tracestate"]'
+              x-original-path: request.path
+              x-original-method: request.method
     extAuthz:
       host: auth:3000
       protocol:
@@ -36,18 +72,6 @@ llm:
   models:
     - name: "*"
       provider: vertex
-      guardrails:
-        request:
-          - webhook:
-              target:
-                host: backend:8000
-                policies:
-                  http:
-                    requestTimeout: "30s"
-              headers:
-                ":path": '"/guardrails/request"'
-                x-challenge-difficulty: request.headers["x-challenge-difficulty"]
-              failureMode: failClosed
       params:
         vertexProject: european-ai-hackathon-2026
         vertexRegion: global

@@ -1,11 +1,26 @@
-import { useState } from "react";
-import AGUIPlayground from "./AGUIPlayground";
+import { useEffect, useState } from "react";
+import { ArenaApp } from "./arena/ArenaApp";
+import {
+	type ArenaRoute,
+	arenaHref,
+	replaceHash,
+	useArenaRoute,
+} from "./arena/router";
 import { Button } from "./components/ui/button";
 import { authClient } from "./lib/auth-client";
+
+const LEVELS = { name: "levels" } as const satisfies ArenaRoute;
 
 export default function App() {
 	const { data: session, isPending } = authClient.useSession();
 	const [error, setError] = useState("");
+	const arenaRoute = useArenaRoute();
+	const signedIn = Boolean(session);
+
+	// The arena is the whole app: an empty or non-arena hash lands on the level overview.
+	useEffect(() => {
+		if (signedIn && !arenaRoute) replaceHash(arenaHref(LEVELS));
+	}, [signedIn, arenaRoute]);
 
 	if (isPending) {
 		return (
@@ -16,7 +31,7 @@ export default function App() {
 		return (
 			<main className="grid h-dvh place-items-center bg-background text-foreground">
 				<div className="flex flex-col items-center gap-4">
-					<h1 className="text-xl font-medium">Guardrail lab</h1>
+					<h1 className="text-xl font-medium">Guardrail Arena</h1>
 					<Button
 						onClick={async () => {
 							try {
@@ -43,10 +58,5 @@ export default function App() {
 		);
 	}
 
-	return (
-		<AGUIPlayground
-			userName={session.user.name}
-			onSignOut={() => void authClient.signOut()}
-		/>
-	);
+	return <ArenaApp route={arenaRoute ?? LEVELS} />;
 }

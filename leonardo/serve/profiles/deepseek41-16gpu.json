@@ -55,7 +55,7 @@
   },
   "hooks": [],
   "client": {
-    "local_port": 18086,
+    "local_port": 18088,
     "timeout_seconds": 300,
     "chat_template_kwargs": {
       "thinking": false

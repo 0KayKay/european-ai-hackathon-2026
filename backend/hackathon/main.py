@@ -5,8 +5,14 @@ import structlog
 import uvicorn
 from fastapi import FastAPI
 
-from hackathon.api.guardrails import router as guardrails_router
 from hackathon.api.router import router as ag_ui_router
+from hackathon.api.challenges import router as challenges_router
+from hackathon.arena.api import (
+    get_level_catalog,
+    get_orchestrator,
+    internal_router as arena_internal_router,
+    router as arena_router,
+)
 from hackathon.config import get_settings
 from hackathon.extensions import (
     LogCorrelationIdMiddleware,
@@ -25,16 +31,34 @@ settings = get_settings()
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     normalize_external_loggers()
     logger.info("Starting application", app=settings.APP_NAME, environment=settings.ENV)
+    # Fail fast on an invalid level config (R-CFG-5) instead of on the first arena request.
+    catalog = get_level_catalog()
+    runs = get_orchestrator()
+    # Saved level overrides (edited in the UI) live in the run store. A broken override does not stop the
+    # app: that level falls back to its repository files and reports `override_error`.
+    catalog.store = runs.store
+    try:
+        await runs.startup()
+        await catalog.refresh()
+    except Exception:
+        # The arena store is optional for the rest of the app; arena requests report the problem themselves.
+        logger.exception("Arena run store unavailable at startup")
     yield None
+    await runs.shutdown()
+    catalog.store = None
 
 
 app = FastAPI(title=get_settings().APP_NAME, lifespan=lifespan)
 app.add_middleware(LogCorrelationIdMiddleware)
 app.add_exception_handler(Exception, global_exception_handler)
 app.include_router(ag_ui_router)
-app.include_router(guardrails_router)
+app.include_router(challenges_router)
+app.include_router(arena_router)
+app.include_router(arena_internal_router)
 if settings.PHOENIX_OTLP_ENDPOINT:
-    configure_tracing(app, settings.PHOENIX_OTLP_ENDPOINT)
+    configure_tracing(
+        app, settings.PHOENIX_OTLP_ENDPOINT, api_key=settings.PHOENIX_API_KEY
+    )
 
 
 @app.get("/api/health")

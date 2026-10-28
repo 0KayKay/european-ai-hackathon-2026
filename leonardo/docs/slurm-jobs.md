@@ -33,6 +33,7 @@ The team folder itself is not made by a job. `python3 leonardo/serve/team.py ini
 | `probe` | `diagnostics/probe.sbatch` | `boost_usr_prod`, debug QoS, 1 GPU, 20 min | nothing |
 | `reach` | `diagnostics/reach.sbatch` | `lrd_all_serial`, 1 CPU, 10 min | `TARGET` (optional `PROBE_PROXY`, `LINK_URL`) |
 | `nccl-check` | `diagnostics/nccl_check.sbatch` | `boost_usr_prod`, debug QoS, 2 nodes × 4 GPUs, 15 min | `BASE`, optional `RUNTIME` |
+| `compat-check` | `diagnostics/compat_check.sbatch` | `boost_usr_prod`, debug QoS, 1 GPU, 15 min | `BASE`, `PROFILE`, its runtime and at least its `config.json` |
 
 `lrd_all_serial` is the CPU queue with internet access; GPU nodes have none. Its jobs have been seen running
 on login nodes.
@@ -70,6 +71,10 @@ that the shared file system has room for the weights plus 100 GiB; afterwards it
 size and writes `download_manifest.json`. A profile without `revision` gets the current one, printed as
 `PIN_REVISION <sha>`. `HF_TOKEN` from your environment is passed on for gated models. Last line on
 success: `CHECKPOINT_READY <path> revision <sha> shards <n>`.
+
+With `CONFIG_ONLY=1` (`cli.py install <profile> --config-only`) it downloads only the configuration,
+tokenizer and code files (`*.json`, `*.jinja`, `*.py`), enough for the compatibility check, and ends with
+`CONFIG_READY`. A later run without it adds the weights.
 
 ## Install the cluster link client: `install/link_client.sbatch`
 
@@ -157,12 +162,19 @@ included, with `scancel --name=leonardo-router --user=$USER`.
 sbatch leonardo/diagnostics/probe.sbatch                                  # prints lrdnXXXX:PORT
 TARGET=lrdnXXXX:PORT PROBE_PROXY=http://… sbatch leonardo/diagnostics/reach.sbatch
 RUNTIME=vllm-0.31.0 sbatch leonardo/diagnostics/nccl_check.sbatch
+PROFILE=glm53 sbatch leonardo/diagnostics/compat_check.sbatch
 ```
 
 - **probe:** prints the GPU node's identity, network interfaces, routes, InfiniBand devices, GPU topology
   and outbound internet, then serves a test page with `python3 -m http.server` for 15 minutes.
 - **reach:** from the CPU queue, `curl`s the probe's page (`TARGET`), the internet directly and through
-  `PROBE_PROXY`, and the cluster link server's `/health` (`LINK_URL`).
+  `PROBE_PROXY`, and the cluster link server (`LINK_URL`) with the WebSocket handshake its client uses
+  (`101` means reachable).
 - **nccl_check:** 8 tasks on 2 nodes, each running `diagnostics/nccl_check.py` in the runtime's image through
   `nccl_task.sh`: an all-reduce correctness check, then bandwidth within a node and across nodes, and a
   summary of the transport NCCL chose (`NET/IB` is InfiniBand; `NET/Socket` means TCP fallback).
+- **compat_check:** on one GPU, inside the profile's runtime, without loading weights: a BF16 matmul, the
+  import of the model's vLLM class, and for models that need them, the sparse-MLA attention backend
+  selection, its Triton kernel against a PyTorch reference, and the TileLang mHC kernel against vLLM's
+  PyTorch implementation. Prints `COMPAT_REPORT <json>`, then `COMPAT_OK` or `COMPAT_FAILED`. A port of
+  Junghwa's GLM preflight ([research.md](research.md)).

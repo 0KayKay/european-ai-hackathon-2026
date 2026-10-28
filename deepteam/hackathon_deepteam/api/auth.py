@@ -5,10 +5,10 @@ from hackathon_deepteam.config import get_settings
 
 
 async def require_user(request: Request) -> str:
-    if get_settings().ENV == "local":
+    cookie = request.headers.get("cookie")
+    if get_settings().ENV == "local" and not cookie:
         return "local-user"
 
-    cookie = request.headers.get("cookie")
     if not cookie:
         raise HTTPException(status_code=401, detail="Sign in required")
 

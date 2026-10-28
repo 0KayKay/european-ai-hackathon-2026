@@ -122,6 +122,9 @@ class Framework(unittest.TestCase):
                 self.assertEqual(path.stat().st_mode & 0o077, 0)
             for name, digest in inference.load(run / 'RELEASE_MANIFEST.json')['files'].items():
                 self.assertEqual(hashlib.sha256((run / name).read_bytes()).hexdigest(), digest)
+        for run, name in zip(runs, MODELS):  # profiles are not in the manifest; each run keeps its own
+            self.assertEqual((run / 'profiles' / (name + '.json')).read_bytes(), (RELEASE / 'profiles' / (name + '.json')).read_bytes())
+            self.assertEqual(sorted(p.name for p in (run / 'profiles').iterdir()), [name + '.json'])
 
     def test_deepseek16_preparation_checks_patch_and_keeps_the_old_identity(self):
         old = inference.load(self.prepare('deepseek41') / 'RUN_CONFIG.json')
@@ -307,13 +310,26 @@ class Framework(unittest.TestCase):
         self.assertNotIn('--dependency', calls[2])
         self.assertIn('LEONARDO_RELEASE=' + str(REPO), calls[0])
         (self.base / 'checkpoints/qwen06b/download_manifest.json').write_text('{}')
-        self.assertIn('checkpoint qwen06b: installed', self.team('install', 'qwen06b').stdout.decode())
+        self.assertIn('checkpoint qwen06b: weights installed', self.team('install', 'qwen06b').stdout.decode())
+        # --config-only: the runtime and only the model's configuration files, for diagnose compat.
+        self.assertIn('configuration installed', self.team('install', 'glm53', '--config-only').stdout.decode())
+        (self.base / 'checkpoints/glm53/config.json').unlink()
+        self.team('install', 'glm53', '--config-only')
+        last = (self.home / 'sbatch-calls').read_text().splitlines()[-1]
+        self.assertIn('--job-name=install-config-glm53', last)
+        self.assertIn('CONFIG_ONLY=1', last)
+        self.assertTrue(last.endswith('install/checkpoint.sbatch glm53'))
 
     def test_diagnose_uses_the_right_queue(self):
         self.command('sbatch', '#!/bin/bash\necho "$*" >> "$HOME/sbatch-calls"\nprintf "800\\n"\n')
         self.team('diagnose', 'reach', '--target', 'lrdn0001:31234')
         self.team('diagnose', 'probe')
-        reach, probe = (self.home / 'sbatch-calls').read_text().splitlines()
+        self.team('diagnose', 'compat', '--profile', 'glm53')
+        self.assertIn(b'--profile', self.team('diagnose', 'compat', check=False).stderr)
+        reach, probe, compat = (self.home / 'sbatch-calls').read_text().splitlines()
+        self.assertIn('PROFILE=glm53', compat)
+        self.assertIn('--partition=boost_usr_prod', compat)
+        self.assertTrue(compat.endswith('diagnostics/compat_check.sbatch'))
         self.assertIn('--partition=lrd_all_serial', reach)
         self.assertIn('TARGET=lrdn0001:31234', reach)
         self.assertIn('--partition=boost_usr_prod', probe)

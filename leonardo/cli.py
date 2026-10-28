@@ -17,6 +17,9 @@ Typical first run, from the repository root:
   ./leonardo/cli.py up qwen06b --qos boost_qos_dbg --time 00:30:00
   ./leonardo/cli.py router up && ./leonardo/cli.py forward
 
+A fine-tune of a model that already has a profile is one command, which also works offline from Leonardo:
+  ./leonardo/cli.py profiles add qwen235b-ourtune --from qwen235b --model our-org/our-finetune
+
 Run ./leonardo/cli.py <command> --help for each command's options and the files it runs.
 leonardo/docs/slurm-jobs.md describes the Slurm jobs and how to submit them without this CLI.
 """
@@ -51,6 +54,7 @@ COMMANDS = {
                 '  install/runtime.sbatch     image from serve/catalog.json, overlay packages, install/register_runtime.py\n'
                 '  install/checkpoint.sbatch  weights from Hugging Face, as pinned in serve/profiles/<profile>.json\n'
                 '  install/link_client.sbatch chisel client for the cluster link (--link-client)\n'
+                'With --config-only, the checkpoint job fetches only the configuration files.\n'
                 'Logs: <team folder>/logs/.'),
     'up': ('start a model server',
            'serve/team.py up -> serve/inference.py prepare (checks assets, creates a private run directory\n'
@@ -70,10 +74,14 @@ COMMANDS = {
     'forward': ('forward a port on this laptop to your router (an SSH port forward)',
                 'Only reads serve/team.py status. Then runs ssh -N -L 127.0.0.1:<port>:<router node>:<router port>\n'
                 'through the login node, so http://127.0.0.1:<port>/v1 on this laptop reaches your router.'),
-    'diagnose': ('submit a check job: probe (GPU node), reach (CPU queue -> GPU node, internet), nccl',
-                 'serve/team.py diagnose -> diagnostics/probe.sbatch, diagnostics/reach.sbatch or\n'
-                 'diagnostics/nccl_check.sbatch (with nccl_task.sh and nccl_check.py). Logs: users/<login>/logs/.'),
+    'diagnose': ('submit a check job: probe (GPU node), reach (CPU queue -> GPU node, internet), nccl, compat',
+                 'serve/team.py diagnose -> diagnostics/probe.sbatch, diagnostics/reach.sbatch,\n'
+                 'diagnostics/nccl_check.sbatch (with nccl_task.sh and nccl_check.py) or\n'
+                 'diagnostics/compat_check.sbatch (with compat_check.py). Logs: users/<login>/logs/.'),
     'sync': ('only upload this checkout to Leonardo', 'Nothing runs; prints where the release is.'),
+    'profiles': ('list the model profiles, or add one for a fine-tune from Hugging Face',
+                 'Nothing; runs on this laptop (tools/profiles.py). "add" looks the model up on Hugging Face,\n'
+                 'writes serve/profiles/<name>.json from the base profile and updates the agentgateway routes.'),
 }
 
 
@@ -123,6 +131,7 @@ def release_files():
     if build(manifest['release'])['files'] != manifest['files']:
         raise SystemExit('leonardo/serve/RELEASE_MANIFEST.json is stale: run python3 leonardo/tools/update_manifest.py')
     names = ['serve/' + name for name in manifest['files']] + ['serve/RELEASE_MANIFEST.json']
+    names += ['serve/profiles/' + p.name for p in (LEONARDO / 'serve/profiles').glob('*.json')]
     for folder in ('install', 'diagnostics'):
         names += [p.relative_to(LEONARDO).as_posix() for p in (LEONARDO / folder).rglob('*')
                   if p.is_file() and '__pycache__' not in p.parts]
@@ -183,6 +192,8 @@ def parser():
     p = command('install')
     p.add_argument('profiles', nargs='*', metavar='PROFILE', help='profiles from leonardo/serve/profiles/, e.g. qwen06b')
     p.add_argument('--link-client', action='store_true', help='also the chisel client for the cluster link')
+    p.add_argument('--config-only', action='store_true',
+                   help="only the runtime and the models' configuration files, e.g. before diagnose compat")
     p = command('up')
     p.add_argument('profile', help='a profile from leonardo/serve/profiles/, e.g. qwen235b')
     p.add_argument('--qos', help='e.g. boost_qos_dbg: starts sooner, at most 30 minutes')
@@ -204,12 +215,22 @@ def parser():
     p = command('forward')
     p.add_argument('--local-port', type=int, default=18000, help='port on this laptop (default 18000)')
     p = command('diagnose')
-    p.add_argument('check', choices=['probe', 'reach', 'nccl'])
+    p.add_argument('check', choices=['probe', 'reach', 'nccl', 'compat'])
     p.add_argument('--target', help='reach: host:port printed by a running probe')
     p.add_argument('--proxy', help='probe/reach: also try this HTTP proxy, e.g. the hackathon proxy')
     p.add_argument('--link-url', help='reach: also check the cluster link server, e.g. https://<host>/leonardo-link')
     p.add_argument('--runtime', help='nccl: installed runtime to test (default vllm-0.31.0)')
+    p.add_argument('--profile', help='compat: profile whose runtime and model to check without weights, e.g. glm53')
     command('sync')
+    p = command('profiles')
+    p.add_argument('action', nargs='?', choices=['add'], help='add: a new profile; without it, list the profiles')
+    p.add_argument('name', nargs='?', help='add: new profile name, e.g. qwen235b-ourtune')
+    p.add_argument('--from', dest='from_profile', metavar='PROFILE',
+                   help='add: existing profile with the same architecture, e.g. qwen235b')
+    p.add_argument('--model', help='add: Hugging Face model id, e.g. our-org/our-finetune (HF_TOKEN if gated)')
+    p.add_argument('--revision', default='main', help='add: branch, tag or commit to pin (default: main)')
+    p.add_argument('--served-name', help='add: model name for API callers (default: <repo name>-leonardo)')
+    p.add_argument('--force', action='store_true', help='add: allow a different architecture than the base')
     return top
 
 
@@ -218,6 +239,15 @@ def main():
     args = top.parse_args()
     if not args.command:
         top.print_help()
+        return
+    if args.command == 'profiles':
+        import profiles
+        if args.action == 'add':
+            if not (args.name and args.from_profile and args.model):
+                top.error('profiles add needs NAME, --from PROFILE and --model ORG/REPO')
+            profiles.add(args.name, args.from_profile, args.model, args.revision, args.served_name, args.force)
+        else:
+            profiles.listing()
         return
     if not args.user:
         top.error('set --user or LEONARDO_USER to your own CINECA login')
@@ -236,7 +266,8 @@ def main():
     elif args.command == 'share':
         team(args, release, 'share', *args.logins, *(['--revoke'] if args.revoke else []))
     elif args.command == 'install':
-        team(args, release, 'install', *args.profiles, *(['--link-client'] if args.link_client else []))
+        team(args, release, 'install', *args.profiles, *(['--link-client'] if args.link_client else []),
+             *(['--config-only'] if args.config_only else []))
     elif args.command == 'up':
         words = ['up', args.profile]
         for flag in ('qos', 'time', 'reservation'):
@@ -251,7 +282,7 @@ def main():
         team(args, release, 'down', args.target)
     elif args.command == 'diagnose':
         words = ['diagnose', args.check]
-        for flag in ('target', 'proxy', 'link_url', 'runtime'):
+        for flag in ('target', 'proxy', 'link_url', 'runtime', 'profile'):
             if getattr(args, flag):
                 words += ['--' + flag.replace('_', '-'), getattr(args, flag)]
         team(args, release, *words)

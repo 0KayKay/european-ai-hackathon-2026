@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from hackathon_deepteam.arena import router as arena_router
 from hackathon_deepteam.api.runs import router
 from hackathon_deepteam.extensions import (
     LogCorrelationIdMiddleware,
@@ -22,3 +23,4 @@ app = FastAPI(title="DeepTeam", lifespan=lifespan)
 app.add_middleware(LogCorrelationIdMiddleware)
 app.add_exception_handler(Exception, global_exception_handler)
 app.include_router(router)
+app.include_router(arena_router)

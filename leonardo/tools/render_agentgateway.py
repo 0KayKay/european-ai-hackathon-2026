@@ -4,7 +4,8 @@ agentgateway refuses to start when a key file it references is missing, so the L
 cannot live in the base config, which every local stack uses. The opt-in Kustomize component
 replaces the config with this rendered copy instead. Every served_model in serve/profiles/ gets an
 OpenAI-compatible route to the leonardo-router Service, the router token as its key and the
-same request guardrails as the default route. Exact model names win over the "*" route.
+same optional request guardrails as the default route. Challenge guardrails run in the backend.
+Exact model names win over the "*" route.
 
     python3 tools/render_agentgateway.py          # write
     python3 tools/render_agentgateway.py --check  # fail if stale (check_repository.py runs this)
@@ -23,6 +24,8 @@ TOKEN_FILE = '/var/run/leonardo-router/token'
 
 def guardrails(lines):
     """The default model's guardrails block, at its original indentation."""
+    if '      guardrails:' not in lines:
+        return []
     start = lines.index('      guardrails:')
     end = start + 1
     while end < len(lines) and (not lines[end].strip() or lines[end].startswith('       ')):
@@ -34,7 +37,8 @@ def render():
     lines = BASE.read_text().splitlines()
     if lines.count('  models:') != 1:
         raise SystemExit('Expected exactly one "  models:" line in ' + str(BASE))
-    models = sorted(json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json'))
+    # Profiles can share a served name (the same model on another runtime); one route each.
+    models = sorted({json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')})
     entries = []
     for model in models:
         entries += ['    - name: ' + model, '      provider: openAI', '      params:', '        baseUrl: ' + UPSTREAM,
@@ -58,7 +62,7 @@ def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(text)
     print('Wrote {} with routes for: {}'.format(OUTPUT, ', '.join(sorted(
-        json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')))))
+        {json.loads(p.read_text())['served_model'] for p in (LEONARDO / 'serve/profiles').glob('*.json')}))))
 
 
 if __name__ == '__main__':

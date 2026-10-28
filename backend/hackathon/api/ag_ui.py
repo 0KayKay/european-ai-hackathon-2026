@@ -2,6 +2,8 @@ from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+import secrets
+import string
 
 import structlog
 from ag_ui.core import BaseEvent, RunAgentInput
@@ -11,7 +13,7 @@ from pydantic_ai.ui import UIEventStream
 from pydantic_ai.ui.ag_ui import AGUIAdapter, AGUIEventStream
 
 from hackathon.agent.builder import build_agent
-from hackathon.agent.challenge1 import mailbox_for
+from hackathon.agent.challenge_1.agent import mailbox_for
 from hackathon.agent.dependencies import AgentDependencies
 from hackathon.agent.settings import ChatState
 
@@ -111,6 +113,16 @@ async def prepare_ag_ui_run(
         else "",
         "difficulty": settings.difficulty,
         "mode": settings.mode,
+        "submission": state.submission.model_dump() if state.submission else {},
+        "secret": "".join(
+            secrets.choice(string.ascii_letters + string.digits) for _ in range(32)
+        )
+        if settings.mode == "CHALLENGE_2"
+        else "",
+        "user_name": "User",
+        "solved": False,
+        "guardrails": [],
+        "sent_emails": [],
     }
 
     agent = build_agent(deps, settings.model_id, settings.difficulty, settings.mode)

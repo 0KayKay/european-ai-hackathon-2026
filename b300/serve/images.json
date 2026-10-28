@@ -1,0 +1,4 @@
+{
+  "nemotron": "registry-1.docker.io#vllm/vllm-openai@sha256:0fec7ec5f3e6bc168e54899935fb0557da908a4832a1dbc88e2debcf2f889416",
+  "glm": "registry-1.docker.io#vllm/vllm-openai@sha256:819ec9c063412e5730d1b0e82046ba540d1bf991f3c4f661a849aae8a0c52374"
+}

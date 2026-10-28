@@ -161,7 +161,8 @@ listens on `41000 + job id % 10000`. It is the only process that holds server ke
   owned by the same account, have a `.runtime/endpoint.json`, and whose job `squeue` still lists. The
   shared registry is never trusted for routing, because anyone in the project group can write to it.
 - **Routing** by the JSON `model` field of each POST to that server, with `Authorization` replaced by the
-  server's own key. `GET /v1/models` lists the routable models; `GET /health` needs no token.
+  server's own key. `GET /v1/models` lists the routable models; `GET /health` needs no token and reports
+  the cluster link's state (`off`, `connecting`, `connected`, `retrying`, `restarting`).
 - **Authentication** with one bearer token in `$BASE/users/<login>/router_token` (compared in constant
   time). The cluster holds the same token in the `leonardo-router` Secret.
 - **Streaming**: responses are relayed as they arrive (`read1`), so SSE is not buffered.
@@ -169,8 +170,10 @@ listens on `41000 + job id % 10000`. It is the only process that holds server ke
   to `router up` run out. `down router` cancels all jobs named `leonardo-router`, pending ones included.
 - **Cluster link** only when the site sets `cluster_link.enabled`. Then `router up` copies the chisel
   binary from `$BASE/tools/` after checking its SHA-256 against `catalog.json`, and the job runs
-  `chisel client --fingerprint <pinned> <server> R:0.0.0.0:<remote_port>:127.0.0.1:<port>`
+  `chisel client --fingerprint <pinned> --max-retry-interval 30s <server> R:0.0.0.0:<remote_port>:127.0.0.1:<port>`
   with the password from `$BASE/users/<login>/link_auth` in its environment (not on the command line).
+  The router reads the client's log for the link's state, writes it to its `endpoint.json` for `status`,
+  and starts the client again if it exits. [cluster-link.md](cluster-link.md) explains the design.
 
 Ports by job id, so jobs on a shared node do not collide: distributed master `29000-29999` (+1 for the EP
 hook), model API `31000-40999`, router `41000-50999`.
@@ -195,18 +198,28 @@ extends and registers it (`install/runtime.sbatch`).
   `TMPDIR` or `VLLM_HOST_IP`.
 - `hooks` must come from the allowlist (`nccl_ep`, `warm_engram`).
 - `runtime` must be in `catalog.json`; `checks`, if set, must name a suite in `inference.CHECK_SUITES`.
+- `client.local_port` (the laptop port `serve/client.py` tunnels to) must differ between profiles;
+  `tools/check_repository.py` fails otherwise, and `cli.py profiles add` picks a free one.
 - `client.chat_template_kwargs` are sent with every test and client request. Qwen uses
   `enable_thinking: false`, so the tests see final answers instead of reasoning only.
 
+`tools/profiles.py` (`cli.py profiles add`) derives a profile for another checkpoint of the same architecture
+from an existing one: it keeps everything except `id`, `model_id`, `revision`, `checkpoint`,
+`served_model`, `expected_shards` and `client.local_port`, and records the base in `derived_from`.
+
 ## The release manifest
 
-`serve/RELEASE_MANIFEST.json` lists every file in `serve/` with its SHA-256. `prepare` refuses to run if
-anything differs, and copies exactly those files into the run directory. This protects a shared checkout
-on Leonardo from silent edits. After changing anything in `serve/`, run:
+`serve/RELEASE_MANIFEST.json` lists every code file in `serve/` with its SHA-256. `prepare` refuses to run
+if anything differs, and copies exactly those files, plus the run's own profile, into the run directory.
+This protects a shared checkout on Leonardo from silent edits. After changing code in `serve/`, run:
 
 ```bash
 python3 tools/update_manifest.py
 ```
+
+Profiles are not in the manifest: they are data, checked by the profile rules before every run and stored
+in full in each run's `RUN_CONFIG.json`. Adding a model therefore changes no generated file in `serve/`, and
+two branches that each add a profile do not conflict.
 
 `validation/validated_code.json` separately records the bytes that passed real GPU runs.
 `tools/check_repository.py` tells you when `serve/` has drifted from them.

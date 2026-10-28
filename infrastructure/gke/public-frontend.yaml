@@ -10,6 +10,7 @@ kind: BackendConfig
 metadata:
   name: frontend
 spec:
+  timeoutSec: 900
   healthCheck:
     requestPath: /
     port: 80

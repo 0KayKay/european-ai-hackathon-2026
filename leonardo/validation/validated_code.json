@@ -291,6 +291,86 @@
         "test_endpoint.py": "a2609712000ce3a4ec1f65c8c6ac2f26a29141cf6dec998974935cb39ac56776"
       },
       "code": "Unmodified current CLI release; seven startup checks, twice seven checks from a CPU Slurm client via the actual router, plus the separately counted laptop suite via cli.py forward. Reused verified runtime/checkpoints. Exact serve hashes below."
+    },
+    "qwen235b-fresh-install": {
+      "date": "2026-10-21",
+      "job_id": "61612274",
+      "nodes": 2,
+      "gpus": 8,
+      "parallelism": {
+        "tensor": 4,
+        "pipeline": 2
+      },
+      "qos": "boost_qos_dbg",
+      "scope": "One operator account and short English functional checks, as qwen235b-cli.",
+      "profile_id": "qwen235b",
+      "runtime": "vllm-backport-sm80-0.13.1",
+      "source_commit": "c472236",
+      "startup_checks_passed": 7,
+      "test_path": "Fresh team folder: cli.py install of the backport runtime and the weights from scratch, then cli.py up; one plain and one streamed reply through the router and cli.py forward",
+      "evidence": "runs/2026-10-21-qwen235b",
+      "evidence_kind": "job log: the seven check lines and INFERENCE_READY, verbatim; and a reply through the router",
+      "code": "Commit c472236, hashes below. Complements qwen235b-cli: this run installed runtime and weights from scratch instead of reusing them.",
+      "files_sha256": {
+        "catalog.json": "7d355d818684d41fef90e4392e2529e762614777b560f2740d84da22e10b16ec",
+        "client.py": "ad6770d5d47a8530a4a2901cfb7bcd4250af3ab43cd6dac0ff5817a7011cefbe",
+        "hooks/nccl_ep.py": "e2a51d455d1e4e040854b5b97fc7c448fcbebbf89f6c66cff5cd859f976f1630",
+        "hooks/warm_engram.py": "835074a2e39444c6970923bc882de291e4818af0947e05451bd6abcdfbdf9e89",
+        "inference.py": "2aea173b96644fb5016cbdddf981d4a193cda7f2f5f6b9ddc3caff3cc76d7497",
+        "lifecycle.py": "1485226c49db2dca8e88cc6e954a13d57865be3eaea0c594ee2a38bc101a65fe",
+        "node.py": "21e5fa9874932174cc3078af01b2d92b5dad26d122350b2cb227ed1546c4efe8",
+        "prepare_run.sh": "033bc136770dd19e1508894ab18b9c22c10a48a20071cb2a8588c839324b4ad5",
+        "profiles/deepseek41.json": "a3519da4b8209410ae2b6e3cc7576e57e7de08ded4173784cd8ae0a1b198fbc0",
+        "profiles/glm53.json": "dabd5597f725cd48928806e75b281e77ce669c777cc324ef121317a74d52b448",
+        "profiles/qwen06b.json": "3fe650803522ffc370b30f6594f83327dacff75c03eb7ffd9e526c37f92a30c3",
+        "profiles/qwen235b.json": "bd6731d40827ff3a95c6bff0529cdbd428ee54a0d585565c0f303d7a028a41e7",
+        "registry.py": "6257e6fc606e28fd4fb252bfa8ae9bff70b6ae3f8dc162a11744b6a1e3e8519e",
+        "router.py": "d62c45982a0c04ac30cf295252c8210e693e4906e943d4397bda5f18afb024f7",
+        "router.sbatch": "2ae1bf6695b6b126faa7c5723832fd6f0335e676c1896363c8b488c016c26810",
+        "serve_model.sbatch": "ed3c145e69dc5d6f958bad6c97104d8aafd91ab23c5d2b6a9c24eb32d5b7d7d6",
+        "submit_server.sh": "91f1f82e423e1aad97a1827a76a0874e2912130bb4d43d22dad7ed1162d006b9",
+        "team.py": "3eb526f40de4438f66a5f520c680c178e578aa5c6b0047f47afacf9e6f6fd325",
+        "test_endpoint.py": "a2609712000ce3a4ec1f65c8c6ac2f26a29141cf6dec998974935cb39ac56776"
+      }
+    },
+    "qwen06b-profiles-branch": {
+      "date": "2026-10-26",
+      "job_id": "62361596",
+      "nodes": 1,
+      "gpus": 1,
+      "parallelism": {
+        "tensor": 1,
+        "pipeline": 1
+      },
+      "qos": "boost_qos_dbg",
+      "profile_id": "qwen06b",
+      "runtime": "vllm-0.31.0",
+      "source_commit": "2243eae",
+      "startup_checks_passed": 7,
+      "scope": "One operator account and short English functional checks; confirms the run preparation after profiles left the release manifest.",
+      "evidence": "runs/2026-10-26-qwen06b",
+      "evidence_kind": "job log: the seven check lines and INFERENCE_READY, verbatim",
+      "code": "Commit 2243eae, hashes below (serve/ code from the manifest, plus the qwen06b profile).",
+      "files_sha256": {
+        "catalog.json": "1d5666397a2d9b2f99161e3710163b7f988810a873cf1e3452057216478b7b62",
+        "client.py": "ad6770d5d47a8530a4a2901cfb7bcd4250af3ab43cd6dac0ff5817a7011cefbe",
+        "hooks/nccl_ep.py": "e2a51d455d1e4e040854b5b97fc7c448fcbebbf89f6c66cff5cd859f976f1630",
+        "hooks/warm_engram.py": "835074a2e39444c6970923bc882de291e4818af0947e05451bd6abcdfbdf9e89",
+        "inference.py": "e0a89b812e149d1b4da4ccc77185d84b2a8159a6bb8776895ce0f8f829da5c0b",
+        "lifecycle.py": "1485226c49db2dca8e88cc6e954a13d57865be3eaea0c594ee2a38bc101a65fe",
+        "node.py": "21e5fa9874932174cc3078af01b2d92b5dad26d122350b2cb227ed1546c4efe8",
+        "prepare_run.sh": "033bc136770dd19e1508894ab18b9c22c10a48a20071cb2a8588c839324b4ad5",
+        "registry.py": "6257e6fc606e28fd4fb252bfa8ae9bff70b6ae3f8dc162a11744b6a1e3e8519e",
+        "router.py": "d62c45982a0c04ac30cf295252c8210e693e4906e943d4397bda5f18afb024f7",
+        "router.sbatch": "2ae1bf6695b6b126faa7c5723832fd6f0335e676c1896363c8b488c016c26810",
+        "runtime_patches/pp_kv_empty_groups/pp_kv_guard.py": "d87aba9acb44929dc2c3b6edd561ae713b8bc80d2e896bc5f3e5985d19e29aab",
+        "runtime_patches/pp_kv_empty_groups/sitecustomize.py": "6e847d74dee3d59a11e5b9ccf1e5208de486744bb4f10d009ce5ca27003650b7",
+        "serve_model.sbatch": "ed3c145e69dc5d6f958bad6c97104d8aafd91ab23c5d2b6a9c24eb32d5b7d7d6",
+        "submit_server.sh": "91f1f82e423e1aad97a1827a76a0874e2912130bb4d43d22dad7ed1162d006b9",
+        "team.py": "3c4a4219a97ba6f189e042cb57c76d0ce49eb5a95e56084d69ec80f58cad78e5",
+        "test_endpoint.py": "a2609712000ce3a4ec1f65c8c6ac2f26a29141cf6dec998974935cb39ac56776",
+        "profiles/qwen06b.json": "3fe650803522ffc370b30f6594f83327dacff75c03eb7ffd9e526c37f92a30c3"
+      }
     }
   }
 }

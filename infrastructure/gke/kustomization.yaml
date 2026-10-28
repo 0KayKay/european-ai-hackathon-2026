@@ -3,7 +3,11 @@ kind: Kustomization
 resources:
   - ../base
   - public-frontend.yaml
+  - phoenix-network-policy.yaml
 images:
+  - name: local/guardrail
+    newName: europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026/guardrail
+    newTag: v1
   - name: local/auth
     newName: europe-west1-docker.pkg.dev/european-ai-hackathon-2026/hackathon-2026/auth
     newTag: v1

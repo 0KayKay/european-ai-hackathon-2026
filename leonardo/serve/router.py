@@ -6,7 +6,8 @@ and swaps the caller's router token for that server's own key. Callers never see
 
 Optionally (site setting cluster_link.enabled, off by default) it also opens the cluster link: a
 chisel client that dials out to the chisel server in Kubernetes and offers this router there, so
-agentgateway reaches it without anyone logging in to Leonardo from the cluster.
+agentgateway reaches it without anyone logging in to Leonardo from the cluster. The router reads the
+client's log to know whether the link is up (GET /health, team.py status) and restarts it if it exits.
 
     python3 router.py prepare --base $WORK/<team> [--hours 12]   # then run the sbatch line it prints
     python3 router.py serve   # run by router.sbatch inside the job
@@ -22,6 +23,7 @@ import http.client
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import shlex
@@ -214,8 +216,17 @@ def state(base, jobs):
     parts = ['{} {}'.format(j['job_id'], j['state']) for j in mine]
     if endpoint:
         parts.append('listening on {}:{}, cluster link {}'.format(endpoint['host'], endpoint['port'],
-                                                                 'on' if endpoint['cluster_link'] else 'off'))
+                                                                 describe_link(endpoint.get('cluster_link'))))
     return {'jobs': mine, 'endpoint': endpoint, 'summary': '; '.join(parts)}
+
+
+def describe_link(status):
+    if not status:
+        return 'off'
+    if not isinstance(status, dict):  # endpoint.json of a router started before link states existed
+        return 'on'
+    text = '{} since {}'.format(status['state'], status['since'][11:19])
+    return text + (': ' + status['error'] if status.get('error') and status['state'] != 'connected' else '')
 
 
 def own_runs(base):
@@ -283,7 +294,7 @@ class Server(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 
-def handler(routes, router_token):
+def handler(routes, router_token, link=None):
     expected = router_token.encode()
 
     class Handler(BaseHTTPRequestHandler):
@@ -317,7 +328,8 @@ def handler(routes, router_token):
 
         def do_GET(self):
             if self.path == '/health':
-                return self.reply(200, {'status': 'ok'})
+                # The link state only, never its error text: /health needs no token.
+                return self.reply(200, {'status': 'ok', 'cluster_link': link.status()['state'] if link else 'off'})
             if not self.authorized():
                 return
             if self.path in ('/v1/models', '/models'):
@@ -396,10 +408,97 @@ def handler(routes, router_token):
 
 def link_command(cfg, port):
     link = cfg['cluster_link']
-    command = [str(Path(cfg['directory']) / 'chisel'), 'client', '--fingerprint', link['fingerprint'], '--keepalive', '25s']
+    command = [str(Path(cfg['directory']) / 'chisel'), 'client', '--fingerprint', link['fingerprint'],
+               '--keepalive', '25s', '--max-retry-interval', '30s']
     if link['proxy']:
         command += ['--proxy', link['proxy']]
     return command + [link['server'], 'R:0.0.0.0:{}:127.0.0.1:{}'.format(int(link['remote_port']), port)]
+
+
+def now():
+    return datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+
+
+class Link:
+    """The cluster link's chisel client. chisel reconnects by itself (with --max-retry-interval); this
+    class reads its log for the state, and starts it again should the process itself exit.
+
+    States: connecting (started, not yet through), connected, retrying (lost or refused, chisel is
+    retrying; error says why), restarting (the client exited and is started again after a pause).
+    """
+    RESTART_DELAYS = (5, 10, 30, 60, 300)
+
+    def __init__(self, command, environment, on_change=lambda status: None):
+        self.command, self.environment, self.on_change = command, environment, on_change
+        self.lock = threading.Lock()
+        self.stopping = threading.Event()
+        self.process = None
+        self.current = {'state': 'connecting', 'since': now(), 'error': None}
+        self.thread = threading.Thread(target=self.run, daemon=True)
+
+    def status(self):
+        with self.lock:
+            return dict(self.current)
+
+    def set(self, state, error=None):
+        with self.lock:
+            if (state, error) == (self.current['state'], self.current['error']):
+                return
+            since = self.current['since'] if state == self.current['state'] else now()
+            self.current = {'state': state, 'since': since, 'error': error}
+            status = dict(self.current)
+        self.on_change(status)
+
+    def read(self, line):
+        """Track chisel 1.13's client messages, e.g. "2026/10/20 21:45:38 client: Connected (Latency 868µs)"."""
+        message = line.split(' client: ', 1)[-1].strip()
+        if message.startswith('Connected'):
+            self.set('connected')
+        elif message.startswith('Connection error: '):
+            self.set('retrying', re.sub(r' \(Attempt: [^)]*\)$', '', message[len('Connection error: '):]))
+        elif message == 'Disconnected':
+            self.set('retrying', 'disconnected')
+
+    def run(self):
+        failures = 0
+        while not self.stopping.is_set():
+            started = time.monotonic()
+            self.set('connecting')
+            with self.lock:
+                if self.stopping.is_set():
+                    return
+                self.process = subprocess.Popen(self.command, env=self.environment, stdout=subprocess.PIPE,
+                                                stderr=subprocess.STDOUT)
+            # Bytes to the job log unchanged: chisel prints "µs", which Python 3.6 cannot print to a job
+            # whose locale is ASCII.
+            with self.process.stdout:
+                for line in self.process.stdout:
+                    sys.stdout.buffer.write(line)
+                    sys.stdout.flush()
+                    self.read(line.decode('utf-8', 'replace'))
+            code = self.process.wait()
+            if self.stopping.is_set():
+                return
+            failures = 1 if time.monotonic() - started > 600 else failures + 1
+            delay = self.RESTART_DELAYS[min(failures, len(self.RESTART_DELAYS)) - 1]
+            self.set('restarting', 'chisel client exited with code {}; starting it again in {} s'.format(code, delay))
+            print('LINK_RESTART in {} s (exit code {})'.format(delay, code), flush=True)
+            self.stopping.wait(delay)
+
+    def start(self):
+        self.thread.start()
+
+    def stop(self):
+        self.stopping.set()
+        with self.lock:
+            process = self.process
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        self.thread.join(timeout=10)
 
 
 def serve():
@@ -407,17 +506,27 @@ def serve():
     cfg = load(Path('ROUTER.json'))
     base = Path(cfg['base'])
     port = int(os.environ['ROUTER_PORT'])
-    server = Server(('0.0.0.0', port), handler(Routes(base), read_private(paths(base)['token'])))
+    endpoint = {'job_id': os.environ.get('SLURM_JOB_ID', 'local'), 'host': os.uname().nodename.split('.')[0],
+                'port': port, 'cluster_link': None, 'release': cfg['release'], 'started': now()}
+    written = threading.Lock()
+
+    def publish(link_status=None):
+        with written:
+            if link_status is not None:
+                endpoint['cluster_link'] = link_status
+            save(Path('.runtime/endpoint.json'), endpoint)
+
     link = None
     if cfg['cluster_link']['enabled']:
         # chisel reads AUTH from the environment, which keeps the password out of the process list.
         environment = dict(os.environ, AUTH=read_private(paths(base)['link_auth']))
-        link = subprocess.Popen(link_command(cfg, port), env=environment)
-    endpoint = {'job_id': os.environ.get('SLURM_JOB_ID', 'local'), 'host': os.uname().nodename.split('.')[0],
-                'port': port, 'cluster_link': link is not None, 'release': cfg['release'],
-                'started': datetime.datetime.now().astimezone().isoformat()}
-    save(Path('.runtime/endpoint.json'), endpoint)
+        link = Link(link_command(cfg, port), environment, on_change=publish)
+        endpoint['cluster_link'] = link.status()
+    server = Server(('0.0.0.0', port), handler(Routes(base), read_private(paths(base)['token']), link))
+    publish()
     print('ROUTER_READY', json.dumps(endpoint), flush=True)
+    if link is not None:
+        link.start()
 
     def stop(signum, frame):
         raise SystemExit(128 + signum)
@@ -427,12 +536,12 @@ def serve():
         server.serve_forever()
     finally:
         server.server_close()
-        if link is not None and link.poll() is None:
-            link.terminate()
-            link.wait()
+        if link is not None:
+            link.stop()
         path = Path('.runtime/endpoint.json')
-        if path.exists() and load(path)['job_id'] == endpoint['job_id']:
-            path.unlink()
+        with written:
+            if path.exists() and load(path)['job_id'] == endpoint['job_id']:
+                path.unlink()
 
 
 def main():

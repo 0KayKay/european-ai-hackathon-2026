@@ -234,7 +234,7 @@ def prepare_run(model, base_arg):
     preflight(cfg)
     run = Path(tempfile.mkdtemp(prefix=name + '-', dir=str(private_dir(mine / 'runs'))))
     run.chmod(0o700)
-    for filename in manifest['files']:
+    for filename in list(manifest['files']) + ['profiles/' + name + '.json']:
         destination = run / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(str(ROOT / filename), str(destination))

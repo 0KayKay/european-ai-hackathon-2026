@@ -75,9 +75,9 @@ def test_level_view():
     assert body["models"][0] == {
         "role": "agent",
         "node": "agent",
-        "model": "gemini-3.8-flash",
+        "model": "qwen3-235b-a22b-fp8-leonardo",
         "endpoint": "agentgateway",
-        "params": {"thinking": False, "reasoning_effort": "low", "max_tokens": 65536},
+        "params": {"max_tokens": 512, "extra": {"chat_template_kwargs": {"enable_thinking": False}}},
     }
     files = body["source"]["files"]
     assert files[0]["path"] == "email-review/level.yaml"

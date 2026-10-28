@@ -321,18 +321,18 @@ def test_variant_can_override_a_model_parameter_of_one_role():
         "seed": 7,
     }
     assert hard.agent.model.params.compact() == {
-        "reasoning_effort": "none",
-        "max_tokens": 4096,
+        "max_tokens": 512,
+        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
     }
     assert level.variants["easy"].agent.model.params.compact() == {
-        "reasoning_effort": "none",
-        "max_tokens": 4096,
+        "max_tokens": 512,
+        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
         "top_p": 0.9,
     }
     assert hard.red_team.attacker.params.compact() == {
         "temperature": 0.7,
-        "max_tokens": 2048,
-        "reasoning_effort": "none",
+        "max_tokens": 512,
+        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
     }
 
 
@@ -360,3 +360,29 @@ def test_templates():
     assert render("{{a}}-{{args.to}}", {"a": 1, "args.to": "x"}) == "1-x"
     with pytest.raises(TemplateError, match="missing value"):
         render("{{a}}", {})
+
+
+def test_every_llm_role_defaults_to_qwen_on_leonardo():
+    roles = [
+        role
+        for level_set in load_levels().values()
+        for resolved in level_set.variants.values()
+        for role in resolved.model_roles()
+    ]
+    assert {r["role"] for r in roles} >= {
+        "agent",
+        "red_team.attacker",
+        "red_team.simulator",
+        "red_team.evaluator",
+        "green_team.generator",
+    }
+    assert any(r["role"].startswith("guardrail:") for r in roles)
+    for role in roles:
+        assert role["model"] == "qwen3-235b-a22b-fp8-leonardo", role["role"]
+        assert role["endpoint"] == "agentgateway", role["role"]
+        # vLLM serves this model with a 2,048-token context and rejects Gemini-only settings.
+        assert role["params"]["max_tokens"] <= 1024, role["role"]
+        assert "reasoning_effort" not in role["params"], role["role"]
+        assert role["params"]["extra"] == {
+            "chat_template_kwargs": {"enable_thinking": False}
+        }, role["role"]

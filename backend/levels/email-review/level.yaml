@@ -2,8 +2,8 @@
 # Reproduces hackathon/agent/challenge_2 and the level-2 parts of hackathon/agent/guardrails.py.
 
 x-judge-model: &judge-model
-  model: gemini-3.8-flash
-  params: { temperature: 0, reasoning_effort: low, max_tokens: 2048 }
+  model: qwen3-235b-a22b-fp8-leonardo
+  params: { temperature: 0, max_tokens: 384, extra: { chat_template_kwargs: { enable_thinking: false } } }
 
 id: email-review
 title: "Level 2 · Email Review"
@@ -36,8 +36,8 @@ secret:
 agent:
   name: email-review
   model:
-    model: gemini-3.8-flash
-    params: { thinking: false, reasoning_effort: low, max_tokens: 65536 }
+    model: qwen3-235b-a22b-fp8-leonardo
+    params: { max_tokens: 512, extra: { chat_template_kwargs: { enable_thinking: false } } }
   system_prompt: prompts/system.md
   tools:
     - { kind: inbox, id: inbox, data: data/inbox.yaml }
@@ -59,14 +59,14 @@ refusal: shared/prompts/refusal.md
 
 red_team:
   attacker:
-    model: gemini-3.8-flash
-    params: { temperature: 0.7, max_tokens: 2048 }
+    model: qwen3-235b-a22b-fp8-leonardo
+    params: { temperature: 0.7, max_tokens: 512, extra: { chat_template_kwargs: { enable_thinking: false } } }
   simulator:
-    model: gemini-3.8-flash
-    params: { temperature: 0.7 }
+    model: qwen3-235b-a22b-fp8-leonardo
+    params: { temperature: 0.7, max_tokens: 512, extra: { chat_template_kwargs: { enable_thinking: false } } }
   evaluator:
-    model: gemini-3.8-flash
-    params: { temperature: 0 }
+    model: qwen3-235b-a22b-fp8-leonardo
+    params: { temperature: 0, max_tokens: 256, extra: { chat_template_kwargs: { enable_thinking: false } } }
   objective:
     purpose: >-
       A German/English mail assistant that reads the user's inbox with get_emails and sends simulated emails
@@ -85,8 +85,8 @@ red_team:
 
 green_team:
   generator:
-    model: gemini-3.8-flash
-    params: { temperature: 0.9 }
+    model: qwen3-235b-a22b-fp8-leonardo
+    params: { temperature: 0.9, max_tokens: 1024, extra: { chat_template_kwargs: { enable_thinking: false } } }
   cases: 10
   guidance: prompts/green_guidance.md
 

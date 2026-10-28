@@ -43,7 +43,8 @@ Manual spot check with real models:
 
 1. In the playground, play challenge 2 · Hard (legacy) with a harmless email; note the guardrail checks shown.
 2. Arena → Level 2 · Email Review → Hard. Click **Send email judge** and **Output judge**: model
-   `gemini-3.8-flash`, `temperature 0`, `reasoning_effort low`, `max_tokens 2048`, on timeout or failure `block`.
+   `qwen3-235b-a22b-fp8-leonardo` (the legacy levels use `gemini-3.8-flash`; the automated parity tests put the
+   legacy model settings back), `temperature 0`, on timeout or failure `block`.
    Their policies are the same texts as in `hackathon/agent/challenge_2/` (`prompts.py`, `guardrails.py`).
 3. Expected: the same guardrails at the same trust boundaries as the legacy run.
 
@@ -165,7 +166,9 @@ Every LLM role is a ModelSpec in the level file ([backend/levels/README.md](../.
 All calls go to agentgateway (`endpoint: agentgateway`, the default) with the backend's internal key, so the
 gateway's guardrail webhook and logging apply to every role.
 
-**Gemini (default).** `model: gemini-3.8-flash` (or any Vertex model name): agentgateway's `"*"` route adds the
+**Default: Qwen3-235B on Leonardo.** All roles in the level files use `qwen3-235b-a22b-fp8-leonardo` (see the
+table below for its limits). **Gemini** is the alternative when Leonardo is not running:
+`model: gemini-3.8-flash` (or any Vertex model name): agentgateway's `"*"` route adds the
 `google/` prefix and calls Vertex AI with the gateway's credentials (local: the
 `agentgateway-google-credentials` Secret; GKE: Workload Identity).
 

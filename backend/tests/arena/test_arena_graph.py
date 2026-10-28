@@ -163,9 +163,9 @@ def test_node_details_show_settings_full_prompts_and_models():
     g = build_graph(level)
     agent = g.node("agent")
     assert agent.details.model == {
-        "model": "qwen3:8b",
-        "endpoint": "http://host.docker.internal:11434/v1",
-        "params": {"reasoning_effort": "none", "max_tokens": 4096},
+        "model": "qwen3-235b-a22b-fp8-leonardo",
+        "endpoint": "agentgateway",
+        "params": {"max_tokens": 512, "extra": {"chat_template_kwargs": {"enable_thinking": False}}},
     }
     prompts = {prompt.name: prompt for prompt in agent.details.prompts}
     assert prompts["System prompt"].text == challenge1_prompt("User", "HARD")
@@ -178,8 +178,8 @@ def test_node_details_show_settings_full_prompts_and_models():
     judge = g.node("guardrail:input-judge")
     assert judge.details.model["params"] == {
         "temperature": 0,
-        "reasoning_effort": "none",
-        "max_tokens": 2048,
+        "max_tokens": 384,
+        "extra": {"chat_template_kwargs": {"enable_thinking": False}},
     }
     judge_prompts = {prompt.name: prompt for prompt in judge.details.prompts}
     assert "{{content}}" in judge_prompts["Policy"].text
@@ -194,7 +194,7 @@ def test_node_details_show_settings_full_prompts_and_models():
 
     attacker = g.node("attacker")
     assert attacker.subtitle == "DeepTeam · 1 attack type · 5 cases"
-    assert attacker.details.model["model"] == "qwen3:8b"
+    assert attacker.details.model["model"] == "qwen3-235b-a22b-fp8-leonardo"
     assert {p.name for p in attacker.details.prompts} == {
         "Purpose",
         "Success criteria",
@@ -276,4 +276,4 @@ def test_guardrail_labels_are_readable_and_configurable():
 def test_model_parameters_are_shown_as_json_values():
     agent = graph("hidden-mailbox", "easy").node("agent")
     settings = {s.label: s.value for s in agent.details.settings}
-    assert "reasoning_effort none" in settings["Model parameters"]
+    assert "max_tokens 512" in settings["Model parameters"]

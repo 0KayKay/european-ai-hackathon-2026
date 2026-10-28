@@ -459,7 +459,7 @@ async def test_guardrail_decisions_are_recorded_exactly_pending_then_final():
     assert pending.data["check_id"] == final.data["check_id"]
     assert (
         final.data["position"] == "user->agent"
-        and final.data["model"] == "qwen3:8b"
+        and final.data["model"] == "qwen3-235b-a22b-fp8-leonardo"
     )
     assert [e.kind for e in result.events][-1] == "success_check"
 
@@ -606,7 +606,7 @@ async def test_each_role_gets_its_own_model_parameters():
     base, _ = await judge_requests(level("email-review", "hard"))
     send, output = base["judges"]["send-email-judge"], base["judges"]["output-judge"]
     assert send["request"]["temperature"] == output["request"]["temperature"] == 0
-    assert send["options"]["default_headers"]["x-model"] == "gemini-3.8-flash"
+    assert send["options"]["default_headers"]["x-model"] == "qwen3-235b-a22b-fp8-leonardo"
     assert send["options"]["default_headers"]["x-thread-id"] == "case-9"
     assert send["options"]["default_headers"]["x-user-id"] == "user-9"
     assert send["options"]["max_retries"] == 0 and send["options"]["timeout"] == 30
@@ -676,13 +676,13 @@ def test_gateway_agent_model_uses_the_role_spec_and_headers():
         model = gateway_agent_model(tuned, ModelIdentity(user_id="u", case_id="c"))
     finally:
         structlog.contextvars.unbind_contextvars("correlation_id")
-    assert model.model_name == "qwen3:8b"
+    assert model.model_name == "qwen3-235b-a22b-fp8-leonardo"
     assert model.settings == agent_model_settings(tuned)
     assert model.settings["temperature"] == 0.4
     client = model.client
-    assert str(client.base_url).rstrip("/") == "http://host.docker.internal:11434/v1"
+    assert str(client.base_url).rstrip("/") == "http://localhost:4000/v1"
     headers = client.default_headers
-    assert headers["x-model"] == "qwen3:8b"
+    assert headers["x-model"] == "qwen3-235b-a22b-fp8-leonardo"
     assert headers["x-user-id"] == "u" and headers["x-correlation-id"] == "corr-1"
 
 

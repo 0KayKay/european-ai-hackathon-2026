@@ -166,11 +166,12 @@ status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPE
   models with an explicit URL call that endpoint directly. The callback path
   `/api/v1/arena/internal/` is answered with 404 by the frontend proxy and refused by the backend when a request
   arrives through a proxy; only in-cluster calls reach it.
-- **Local Level 1 red team.** Its attacker, simulator and evaluator use Ollama `qwen3:8b` on the host through
-  `http://host.docker.internal:11434/v1`. Keep Ollama running and pull `qwen3:8b` before starting Level 1 runs.
-  The model uses `reasoning_effort: none` so its JSON answers reach DeepTeam as content rather than consuming the
-  response budget as thinking text. This host endpoint is for local Docker/Kind runs and must be changed for a
-  remote cluster.
+- **Default models.** Every LLM role of every level (agent, judges, attacker, simulator, evaluator, green
+  generator) uses `qwen3-235b-a22b-fp8-leonardo` through agentgateway, with thinking switched off via
+  `chat_template_kwargs`. This needs the Leonardo cluster link (`infrastructure/gke-leonardo`) and a running
+  `qwen235b` server. The server has a 2,048-token context, so `max_tokens` is kept small (384–1,024). For local
+  runs without Leonardo, change the roles in the level files (or in the UI) to a model you have, e.g.
+  `gemini-3.8-flash` or a local Ollama endpoint.
 - **Limitations.** The deepteam arena endpoints (`/internal/arena/generate`,
   `/internal/arena/multi-turn`) are implemented, but still need a live model and cluster check (see
   [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)). Execution is serial per

@@ -31,7 +31,6 @@ from hackathon.agent.challenge_3.guardrail_prompts import LEVEL3_OUTPUT_SAFETY_P
 from hackathon.agent.challenge_3.prompts import challenge3_prompt
 from hackathon.agent.guardrails import REFUSAL, ChallengeGuardrails
 from hackathon.api.challenges import prepare_attempt
-from hackathon.arena.config.loader import load_levels
 from hackathon.arena.config.templates import render
 from hackathon.arena.models import agent_model_settings
 from hackathon.arena.registry.guardrails import (
@@ -51,6 +50,7 @@ from hackathon.arena.registry.success import (
     offer_routing_checks,
 )
 from hackathon.arena.registry.tools import ToolState
+from tests.arena.legacy_models import legacy_model_levels
 from hackathon.config import Settings
 
 MODES = {
@@ -108,7 +108,7 @@ LEGACY_HARD_GUARDRAILS = {
 
 @lru_cache
 def levels():
-    return load_levels()
+    return legacy_model_levels()
 
 
 def level(level_id: str, difficulty: str):
@@ -169,16 +169,8 @@ def test_agent_identity_and_model_settings_match_legacy(level_id, difficulty):
     legacy = legacy_agent(mode, difficulty, legacy_deps(mode, difficulty))
     resolved = level(level_id, difficulty)
     assert resolved.agent.name == legacy.name
-    if level_id == "hidden-mailbox":
-        assert resolved.agent.model.model == "qwen3:8b"
-        assert resolved.agent.model.endpoint == "http://host.docker.internal:11434/v1"
-        assert agent_model_settings(resolved.agent.model) == {
-            "openai_reasoning_effort": "none",
-            "max_tokens": 4096,
-        }
-    else:
-        assert resolved.agent.model.model == "gemini-3.8-flash"
-        assert agent_model_settings(resolved.agent.model) == legacy.model.settings
+    assert resolved.agent.model.model == "gemini-3.8-flash"
+    assert agent_model_settings(resolved.agent.model) == legacy.model.settings
 
 
 @pytest.mark.parametrize("level_id,difficulty", COMBOS)
@@ -406,12 +398,10 @@ async def test_guardrails_match_legacy(level_id, difficulty, monkeypatch):
             _FakeOpenAI.calls.clear()
             legacy_decision = await legacy_guardrails.judge(prompt)
             [legacy_request] = _FakeOpenAI.calls
-            request = judge_request(guardrail.model, guardrail.system_prompt.text, prompt)
-            if level_id == "hidden-mailbox":
-                assert request["model"] == "qwen3:8b"
-                assert request["reasoning_effort"] == "none"
-                request = {**request, "model": "gemini-3.8-flash", "reasoning_effort": "low"}
-            assert request == legacy_request
+            assert (
+                judge_request(guardrail.model, guardrail.system_prompt.text, prompt)
+                == legacy_request
+            )
             decision = parse_judge_content(
                 '```json\n{"decision":"UNSAFE","rule":"r","reason":"x"}\n```'
             )

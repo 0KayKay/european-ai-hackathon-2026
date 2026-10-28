@@ -20,6 +20,7 @@ from hackathon.arena.runs.red_team import (
     TurnCallback,
     check_generated,
 )
+from hackathon.config import get_settings
 from hackathon.arena.runs.store import (
     MemoryRunStore,
     PostgresRunStore,
@@ -106,9 +107,9 @@ async def test_deepteam_generate_speaks_the_ndjson_contract():
     assert set(body["objective"]) == {"purpose", "criteria", "attacker_knowledge"}
     # `endpoint: agentgateway` is resolved to the gateway base URL; no credentials in the body.
     assert body["models"]["attacker"] == {
-        "model": "gemini-3.8-flash",
+        "model": "qwen3-235b-a22b-fp8-leonardo",
         "endpoint": "http://localhost:4000/v1",
-        "params": {"temperature": 0.7, "max_tokens": 2048},
+        "params": {"temperature": 0.7, "max_tokens": 512, "extra": {"chat_template_kwargs": {"enable_thinking": False}}},
     }
     assert "gateway-key" not in json.dumps(body)
 
@@ -287,13 +288,14 @@ async def test_green_generator_direct_level():
         )
     ]
     assert cases == [{"input": f"<message {n}>"} for n in (1, 2, 3)]
-    assert fake.options["base_url"] == "http://host.docker.internal:11434/v1"
-    assert fake.options["api_key"] == "unused"
-    assert fake.options["default_headers"]["x-model"] == "qwen3:8b"
+    assert fake.options["base_url"] == "http://localhost:4000/v1"
+    assert fake.options["api_key"] == get_settings().AGENTGATEWAY_API_KEY
+    assert fake.options["default_headers"]["x-model"] == "qwen3-235b-a22b-fp8-leonardo"
     assert fake.options["default_headers"]["x-user-id"] == "tester"
     first = fake.requests[0]
-    assert first["temperature"] == 0.9 and first["model"] == "qwen3:8b"
-    assert first["reasoning_effort"] == "none"
+    assert first["temperature"] == 0.9 and first["model"] == "qwen3-235b-a22b-fp8-leonardo"
+    assert first["max_completion_tokens"] == 1024
+    assert first["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
     schema = first["response_format"]["json_schema"]["schema"]
     assert schema["properties"]["cases"]["items"]["required"] == ["input"]
     system = first["messages"][0]["content"]

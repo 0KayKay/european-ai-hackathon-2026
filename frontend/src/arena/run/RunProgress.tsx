@@ -1,3 +1,4 @@
+import { AlertTriangleIcon, CheckIcon, Loader2Icon } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { getLevel } from "../api";
@@ -7,7 +8,13 @@ import { ArenaGraph } from "../graph/ArenaGraph";
 import { EventLog } from "../replay/EventLog";
 import { highlightAt } from "../replay/events";
 import { arenaHref } from "../router";
-import type { CaseSummary, Progress, RunDetail } from "../types";
+import type {
+	CaseSummary,
+	GenerationStatus,
+	Progress,
+	RunDetail,
+	Team,
+} from "../types";
 import { useArenaQuery } from "../useArenaQuery";
 
 const LIVE_EVENTS_SHOWN = 8;
@@ -167,7 +174,8 @@ function CaseQueue({ run }: { run: RunDetail }) {
 								key={item.id}
 								data-case={item.label}
 								className={cn(
-									"border-b border-slate-100",
+									// New cases slide in as they are generated.
+									"border-b border-slate-100 animate-in fade-in-0 slide-in-from-top-1 duration-300",
 									item.id === liveId && "bg-blue-50/50",
 								)}
 							>
@@ -190,6 +198,109 @@ function CaseQueue({ run }: { run: RunDetail }) {
 					})}
 				</ul>
 			)}
+		</section>
+	);
+}
+
+const GENERATION_TEXT: Record<Team, Record<GenerationStatus, string>> = {
+	red: {
+		pending: "Waiting to generate attack cases…",
+		generating: "Generating attack cases…",
+		done: "Attack cases generated",
+		failed: "Attack case generation failed",
+		dataset: "Attack cases loaded from a dataset",
+	},
+	green: {
+		pending: "Waiting to generate benign cases…",
+		generating: "Generating benign cases…",
+		done: "Benign cases generated",
+		failed: "Benign case generation failed",
+		dataset: "Benign cases loaded from a dataset",
+	},
+};
+
+function TeamGeneration({ run, team }: { run: RunDetail; team: Team }) {
+	const status = run.generation?.[team]?.status ?? "generating";
+	const text = GENERATION_TEXT[team];
+	const generated = run.cases.filter((c) => c.team === team).length;
+	const total = Math.max(run.progress[team].total, generated);
+	const pct = total > 0 ? (generated / total) * 100 : 0;
+	const busy = status === "generating" || status === "pending";
+	const title = text[status];
+	return (
+		<div
+			data-team={team}
+			data-generation={status}
+			className="flex flex-col gap-2 rounded-lg border bg-slate-50/60 p-4"
+		>
+			<div className="flex items-center gap-2.5">
+				{busy ? (
+					<Loader2Icon
+						aria-hidden="true"
+						className={cn(
+							"size-4 shrink-0 animate-spin",
+							team === "red" ? "text-red-500" : "text-emerald-600",
+						)}
+					/>
+				) : status === "failed" ? (
+					<AlertTriangleIcon
+						aria-hidden="true"
+						className="size-4 shrink-0 text-red-600"
+					/>
+				) : (
+					<CheckIcon
+						aria-hidden="true"
+						className="size-4 shrink-0 text-emerald-600"
+					/>
+				)}
+				<h3 className="text-sm font-semibold">{title}</h3>
+			</div>
+			<div
+				role="progressbar"
+				aria-label={`${team === "red" ? "Attack" : "Benign"} cases generated`}
+				aria-valuemin={0}
+				aria-valuemax={total}
+				aria-valuenow={generated}
+				className="relative h-2 overflow-hidden rounded-full bg-slate-200"
+			>
+				<div
+					className={cn(
+						"h-full rounded-full transition-[width] duration-500",
+						team === "red" ? "bg-red-500" : "bg-emerald-500",
+					)}
+					style={{ width: `${pct}%` }}
+				/>
+				{busy && (
+					<div
+						aria-hidden="true"
+						className="absolute inset-0 animate-pulse bg-white/30"
+					/>
+				)}
+			</div>
+			<p className="text-[13px] text-slate-600 tabular-nums">
+				{generated} of {total} cases generated
+			</p>
+		</div>
+	);
+}
+
+/** While the run is generating: progress of case generation per team, instead of an empty sample. */
+function GenerationPanel({ run }: { run: RunDetail }) {
+	return (
+		<section
+			aria-label="Case generation"
+			className="flex min-h-[28rem] flex-col overflow-hidden rounded-xl border bg-white shadow-sm"
+		>
+			<div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+				<h2 className="text-sm font-semibold">Generating cases</h2>
+				<span className="truncate text-xs text-slate-500">
+					the live sample starts with the first case
+				</span>
+			</div>
+			<div className="flex flex-1 flex-col justify-center gap-4 p-6">
+				<TeamGeneration run={run} team="red" />
+				<TeamGeneration run={run} team="green" />
+			</div>
 		</section>
 	);
 }
@@ -234,9 +345,7 @@ function LiveSample({ run }: { run: RunDetail }) {
 			</div>
 			{!live ? (
 				<p className="flex flex-1 items-center justify-center p-6 text-sm text-slate-500">
-					{run.status === "generating"
-						? "Cases are being generated. The live sample starts with the first case."
-						: "No case is running right now."}
+					No case is running right now.
 				</p>
 			) : (
 				<div className="flex min-h-0 flex-1 flex-col xl:flex-row">
@@ -363,7 +472,11 @@ export function RunProgress({ run }: { run: RunDetail }) {
 				</section>
 			</div>
 			<div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-				<LiveSample run={run} />
+				{run.status === "generating" && !run.live ? (
+					<GenerationPanel run={run} />
+				) : (
+					<LiveSample run={run} />
+				)}
 				<div className="flex min-h-0 flex-col gap-4">
 					<CaseQueue run={run} />
 					<ModelsUsed run={run} />

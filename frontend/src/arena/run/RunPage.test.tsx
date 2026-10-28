@@ -209,7 +209,79 @@ describe("run in progress", () => {
 				"<planted email subject 1> · <planted email body 1>",
 			),
 		).toBeInTheDocument();
-		expect(screen.getByText(/Cases are being generated/)).toBeInTheDocument();
+		// The generation panel takes the place of the (still empty) live sample.
+		expect(screen.queryByRole("region", { name: "Live sample" })).toBeNull();
+		const panel = screen.getByRole("region", { name: "Case generation" });
+		expect(
+			within(panel).getByRole("heading", { name: "Generating attack cases…" }),
+		).toBeInTheDocument();
+		expect(
+			within(panel).getByRole("heading", { name: "Generating benign cases…" }),
+		).toBeInTheDocument();
+		const attacks = within(panel).getByRole("progressbar", {
+			name: "Attack cases generated",
+		});
+		expect(attacks).toHaveAttribute("aria-valuenow", "4");
+		expect(attacks).toHaveAttribute("aria-valuemax", "10");
+		expect(within(panel).getByText("4 of 10 cases generated")).toBeVisible();
+		expect(within(panel).getByText("0 of 20 cases generated")).toBeVisible();
+	});
+
+	it("updates generation progress and shows the live sample once a case runs", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const more: RunDetail = {
+			...emailReviewRunGenerating,
+			generation: {
+				red: { status: "done", error: null },
+				green: { status: "generating", error: null },
+			},
+			cases: [
+				...emailReviewRunCompleted.cases.slice(0, 10).map((item) => ({
+					...item,
+					outcome: null,
+					status: "pending" as const,
+				})),
+				...emailReviewRunCompleted.cases.slice(10, 15).map((item) => ({
+					...item,
+					outcome: null,
+					status: "pending" as const,
+				})),
+			],
+		};
+		const running: RunDetail = {
+			...hiddenMailboxRunRunning,
+			id: "run-er-1",
+		};
+		const run = snapshots(emailReviewRunGenerating, more, running);
+		renderAt("#/arena/runs/run-er-1", { [`${API}/runs/run-er-1`]: run.route });
+		const panel = await screen.findByRole("region", {
+			name: "Case generation",
+		});
+		expect(within(panel).getByText("4 of 10 cases generated")).toBeVisible();
+
+		run.next();
+		await tick();
+		await waitFor(() =>
+			expect(within(panel).getByText("10 of 10 cases generated")).toBeVisible(),
+		);
+		expect(
+			within(panel).getByRole("heading", { name: "Attack cases generated" }),
+		).toBeInTheDocument();
+		expect(within(panel).getByText("5 of 20 cases generated")).toBeVisible();
+		expect(
+			within(screen.getByRole("list", { name: "Cases" })).getAllByRole(
+				"listitem",
+			),
+		).toHaveLength(15);
+
+		run.next();
+		await tick();
+		expect(
+			await screen.findByRole("region", { name: "Live sample" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("region", { name: "Case generation" }),
+		).toBeNull();
 	});
 
 	it("keeps the stopped state when an older poll answers after the stop", async () => {

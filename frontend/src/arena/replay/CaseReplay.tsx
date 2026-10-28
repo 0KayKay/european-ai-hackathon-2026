@@ -9,7 +9,7 @@ import {
 	OutcomeBadge,
 	runCrumbs,
 } from "../components";
-import { formatDuration } from "../format";
+import { formatDateTime, formatDuration } from "../format";
 import { ArenaGraph } from "../graph/ArenaGraph";
 import { arenaHref } from "../router";
 import {
@@ -222,6 +222,17 @@ export function CaseReplay({
 					<div className="flex min-w-0 items-center gap-2.5 text-[13px] text-slate-600">
 						{data.outcome && <OutcomeBadge outcome={data.outcome} />}
 						<span className="truncate">{caseFacts(data)}</span>
+						{data.started_at && (
+							<span className="shrink-0 whitespace-nowrap">
+								· started{" "}
+								<time
+									dateTime={data.started_at}
+									className="font-medium text-slate-900 tabular-nums"
+								>
+									{formatDateTime(data.started_at, { seconds: true })}
+								</time>
+							</span>
+						)}
 					</div>
 				)
 			}

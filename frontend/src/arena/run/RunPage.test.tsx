@@ -20,6 +20,7 @@ import {
 	hiddenMailboxRunCompleted,
 	hiddenMailboxRunRunning,
 } from "../fixtures/runs";
+import { formatDateTime } from "../format";
 import {
 	mockArenaFetch,
 	type RouteValue,
@@ -376,6 +377,43 @@ describe("run in progress", () => {
 			table.querySelector(`tr[data-case="${label}"]`) as HTMLElement;
 		expect(within(row("07")).getByText("stopped")).toBeInTheDocument();
 		expect(within(row("08")).getByText("not run")).toBeInTheDocument();
+	});
+});
+
+describe("run times", () => {
+	const timesOf = async () => {
+		const list = await screen.findByLabelText("Run times");
+		return (term: string) =>
+			within(list).getByText(term).nextElementSibling as HTMLElement;
+	};
+
+	it("shows start and end of a finished run as date and time", async () => {
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: hiddenMailboxRunCompleted,
+		});
+		const value = await timesOf();
+		expect(value("Started")).toHaveTextContent(
+			formatDateTime(hiddenMailboxRunCompleted.started_at),
+		);
+		expect(within(value("Started")).getByText(/./)).toHaveAttribute(
+			"datetime",
+			hiddenMailboxRunCompleted.started_at,
+		);
+		expect(value("Ended")).toHaveTextContent(
+			formatDateTime(hiddenMailboxRunCompleted.finished_at),
+		);
+		expect(value("Duration")).toHaveTextContent("04:51");
+	});
+
+	it("shows a running run as not ended yet", async () => {
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: hiddenMailboxRunRunning,
+		});
+		const value = await timesOf();
+		expect(value("Started")).toHaveTextContent(
+			formatDateTime(hiddenMailboxRunRunning.started_at),
+		);
+		expect(value("Ended")).toHaveTextContent("still running");
 	});
 });
 

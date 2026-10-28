@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ExpandableText } from "../components";
-import { formatEventTime } from "../format";
+import { formatDateTime, formatEventTime } from "../format";
 import type { ArenaGraph, CaseEvent, Team } from "../types";
 import { type EventTone, eventHeading, guardrailData } from "./events";
 
@@ -282,7 +282,10 @@ export function EventEntry({
 	const expandable = compact && !onSelect;
 	const header = (
 		<>
-			<span className="font-mono text-xs text-slate-500 tabular-nums">
+			<span
+				title={formatDateTime(event.at, { seconds: true })}
+				className="font-mono text-xs text-slate-500 tabular-nums"
+			>
 				{formatEventTime(event.t)}
 			</span>
 			<span

@@ -13,7 +13,7 @@ import {
 	RUN_STATUS_TONES,
 	runCrumbs,
 } from "../components";
-import { formatClock, STATUS_LABELS } from "../format";
+import { formatClock, formatDateTime, STATUS_LABELS } from "../format";
 import { arenaHref } from "../router";
 import type { RunDetail } from "../types";
 import { RunProgress } from "./RunProgress";
@@ -91,6 +91,43 @@ function StopButton({
 				{stopping ? "Stopping…" : "Stop run"}
 			</Button>
 		</>
+	);
+}
+
+/** Start and end of the run as local date and time, and its duration. */
+function RunTimes({ run }: { run: RunDetail }) {
+	return (
+		<dl
+			aria-label="Run times"
+			className="flex shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b bg-white px-4 py-2 text-[13px] lg:px-6"
+		>
+			<div className="flex items-baseline gap-1.5">
+				<dt className="text-slate-500">Started</dt>
+				<dd className="font-medium tabular-nums">
+					<time dateTime={run.started_at}>
+						{formatDateTime(run.started_at)}
+					</time>
+				</dd>
+			</div>
+			<div className="flex items-baseline gap-1.5">
+				<dt className="text-slate-500">Ended</dt>
+				<dd className="font-medium tabular-nums">
+					{run.finished_at ? (
+						<time dateTime={run.finished_at}>
+							{formatDateTime(run.finished_at)}
+						</time>
+					) : (
+						<span className="font-normal text-slate-500">still running</span>
+					)}
+				</dd>
+			</div>
+			<div className="flex items-baseline gap-1.5">
+				<dt className="text-slate-500">Duration</dt>
+				<dd className="font-mono text-xs tabular-nums">
+					{formatClock(run.elapsed)}
+				</dd>
+			</div>
+		</dl>
 	);
 }
 
@@ -189,6 +226,7 @@ export function RunPage({ runId }: { runId: string }) {
 					Live updates are failing ({error.message}). Retrying…
 				</p>
 			)}
+			{run && <RunTimes run={run} />}
 			{run && <RunNotices run={run} />}
 			{run &&
 				(active ? <RunProgress run={run} /> : <RunResultsView run={run} />)}

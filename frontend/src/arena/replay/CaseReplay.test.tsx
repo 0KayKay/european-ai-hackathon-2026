@@ -18,6 +18,7 @@ import {
 	hiddenMailboxCaseG04,
 	hiddenMailboxRunCompleted,
 } from "../fixtures/runs";
+import { formatDateTime, formatEventTime } from "../format";
 import { mockArenaFetch } from "../testing/fetch";
 import { mockReactFlow } from "../testing/reactflow";
 
@@ -103,6 +104,30 @@ describe("case replay", () => {
 			),
 		);
 		expect(time()).toBe("0.00s / 3.22s");
+	});
+
+	it("shows the case start as date and time, event times with the absolute time", async () => {
+		renderAt("#/arena/runs/run-hm-1/cases/hm-03");
+		await screen.findByRole("list", { name: "Event log" });
+		const banner = screen.getByRole("banner");
+		const started = hiddenMailboxCase03.started_at as string;
+		expect(
+			within(banner).getByText(formatDateTime(started, { seconds: true })),
+		).toHaveAttribute("datetime", started);
+
+		const [first, second] = hiddenMailboxCase03.events;
+		const entry = log().querySelector(
+			`[data-seq="${second.seq}"]`,
+		) as HTMLElement;
+		expect(within(entry).getByText(formatEventTime(second.t))).toHaveAttribute(
+			"title",
+			formatDateTime(second.at, { seconds: true }),
+		);
+		expect(
+			within(
+				log().querySelector(`[data-seq="${first.seq}"]`) as HTMLElement,
+			).getByText("0.00s"),
+		).toHaveAttribute("title", formatDateTime(first.at, { seconds: true }));
 	});
 
 	it("steps with the buttons and the keyboard", async () => {

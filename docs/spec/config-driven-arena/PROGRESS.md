@@ -65,6 +65,9 @@ Independent reviews per area after all packages, with fixes merged:
 - **backend / b300 / CI:** no product bug; the offer-review parity test now compares the whole prompt except the
   four deliberately changed lines, the double-stop test waits for the second cancel instead of sleeping, and runs
   of a removed level are titled with their id. B300 values, CI job and docs checked consistent.
+- Two more timing-dependent backend tests found with shuffled parallel runs and made robust (the double-stop test
+  now waits for the gated case; the legacy deadline test gets 0.5 s instead of 0.01 s). Four shuffled parallel
+  suites then passed.
 - Open notes: `ContentFilterError`/`IncompleteToolCall` are reported as `UnexpectedModelBehavior`; the deepteam
   generate schema uses strict `json_schema` for a string map, which strict OpenAI mode would reject (fine on vLLM,
   unverified live).
@@ -82,3 +85,10 @@ HTTP 403, so please delete them in the GitHub UI):
 Keep or check by hand: `abliterated-model` (1 commit, not in `main`), `claude/leonardo-models-and-link` (5 commits;
 their content looks re-committed on `main` under other hashes), `feat/deep-team-ui` (Marina's original UI, used
 as a template only).
+
+## Final state
+
+All CI jobs pass locally on the branch head: backend 326 passed / 5 skipped (Postgres-only), frontend 105 + auth 3 +
+build, deepteam 27, guardrail 11, b300 (repository check, tests, clients), leonardo (check, tests).
+Needs a live check: GLM on B300 with the new profile (log lines above), the raised `max_tokens`, a red-team run
+with the objective-driven multi-turn prompts.

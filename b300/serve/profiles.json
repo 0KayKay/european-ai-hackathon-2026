@@ -9,6 +9,16 @@
     "memory": "960G",
     "time": "04:00:00"
   },
+  "glm53-long": {
+    "models": [
+      "glm-long"
+    ],
+    "image": "glm",
+    "gpus": 8,
+    "cpus": 64,
+    "memory": "960G",
+    "time": "04:00:00"
+  },
   "nemotron": {
     "models": [
       "ultra",

@@ -41,6 +41,7 @@ servers were stopped after verification; start an allocation before making API c
 | Profile | Models / API aliases | GPUs | Default laptop ports |
 | --- | --- | --- | --- |
 | `glm53` | GLM-5.3-Flash: `glm-5.3-flash-leonardo` | 8, TP8/PP1 | 18083 |
+| `glm53-long` | Same GLM and API name, 262,144-token context, 32 slots | 8, TP8/PP1 | 18083 |
 | `nemotron` | Ultra and safety together | 5 total | 18085, 18086 |
 | `ultra` | `nemotron-ultra-550b-b300`, official 550B NVFP4 | 4, TP4/PP1 | 18085 |
 | `safety` | `nemotron-content-safety-reasoning-4b-b300`, BF16 | 1, TP1/PP1 | 18086 |
@@ -49,9 +50,10 @@ servers were stopped after verification; start an allocation before making API c
 GLM keeps its historically tested `leonardo` alias. Configured contexts are
 65,536 tokens for GLM, 8,192 for Ultra and Safeguard, and 4,096 for safety. GLM
 has 16 sequence slots with 16,384-token chunked prefill; Ultra and safety have
-four; Safeguard has one. The GLM 65,536/16 settings are **not yet GPU-validated**
-(the recorded GLM runs used 2,048/4); see [GLM context sizing](docs/glm-context.md)
-for the memory estimate and the startup log lines to report. The observed team limit was eight GPUs: GLM and the Nemotron pair cannot
+four; Safeguard has one. A `glm53` start on 29 October reported a 16.8 M-token KV
+cache (256x concurrency at 65,536); `glm53-long` (262,144 tokens, 32 slots, run instead of
+`glm53`) is **not yet GPU-validated**; see [GLM context sizing](docs/glm-context.md)
+for the measurements and the startup log lines to report. The observed team limit was eight GPUs: GLM and the Nemotron pair cannot
 run together under that limit. Verify current project/QoS limits before use.
 
 ## How does it work?

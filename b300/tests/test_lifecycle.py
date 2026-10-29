@@ -121,6 +121,29 @@ class LifecycleContracts(unittest.TestCase):
         self.assertIn('serve/server.py', names)
         self.assertFalse(any('.runtime' in name or 'api-key' in name for name in names))
 
+    def test_long_context_glm_runs_as_the_glm_kind(self):
+        import server
+        models = common.load(common.ROOT / 'models.json')
+        profiles = common.load(common.ROOT / 'profiles.json')
+        self.assertEqual(profiles['glm53']['models'], ['glm'])
+        self.assertEqual(profiles['glm53-long']['models'], ['glm-long'])
+        glm, long = models['glm'], models['glm-long']
+        # Same checkpoint, API name and laptop port: key files, forwards, clients and the gateway alias are unchanged.
+        self.assertEqual(long['kind'], 'glm')
+        for field in ('repo', 'revision', 'weight_bytes', 'shard_count', 'metadata_sha256', 'served_model',
+                      'tp', 'port', 'local_port', 'client'):
+            self.assertEqual(long[field], glm[field], field)
+        command = server.engine(long, long['kind'], Path('/fixture'), '10.0.0.1', 8000)
+        self.assertIn('--distributed-executor-backend', command)
+        value = lambda args, flag: args[args.index(flag) + 1]
+        self.assertEqual(value(command, '--tensor-parallel-size'), '8')
+        self.assertEqual([value(command, f) for f in ('--max-model-len', '--max-num-seqs', '--max-num-batched-tokens')],
+                         ['262144', '32', '16384'])
+        self.assertEqual(value(glm['engine_args'], '--max-model-len'), '65536')
+        differ = {'--max-model-len', '--max-num-seqs'}
+        strip = lambda args: [a for i, a in enumerate(args) if a not in differ and (i == 0 or args[i - 1] not in differ)]
+        self.assertEqual(strip(long['engine_args']), strip(glm['engine_args']))
+
     def test_forwarding_is_private_and_keeps_ports_distinct(self):
         endpoint = {'host_ip': '10.1.2.3', 'models': {
             'ultra': {'local_port': 18085, 'port': 30001},

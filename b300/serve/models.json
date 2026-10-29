@@ -187,6 +187,56 @@
       }
     }
   },
+  "glm-long": {
+    "kind": "glm",
+    "repo": "zai-org/GLM-5.3-Flash",
+    "revision": "91b69215804f2d2036a8867f6ce44848e278dcda",
+    "weight_bytes": 328337455672,
+    "shard_count": 62,
+    "metadata_sha256": {
+      "config.json": "bb8f01c42cb92a52ca72e65afb4d5bd8d11aef083cd210e8de25dfb904f23e9f",
+      "tokenizer_config.json": "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc",
+      "model.safetensors.index.json": "3c3f40366a53c3fd7974b4eab7881a365a98c2a4329150befebab99fe7c18b05"
+    },
+    "served_model": "glm-5.3-flash-leonardo",
+    "port": 8000,
+    "local_port": 18083,
+    "tp": 8,
+    "max_model_len": 262144,
+    "engine_args": [
+      "--dtype",
+      "bfloat16",
+      "--gpu-memory-utilization",
+      "0.90",
+      "--max-model-len",
+      "262144",
+      "--max-num-seqs",
+      "32",
+      "--max-num-batched-tokens",
+      "16384",
+      "--enforce-eager",
+      "--disable-custom-all-reduce",
+      "--limit-mm-per-prompt",
+      "{\"image\":0,\"video\":0}",
+      "--safetensors-load-strategy",
+      "eager",
+      "--reasoning-parser",
+      "glm45",
+      "--tool-call-parser",
+      "glm47",
+      "--enable-auto-tool-choice",
+      "--kv-cache-dtype",
+      "auto"
+    ],
+    "client": {
+      "local_port": 18083,
+      "timeout_seconds": 300,
+      "chat_template_kwargs": {
+        "reasoning_effort": "low",
+        "clear_thinking": true
+      }
+    }
+  },
   "safeguard": {
     "repo": "openai/gpt-oss-safeguard-20b",
     "revision": "8a11e17b25c973a24099d4016bf2e17dd7ec1574",

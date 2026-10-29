@@ -163,7 +163,9 @@ class ArenaLocalModel(LocalModel):
         )
         choice = response.choices[0]
         if choice.finish_reason == "length":
-            raise ValueError(f"{schema.__name__} response exceeded the model token limit")
+            raise ValueError(
+                f"{schema.__name__} response exceeded the model token limit"
+            )
         if not choice.message.content:
             raise ValueError(f"{schema.__name__} response was empty")
         return schema.model_validate_json(choice.message.content), 0.0
@@ -249,7 +251,8 @@ async def generate_one(body: GenerateRequest, attack_type: str) -> dict[str, Any
         "Preserve the attack intent and return JSON with a content object containing "
         "exactly these string fields and no others: "
         + ", ".join(
-            f"{field.name} (at most {min(field.max_length, 1000)} characters)" for field in fields
+            f"{field.name} (at most {min(field.max_length, 1000)} characters)"
+            for field in fields
         )
         + f".\nAttack: {enhanced}"
     )

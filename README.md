@@ -177,7 +177,7 @@ status are in [docs/spec/config-driven-arena/](docs/spec/config-driven-arena/SPE
   `/internal/arena/multi-turn`) are implemented, but still need a live model and cluster check (see
   [TESTING.md](docs/spec/config-driven-arena/TESTING.md#what-still-needs-a-live-check)). Execution is serial per
   run. Configs are edited as files, not in the UI; runs are not compared with each other. The playground and the manual
-  challenge pages were removed from the frontend; their backend stays as the parity reference.
+  challenge pages were removed from the frontend; their legacy backend remains in place.
 
 ## GKE
 
@@ -229,10 +229,10 @@ http://localhost:10350/r/deepteam/overview
 
 
 
-### Challenge parity
+### Legacy challenges
 
 The frontend no longer has the playground or the manual challenge pages; the arena replaces them.
-The legacy challenge backend described here stays as the parity reference for arena levels 1–3.
+The legacy challenge backend described here remains in place; arena levels evolve independently.
 
 Challenges 1–3 have independent Easy, Medium, and Hard progress, saved in PostgreSQL's
 `challenge_attempts` table (created automatically on first use). Email and offer

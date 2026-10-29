@@ -246,7 +246,9 @@ async def test_generate_one_accepts_flat_injection_fields_from_model(monkeypatch
     monkeypatch.setattr(arena, "model_for", lambda *_: FakeModel())
     monkeypatch.setitem(arena.SINGLE_ATTACKS, "prompt_injection", FakeAttack)
 
-    result = await arena.generate_one(arena.GenerateRequest.model_validate(body()), "prompt_injection")
+    result = await arena.generate_one(
+        arena.GenerateRequest.model_validate(body()), "prompt_injection"
+    )
     assert result["content"] == {"subject": "<subject>", "body": "<enhanced>"}
 
 

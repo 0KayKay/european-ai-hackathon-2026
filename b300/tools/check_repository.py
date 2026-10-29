@@ -29,9 +29,6 @@ def main():
         assert profile['gpus'] <= 8
         time_seconds(profile['time'])
         assert '@sha256:' in images[profile['image']]
-        # A run publishes each model under its kind (key file, endpoint entry, forward): one of each per profile.
-        kinds = [models[k].get('kind', k) for k in profile['models']]
-        assert len(set(kinds)) == len(kinds) and set(kinds) <= {'glm', 'ultra', 'safety', 'safeguard'}, name
     clients = json.loads((ROOT / 'profiles.json').read_text())
     for name, model in models.items():
         assert re.fullmatch('[a-f0-9]{40}', model['revision'])

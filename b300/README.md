@@ -40,20 +40,19 @@ servers were stopped after verification; start an allocation before making API c
 
 | Profile | Models / API aliases | GPUs | Default laptop ports |
 | --- | --- | --- | --- |
-| `glm53` | GLM-5.3-Flash: `glm-5.3-flash-leonardo` | 8, TP8/PP1 | 18083 |
-| `glm53-long` | Same GLM and API name, 262,144-token context, 32 slots | 8, TP8/PP1 | 18083 |
+| `glm53` | GLM-5.3-Flash: `glm-5.3-flash-b300` | 8, TP8/PP1 | 18083 |
 | `nemotron` | Ultra and safety together | 5 total | 18085, 18086 |
 | `ultra` | `nemotron-ultra-550b-b300`, official 550B NVFP4 | 4, TP4/PP1 | 18085 |
 | `safety` | `nemotron-content-safety-reasoning-4b-b300`, BF16 | 1, TP1/PP1 | 18086 |
 | `safeguard` | `gpt-oss-safeguard-20b-b300`, native MXFP4/BF16 | 1, TP1/PP1 | 18087 |
 
-GLM keeps its historically tested `leonardo` alias. Configured contexts are
-65,536 tokens for GLM, 8,192 for Ultra and Safeguard, and 4,096 for safety. GLM
-has 16 sequence slots with 16,384-token chunked prefill; Ultra and safety have
-four; Safeguard has one. A `glm53` start on 29 October reported a 16.8 M-token KV
-cache (256x concurrency at 65,536); `glm53-long` (262,144 tokens, 32 slots, run instead of
-`glm53`) is **not yet GPU-validated**; see [GLM context sizing](docs/glm-context.md)
-for the measurements and the startup log lines to report. The observed team limit was eight GPUs: GLM and the Nemotron pair cannot
+Configured contexts are 262,144 tokens for GLM, 8,192 for Ultra and Safeguard,
+and 4,096 for safety. GLM has 32 sequence slots with 16,384-token chunked prefill;
+Ultra and safety have four; Safeguard has one. The GLM 262,144/32 settings are
+**not yet GPU-validated**; they are sized from a `glm53` start on 29 October at
+65,536 tokens / 16 slots that reported a 16.8 M-token KV cache (256x concurrency).
+See [GLM context sizing](docs/glm-context.md) for the measurement and the startup
+log lines to report. The observed team limit was eight GPUs: GLM and the Nemotron pair cannot
 run together under that limit. Verify current project/QoS limits before use.
 
 ## How does it work?
@@ -272,13 +271,14 @@ is an error, not an accepted safe verdict.
 ### Connect to agentgateway (cluster link)
 
 The app's agentgateway in GKE can call a B300 run's models, for example GLM as
-`glm-5.3-flash-b300`, which already has a route there. It uses Leonardo's
+`glm-5.3-flash-b300`, its served name and route name there. It uses Leonardo's
 cluster link server ([design](../leonardo/docs/cluster-link.md),
 [Kubernetes side](../infrastructure/leonardo/README.md)): agentgateway calls the
 `b300-router` Service with a fixed router token, and the chisel server in GKE
 forwards that to reverse port 9001. Leonardo keeps port 9000, so both can connect
-at the same time. GLM's gateway alias translates to its legacy native server name,
-`glm-5.3-flash-leonardo`; direct laptop clients still use the native name.
+at the same time. Each B300 model has exactly one route, named like its served
+name, so the gateway passes `model` through unchanged; direct laptop clients use
+the same names.
 
 On B300, `up PROFILE --link` starts `serve/link.py` in the serving job, on the
 batch host next to the model servers. Once the run's endpoint is published, it
@@ -339,10 +339,10 @@ curl -sS http://127.0.0.1:13000/v1/chat/completions -H "Authorization: Bearer $K
 
 `503` from agentgateway means the link is down; `404 model_not_found` from the
 relay means the link works but this run does not serve that model. All B300
-aliases (GLM, Nemotron and Safeguard) have routes in
+models (GLM, Nemotron and Safeguard) have routes in
 `infrastructure/leonardo/agentgateway.yaml`, generated from `serve/models.json`
 by `leonardo/tools/render_agentgateway.py`. Deploy the updated gateway config
-before using the Nemotron or Safeguard aliases. Tested locally with the real
+before using the Nemotron or Safeguard models or the renamed GLM. Tested locally with the real
 chisel 1.13.0 server and client (tunnel, token, streaming, reconnect after a
 server restart, shutdown with the endpoint) and in `tests/test_link.py`.
 

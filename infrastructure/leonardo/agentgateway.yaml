@@ -99,8 +99,6 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
-      transformation:
-        model: '"glm-5.3-flash-leonardo"'
     - name: glm-5.3-flash-leonardo
       provider: openAI
       params:

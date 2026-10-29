@@ -1,31 +1,27 @@
 # GLM-5.3-Flash context sizing on B300
 
-Updated 29 October 2026. Two GLM profiles exist; both use the same pinned
-checkpoint, 8 B300 GPUs with TP8/PP1, and the API name `glm-5.3-flash-leonardo`
-(gateway alias `glm-5.3-flash-b300`). Run only one of them at a time.
+Updated 29 October 2026. The `glm53` profile (model `glm`) serves the pinned
+checkpoint on 8 B300 GPUs with TP8/PP1 under the API name `glm-5.3-flash-b300`,
+which is also its agentgateway route.
 
-| Setting | `glm53` (model `glm`) | `glm53-long` (model `glm-long`) |
+| Setting | Current `glm53` | Measured earlier `glm53` start |
 | --- | --- | --- |
-| `--max-model-len` | 65,536 | 262,144 |
-| `--max-num-seqs` | 16 | 32 |
+| `--max-model-len` | 262,144 | 65,536 |
+| `--max-num-seqs` | 32 | 16 |
 | `--max-num-batched-tokens` | 16,384 (chunked prefill) | 16,384 (chunked prefill) |
 | `--gpu-memory-utilization` / `--kv-cache-dtype` | 0.90 / `auto` | 0.90 / `auto` |
-| Status | KV cache measured at startup (below) | Not yet GPU-validated |
+| Status | **Not yet GPU-validated** | KV cache measured at startup (below) |
 
 All other engine flags (`--enforce-eager`, `--disable-custom-all-reduce`, the
-parsers, eager safetensors loading) are the same. The values live in
+parsers, eager safetensors loading) are unchanged. The values live in
 [`serve/models.json`](../serve/models.json) and [`profiles.json`](../profiles.json);
 `tools/check_repository.py` asserts that they agree. The earlier recorded GLM runs
 (11393, 12342, 12482) used 2,048 tokens / 4 slots.
 
-`glm-long` has `"kind": "glm"`: the server runs it exactly like `glm`, with the same
-seven-check GLM suite, key file (`glm.api-key`), log (`glm.server.log`), endpoint
-entry, `forward`/`query --model glm` and laptop port 18083. Clients and the gateway
-need no change.
-
 ## Measured on B300 (`glm53`, 65,536 tokens)
 
-From the vLLM log of a `glm53` start on 29 October 2026, per GPU:
+From the vLLM log of a `glm53` start on 29 October 2026 with 65,536 tokens and
+16 slots, per GPU:
 
 | Item | Per GPU |
 | --- | ---: |
@@ -46,19 +42,18 @@ rank would cost 45 × 512 × 2 B ≈ 46 KB plus ≈ 6 KB of indexer keys, ≈ 52
 token; the measured cost is about a quarter of that. The earlier estimate in this
 file (80–120 layers, 1.3–1.9 M tokens) was about ten times too pessimistic.
 
-## `glm53-long`: 262,144 tokens, 32 slots
+## Current sizing: 262,144 tokens, 32 slots
 
 The KV cache size depends on memory, not on `--max-model-len`, and the batched-token
-limit and so the activation peak are unchanged, so `glm53-long` should again report
-about 16.8 M tokens. The worst case of 32 × 262,144 = 8,388,608 tokens fits with a 2×
-margin (expected concurrency ≈ 64x). 262,144 tokens are a quarter of the model's
-positional range. A 262,144-token prompt is prefilled in sixteen 16,384-token chunks.
-
-Start it (after `down glm53` if that is running):
+limit and so the activation peak are unchanged, so the next `glm53` start should
+again report about 16.8 M tokens. The worst case of 32 × 262,144 = 8,388,608 tokens
+fits with a 2× margin (expected concurrency ≈ 64x). 262,144 tokens are a quarter of
+the model's positional range. A 262,144-token prompt is prefilled in sixteen
+16,384-token chunks.
 
 ```bash
-./b300/cli.py up glm53-long --link     # or without --link for laptop-only use
-./b300/cli.py status                    # ready, then cluster_link: connected
+./b300/cli.py up glm53 --link     # or without --link for laptop-only use
+./b300/cli.py status              # ready, then cluster_link: connected
 ```
 
 ## What to send back
@@ -74,7 +69,7 @@ grep -E 'Free memory on device|GPU KV cache size|Maximum concurrency for' \
   "$BASE/users/$USER/runs/RUN_ID/glm.server.log"
 ```
 
-- For `glm53-long`, `Maximum concurrency for 262,144 tokens per request` ≥ 32x
+- `Maximum concurrency for 262,144 tokens per request` ≥ 32x
   confirms that all 32 slots can hold a full context at once.
 - Below 32x the configuration still works, but long requests queue; lower
   `--max-num-seqs` to the reported value if predictable latency matters more.

@@ -143,10 +143,8 @@ def main():
             device_map[kind] = ids[offset:offset + models[kind]['tp']]
             offset += models[kind]['tp']
         # Match the tested pair: safety on the fifth GPU, Ultra on the first four.
-        for name in sorted(profile['models'], key=lambda k: 0 if k == 'safety' else 1):
-            spec = models[name]
-            # A variant (glm-long) runs as its family's kind: same engine path, checks, key file and endpoint entry.
-            kind = spec.get('kind', name)
+        for kind in sorted(profile['models'], key=lambda k: 0 if k == 'safety' else 1):
+            spec = models[kind]
             key = secrets.token_urlsafe(36)
             keys[kind] = key
             keyfile = args.run / (kind + '.api-key')
@@ -158,12 +156,12 @@ def main():
                 except OSError:
                     probe.bind((address, 0))
                 port = probe.getsockname()[1]
-            selected = device_map[name]
+            selected = device_map[kind]
             environment = dict(os.environ, CUDA_VISIBLE_DEVICES=','.join(selected), VLLM_API_KEY=key,
                 HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', VLLM_WORKER_MULTIPROC_METHOD='spawn',
                 VLLM_CACHE_ROOT=str(args.scratch / ('vllm-' + kind)),
                 FLASHINFER_WORKSPACE_BASE=str(args.scratch / ('flashinfer-' + kind)))
-            command = engine(spec, kind, folders[name], address, port)
+            command = engine(spec, kind, folders[kind], address, port)
             handle = (args.run / (kind + '.server.log')).open('w')
             handles.append(handle)
             update(phase='loading_' + kind)

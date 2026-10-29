@@ -1,11 +1,11 @@
-"""Evaluation runs: generate red and green cases, execute them serially, record everything (SPEC §4.4–§4.7).
+"""Evaluation runs: generate red and green cases, execute them concurrently, record everything (SPEC §4.4–§4.7).
 
 A run is created by `start_run()` and executed in a background asyncio task:
 
 - `generating`: red cases (DeepTeam, or a stored dataset) and green cases (generator, or a stored dataset) are
   created; every case is stored as soon as it exists, so the inputs can be inspected early (R-RED-4).
   Single-turn generated cases are stored as datasets (red only for indirect levels, R-DAT-1).
-- `running`: every case runs to completion, one after the other (R-RUN-2, R-RUN-3). Single-turn cases use
+- `running`: up to eight independent cases run concurrently. Single-turn cases use
   `run_case()`; multi-turn red cases are driven by the red-team source through the internal turn callback.
 - `completed` / `stopped` (stop request) / `failed` (unexpected error) / `interrupted` (process shutdown or
   restart). Completed cases are kept in every case.
@@ -18,6 +18,7 @@ import hmac
 import secrets
 import time
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
@@ -63,6 +64,7 @@ logger = structlog.get_logger(__name__)
 
 Team = Literal["red", "green"]
 STOP_TIMEOUT_SECONDS = 10
+MAX_CONCURRENCY = 8
 
 
 class GreenSource(Protocol):
@@ -96,9 +98,13 @@ class ActiveRun:
     token: str
     datasets: dict[str, dict[str, Any] | None]
     cases: list[dict[str, Any]] = field(default_factory=list)
-    live: dict[str, Any] | None = None
-    # The executing case, until its result is saved.
-    current: dict[str, Any] | None = None
+    live: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Executing cases, until their results are saved.
+    current: dict[str, dict[str, Any]] = field(default_factory=dict)
+    slots: asyncio.Semaphore = field(
+        default_factory=lambda: asyncio.Semaphore(MAX_CONCURRENCY)
+    )
+    save_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     task: asyncio.Task | None = None
     cancel_status: str = "stopped"
 
@@ -322,12 +328,13 @@ class Orchestrator:
     # --- execution -------------------------------------------------------------------------------------------
 
     async def _save(self, active: ActiveRun, *cases: dict[str, Any]) -> None:
-        run = active.run
-        run["counts"] = result_views.counts(active.cases)
-        run["progress"] = result_views.progress(run, active.cases)
-        for case in cases:
-            await self.store.save_case(case)
-        await self.store.save_run(run)
+        async with active.save_lock:
+            run = active.run
+            run["counts"] = result_views.counts(active.cases)
+            run["progress"] = result_views.progress(run, active.cases)
+            for case in cases:
+                await self.store.save_case(case)
+            await self.store.save_run(run)
 
     async def _execute(self, active: ActiveRun) -> None:
         run = active.run
@@ -337,9 +344,15 @@ class Orchestrator:
                 group.create_task(self._prepare_green(active))
             run["status"] = "running"
             await self._save(active)
-            for case in sorted(active.cases, key=case_order):
-                if case["status"] == "pending":
+
+            async def execute(case: dict[str, Any]) -> None:
+                async with active.slots:
                     await self._execute_case(active, case)
+
+            async with asyncio.TaskGroup() as group:
+                for case in sorted(active.cases, key=case_order):
+                    if case["status"] == "pending":
+                        group.create_task(execute(case))
             run["status"] = "completed"
         except asyncio.CancelledError:
             run["status"] = active.cancel_status
@@ -355,7 +368,7 @@ class Orchestrator:
                 await self._settle_current(active)
             except Exception:
                 logger.exception("Could not save the last arena case", run_id=run["id"])
-            active.live = None
+            active.live.clear()
             try:
                 await self._save(active)
             except Exception:
@@ -366,19 +379,59 @@ class Orchestrator:
             logger.info("Arena run finished", run_id=run["id"], status=run["status"])
 
     async def _settle_current(self, active: ActiveRun) -> None:
-        """Save the case that was executing when the run ended (stop, shutdown, failure).
+        """Save cases that were executing when the run ended (stop, shutdown, failure).
 
         An undecided case becomes `stopped` with its events so far. A decided one is saved again, because the
         run may have ended while its result was being saved.
         """
-        case, active.current = active.current, None
-        if case is None:
-            return
-        if case["status"] == "running":
-            case["status"] = "stopped"
-            if active.live and active.live["case_id"] == case["id"]:
-                case["events"] = active.live["events"]
-        await self.store.save_case(case)
+        for case in active.current.values():
+            if case["status"] == "running":
+                case["status"] = "stopped"
+                if live := active.live.get(case["id"]):
+                    case["events"] = live["events"]
+            try:
+                await self.store.save_case(case)
+            except Exception:
+                logger.exception(
+                    "Could not save the last arena case", case_id=case["id"]
+                )
+        active.current.clear()
+
+    async def _generate(
+        self, active: ActiveRun, sources: list[AsyncIterator[dict[str, Any]]]
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Merge generation streams under the run's shared concurrency limit."""
+        queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue(MAX_CONCURRENCY)
+
+        async def consume(source: AsyncIterator[dict[str, Any]]) -> None:
+            try:
+                async with active.slots:
+                    try:
+                        async for case in source:
+                            await queue.put(("case", case))
+                    finally:
+                        if close := getattr(source, "aclose", None):
+                            await close()
+            except Exception as exc:
+                await queue.put(("error", exc))
+            else:
+                await queue.put(("done", None))
+
+        tasks = [asyncio.create_task(consume(source)) for source in sources]
+        remaining = len(tasks)
+        try:
+            while remaining:
+                kind, value = await queue.get()
+                if kind == "done":
+                    remaining -= 1
+                elif kind == "error":
+                    raise value
+                else:
+                    yield value
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def _new_case(
         self,
@@ -498,33 +551,39 @@ class Orchestrator:
         if single:
             remaining = dict(single)
             try:
-                async for raw in self.red_team.generate(
-                    level, run_id=run["id"], attacks=single
-                ):
-                    values, problem = check_generated(level, raw)
-                    attack_type = values.pop("attack_type", None)
-                    if remaining.get(attack_type, 0) <= 0:
-                        logger.warning(
-                            "Ignored a generated case of an unrequested type or beyond its count",
-                            run_id=run["id"],
-                            attack_type=attack_type,
-                        )
-                        continue
-                    remaining[attack_type] -= 1
-                    if problem:
-                        case = self._failed_case(
-                            active,
-                            "red",
-                            f"Invalid generated case: {problem}",
-                            attack_type=attack_type,
-                            **values,
-                        )
-                    else:
-                        case = self._new_case(
-                            active, "red", attack_type=attack_type, **values
-                        )
-                        valid.append(case)
-                    await self._save(active, case)
+                sources = [
+                    self.red_team.generate(
+                        level, run_id=run["id"], attacks=[(attack_type, 1)]
+                    )
+                    for attack_type, attempts in single
+                    for _ in range(attempts)
+                ]
+                async with aclosing(self._generate(active, sources)) as generated:
+                    async for raw in generated:
+                        values, problem = check_generated(level, raw)
+                        attack_type = values.pop("attack_type", None)
+                        if remaining.get(attack_type, 0) <= 0:
+                            logger.warning(
+                                "Ignored a generated case of an unrequested type or beyond its count",
+                                run_id=run["id"],
+                                attack_type=attack_type,
+                            )
+                            continue
+                        remaining[attack_type] -= 1
+                        if problem:
+                            case = self._failed_case(
+                                active,
+                                "red",
+                                f"Invalid generated case: {problem}",
+                                attack_type=attack_type,
+                                **values,
+                            )
+                        else:
+                            case = self._new_case(
+                                active, "red", attack_type=attack_type, **values
+                            )
+                            valid.append(case)
+                        await self._save(active, case)
             except RedTeamError as exc:
                 logger.warning(
                     "Red-team generation failed", run_id=run["id"], error=str(exc)
@@ -564,14 +623,23 @@ class Orchestrator:
         count = run["plan"]["green"]
         valid: list[dict[str, Any]] = []
         try:
-            async for values in self.green_team.generate(
-                level, count=count, user_id=run["created_by"], run_id=run["id"]
-            ):
-                if len(valid) >= count:
-                    break
-                case = self._new_case(active, "green", **values)
-                valid.append(case)
-                await self._save(active, case)
+            batch_size = max(1, -(-count // MAX_CONCURRENCY))
+            sources = [
+                self.green_team.generate(
+                    level,
+                    count=min(batch_size, count - offset),
+                    user_id=run["created_by"],
+                    run_id=run["id"],
+                )
+                for offset in range(0, count, batch_size)
+            ]
+            async with aclosing(self._generate(active, sources)) as generated:
+                async for values in generated:
+                    if len(valid) >= count:
+                        break
+                    case = self._new_case(active, "green", **values)
+                    valid.append(case)
+                    await self._save(active, case)
         except GreenTeamError as exc:
             logger.warning(
                 "Green-team generation failed", run_id=run["id"], error=str(exc)
@@ -593,11 +661,11 @@ class Orchestrator:
 
     async def _execute_case(self, active: ActiveRun, case: dict[str, Any]) -> None:
         level = active.level
-        active.current = case
+        active.current[case["id"]] = case
         case["status"] = "running"
         case["started_at"] = now_iso()
         live = {"case_id": case["id"], "events": []}
-        active.live = live
+        active.live[case["id"]] = live
 
         async def listener(event: CaseEvent) -> None:
             live["events"].append(event.model_dump(mode="json"))
@@ -643,9 +711,9 @@ class Orchestrator:
                 error=f"The case could not run ({type(exc).__name__}).",
             )
         self._apply_result(case, result, time.monotonic() - start)
-        active.live = None
+        active.live.pop(case["id"])
         await self._save(active, case)
-        active.current = None
+        active.current.pop(case["id"])
 
     @staticmethod
     def _apply_result(
@@ -766,10 +834,11 @@ class Orchestrator:
         self, run: dict[str, Any], cases: list[dict[str, Any]], active: ActiveRun | None
     ) -> dict[str, Any]:
         live = None
-        if active is not None and active.live is not None:
+        if active is not None and active.live:
+            current = next(iter(active.live.values()))
             live = {
-                "case_id": active.live["case_id"],
-                "events": list(active.live["events"]),
+                "case_id": current["case_id"],
+                "events": list(current["events"]),
             }
         return {
             **self.summary(run),
@@ -829,8 +898,8 @@ class Orchestrator:
             case = next((c for c in active.cases if c["id"] == case_id), None)
             if case is not None:
                 case = dict(case)
-                if active.live and active.live["case_id"] == case_id:
-                    case["events"] = list(active.live["events"])
+                if live := active.live.get(case_id):
+                    case["events"] = list(live["events"])
                 return self._case_detail(active.run, case, graph=True)
         run = await self._stored_run(run_id)
         case = await self.store.get_case(run_id, case_id)

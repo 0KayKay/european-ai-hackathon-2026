@@ -354,6 +354,9 @@ Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active
 
 **Runs as implemented (WP6, `hackathon/arena/runs/`; additions to the shapes above, nothing removed):**
 
+- Each run has eight shared worker slots for red/green generation and case execution. Multi-turn cases keep
+  their turns sequential. `live` remains a sample of one running case; each running case's detail endpoint
+  exposes its own events. Stop and shutdown cancel all workers and retain partial events and completed results.
 - Event `data` keys as recorded by the engine: see the WP5 list above (`injection` is **exactly** the injection
   fields, `{ subject, body }`; the tool is the target of the `injection->tool:<name>` edge). The JSON of every
   endpoint is checked against these key sets by `backend/tests/arena/test_arena_contract.py`, which can also dump

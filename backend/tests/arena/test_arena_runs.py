@@ -7,6 +7,7 @@ over an `httpx.MockTransport`.
 
 import asyncio
 import json
+from collections import Counter
 from typing import Any
 
 import httpx
@@ -64,15 +65,16 @@ class FakeRedTeam:
         self.turns = turns
         self.invalid = invalid or {}
         self.generated: list[list[tuple[str, int]]] = []
+        self.indices = Counter()
         self.driven: list[dict[str, Any]] = []
         self.drive_hook = None
 
     async def generate(self, level, *, run_id, attacks):
         self.generated.append(list(attacks))
-        n = 0
         for attack_type, count in attacks:
             for _ in range(count):
-                n += 1
+                self.indices[run_id] += 1
+                n = self.indices[run_id]
                 if n in self.invalid:
                     yield {"attack_type": attack_type, **self.invalid[n]}
                 elif level.surface.channel == "direct":
@@ -99,10 +101,13 @@ class FakeRedTeam:
 class FakeGreen:
     def __init__(self):
         self.calls = 0
+        self.indices = Counter()
 
     async def generate(self, level, *, count, user_id, run_id):
         self.calls += 1
-        for n in range(1, count + 1):
+        for _ in range(count):
+            self.indices[run_id] += 1
+            n = self.indices[run_id]
             if level.surface.channel == "direct":
                 yield {"input": f"<message {n}>"}
             else:
@@ -295,8 +300,11 @@ async def test_direct_level_full_run():
         "passed": 8,
         "error": 2,
     }
-    # Single-turn attacks come from one generate call; multi-turn ones are driven per case.
-    assert harness.red.generated == [[("prompt_injection", 5), ("roleplay", 5)]]
+    requested = Counter()
+    for request in harness.red.generated:
+        for attack_type, count in request:
+            requested[attack_type] += count
+    assert requested == {"prompt_injection": 5, "roleplay": 5}
     assert [d["attack_type"] for d in harness.red.driven] == ["linear_jailbreaking"] * 5
     assert {d["max_turns"] for d in harness.red.driven} == {15}
 
@@ -444,6 +452,7 @@ async def test_direct_level_red_cases_are_always_generated():
     harness = Harness()
     run = await harness.run("hidden-mailbox", "easy")
     green = run["datasets"]["green"]
+    generated_calls = harness.green.calls
     response = await harness.http.post(
         "/api/v1/arena/runs",
         json={
@@ -461,7 +470,7 @@ async def test_direct_level_red_cases_are_always_generated():
     )
     assert harness.red.generated == []  # Level 1 now has only multi-turn cases
     assert len(harness.red.driven) == 10  # five fresh red cases per run
-    assert harness.green.calls == 1
+    assert harness.green.calls == generated_calls
     assert second["datasets"] == {"red": None, "green": green}
 
 
@@ -535,13 +544,14 @@ async def test_indirect_level_full_run_and_dataset_reuse():
     }
 
     # Reuse both datasets on another difficulty: exactly the same cases, nothing generated (AC-10).
+    generation_calls = (list(red.generated), harness.green.calls)
     reused = await harness.run(
         "email-review",
         "easy",
         red={"source": "dataset", "dataset_id": run["datasets"]["red"]},
         green={"source": "dataset", "dataset_id": run["datasets"]["green"]},
     )
-    assert len(red.generated) == 1 and harness.green.calls == 1
+    assert (red.generated, harness.green.calls) == generation_calls
     assert reused["datasets"] == run["datasets"]
     assert reused["progress"]["red"] == {"done": 9, "total": 9}
     exported = (
@@ -623,6 +633,102 @@ async def until(predicate, timeout: float = 10):
 
 
 @pytest.mark.asyncio
+async def test_generation_shares_eight_slots_per_run_and_stop_cancels_every_source():
+    running = Counter()
+    peak = Counter()
+    teams: dict[str, set[str]] = {}
+    release = asyncio.Event()
+
+    async def wait_for_release(team, run_id):
+        running[run_id] += 1
+        peak[run_id] = max(peak[run_id], running[run_id])
+        teams.setdefault(run_id, set()).add(team)
+        try:
+            await release.wait()
+        finally:
+            running[run_id] -= 1
+
+    class Red(FakeRedTeam):
+        async def generate(self, level, *, run_id, attacks):
+            await wait_for_release("red", run_id)
+            async for case in super().generate(level, run_id=run_id, attacks=attacks):
+                yield case
+
+    class Green(FakeGreen):
+        async def generate(self, level, *, count, user_id, run_id):
+            await wait_for_release("green", run_id)
+            async for case in super().generate(
+                level, count=count, user_id=user_id, run_id=run_id
+            ):
+                yield case
+
+    catalog = LevelCatalog.build(load_levels())
+    for attack in catalog.variant("email-review", "easy").red_team.attacks:
+        attack.attempts = 3
+    harness = Harness(red=Red(), green=Green(), catalog=catalog)
+    runs = [await harness.start("email-review", "easy") for _ in range(2)]
+
+    async def both_runs_at_capacity():
+        return all(running[run["id"]] == 8 for run in runs)
+
+    await until(both_runs_at_capacity)
+    assert all(teams[run["id"]] == {"red", "green"} for run in runs)
+    await asyncio.gather(*(harness.runs.stop_run(run["id"]) for run in runs))
+    assert all(peak[run["id"]] == 8 and running[run["id"]] == 0 for run in runs)
+    assert not harness.runs.active
+    for run in runs:
+        assert (await harness.store.get_run(run["id"]))["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_eight_cases_have_separate_live_events_and_stop_preserves_all_of_them():
+    running = 0
+    peak = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def respond(messages, info):
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        if running == 8:
+            started.set()
+        try:
+            await release.wait()
+            return ModelResponse(parts=[TextPart("<reply>")])
+        finally:
+            running -= 1
+
+    harness = Harness(
+        models=EngineModels(agent=lambda spec, identity: FunctionModel(respond))
+    )
+    summary = await harness.start("email-review", "easy")
+    run_id = summary["id"]
+    await asyncio.wait_for(started.wait(), 10)
+    run = await harness.get(f"/runs/{run_id}")
+    active = [case for case in run["cases"] if case["status"] == "running"]
+    assert len(active) == peak == 8
+    assert sum(case["status"] == "pending" for case in run["cases"]) == 12
+    for case in active:
+        detail = await harness.get(f"/runs/{run_id}/cases/{case['id']}")
+        injection = next(
+            event for event in detail["events"] if event["kind"] == "injection"
+        )
+        assert injection["data"] == detail["content"]
+
+    await harness.runs.stop_run(run_id)
+    assert running == 0
+    run = await harness.get(f"/runs/{run_id}")
+    assert run["status"] == "stopped" and run["live"] is None
+    assert sum(case["status"] == "stopped" for case in run["cases"]) == 8
+    assert not any(case["status"] == "running" for case in run["cases"])
+    for case in active:
+        detail = await harness.get(f"/runs/{run_id}/cases/{case['id']}")
+        assert detail["events"]
+    assert not harness.runs.turn_targets
+
+
+@pytest.mark.asyncio
 async def test_generated_inputs_and_live_case_are_visible_and_stop_keeps_completed_cases():
     gate = {"<body 2>": asyncio.Event()}  # case 02 waits once it has read the inbox
     harness = Harness(models=engine_models(gate))
@@ -632,9 +738,10 @@ async def test_generated_inputs_and_live_case_are_visible_and_stop_keeps_complet
     async def blocked():
         run = await harness.get(f"/runs/{run_id}")
         live = run["live"] or {"events": []}
-        return run["progress"]["red"]["done"] == 1 and any(
-            event["kind"] == "tool_result" for event in live["events"]
-        )
+        return run["progress"] == {
+            "red": {"done": 9, "total": 10},
+            "green": {"done": 10, "total": 10},
+        } and any(event["kind"] == "tool_result" for event in live["events"])
 
     await until(blocked)
     run = await harness.get(f"/runs/{run_id}")
@@ -646,7 +753,7 @@ async def test_generated_inputs_and_live_case_are_visible_and_stop_keeps_complet
     assert cases["02"]["status"] == "running" and cases["02"]["outcome"] is None
     assert run["live"]["case_id"] == cases["02"]["id"]
     assert [e["kind"] for e in run["live"]["events"]][:2] == ["injection", "user_task"]
-    assert run["progress"]["red"] == {"done": 1, "total": 10}
+    assert run["progress"]["red"] == {"done": 9, "total": 10}
     live_detail = await harness.get(f"/runs/{run_id}/cases/{cases['02']['id']}")
     assert live_detail["events"] and live_detail["outcome"] is None
 
@@ -657,12 +764,12 @@ async def test_generated_inputs_and_live_case_are_visible_and_stop_keeps_complet
     cases = by_label(run["cases"])
     assert cases["01"]["outcome"] == "succeeded"  # completed case kept
     assert cases["02"]["status"] == "stopped" and cases["02"]["outcome"] is None
-    assert all(case["status"] == "pending" for case in run["cases"][2:])
-    assert run["counts"]["succeeded"] == 1 and run["progress"]["red"]["done"] == 1
+    assert all(case["status"] == "done" for case in run["cases"][2:])
+    assert run["counts"]["succeeded"] == 1 and run["progress"]["red"]["done"] == 9
     replay = await harness.get(f"/runs/{run_id}/cases/{cases['01']['id']}")
     assert replay["events"]
     results = await harness.get(f"/runs/{run_id}/results")
-    assert results["rates"]["attack_success"]["denominator"] == 1
+    assert results["rates"]["attack_success"]["denominator"] == 9
     # Stopping a finished run changes nothing.
     again = await harness.http.post(f"/api/v1/arena/runs/{run_id}/stop")
     assert again.json()["status"] == "stopped"
@@ -709,13 +816,15 @@ async def test_stop_while_a_decided_case_is_saved_keeps_its_result():
     assert run["status"] == "stopped"
     case = by_label(run["cases"])["01"]
     assert (case["status"], case["outcome"]) == ("done", "succeeded")
-    assert run["counts"]["succeeded"] == 1
+    assert run["counts"]["succeeded"] >= 1
 
 
 @pytest.mark.asyncio
 async def test_a_second_stop_does_not_interrupt_saving_the_stopped_run():
     gate = {"<body 2>": asyncio.Event()}
-    release = asyncio.Event()  # the first stop's save waits for it, however slow the machine is
+    release = (
+        asyncio.Event()
+    )  # the first stop's save waits for it, however slow the machine is
     store = HoldingStore(run=lambda run: run["status"] == "stopped", release=release)
     harness = Harness(models=engine_models(gate), store=store)
     summary = await harness.start("email-review", "easy")

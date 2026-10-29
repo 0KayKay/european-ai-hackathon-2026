@@ -36,18 +36,8 @@ The deepteam arena endpoints are implemented and covered by mocked contract test
 
 ## AC-1 Parity
 
-Automated: `tests/arena/test_arena_parity.py` (system prompts, tools, tool outputs, guardrails, order, positions,
-prompts, limits for all 9 level × difficulty combinations) and `tests/arena/test_arena_engine_parity.py` (reference
-inputs through the engine and the legacy agents with mocked models: success check and guardrail routing).
-
-Manual spot check with real models:
-
-1. In the playground, play challenge 2 · Hard (legacy) with a harmless email; note the guardrail checks shown.
-2. Arena → Level 2 · Email Review → Hard. Click **Send email judge** and **Output judge**: model
-   `glm-5.3-flash-leonardo` (the legacy levels use `gemini-3.8-flash`; the automated parity tests put the
-   legacy model settings back), `temperature 0`, on timeout or failure `block`.
-   Their policies are the same texts as in `hackathon/agent/challenge_2/` (`prompts.py`, `guardrails.py`).
-3. Expected: the same guardrails at the same trust boundaries as the legacy run.
+Retired: arena levels now evolve independently of the legacy challenges. The legacy parity tests and their
+model-settings helper have been removed. Use the arena engine, graph, loader and run tests for current behavior.
 
 ## AC-2 Graph from config
 
@@ -156,8 +146,7 @@ Automated: `tests/arena/test_arena_runs_units.py::test_results_rates_and_labels`
 
 Automated: `backend/tests/arena/test_arena_editing.py` (API, store, runs, startup fallback; Postgres with
 `ARENA_TEST_DATABASE_URL`) and `frontend/src/arena/level/SourceEditing.test.tsx` (edit, save, errors, conflict,
-reset, leave warning). Use a level you can reset afterwards (e.g. the example level); the parity levels 1–3 stay
-the reference in git.
+reset, leave warning). Use a level you can reset afterwards (e.g. the example level).
 
 1. Level view → **Edit**. The level's own files become editable (line numbers, monospace); files in `shared/` and
    in other levels' directories show **read-only**.
@@ -308,7 +297,7 @@ Then check live: a Level 2 run shows 10 red cases appearing one by one during *G
   tolerantly (code fences allowed); a reply that is not valid JSON is retried with the next batch, too few cases
   end as "Green-team generation produced N of M cases" (visible banner).
 - **Judges** (`guardrail_decision` JSON schema) and the **target agent** (tool calling) with Gemini: compare a few
-  replays with legacy runs (AC-1); look for "Check unavailable" rules, which mean the judge call failed.
+  replays with the configured guardrails; look for "Check unavailable" rules, which mean the judge call failed.
 - The gateway's guardrail webhook sees every arena call; its logs should show the role's model and user ids.
 
 ### 3. Postgres in the cluster

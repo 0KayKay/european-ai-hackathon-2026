@@ -10,9 +10,9 @@ sub-agents) → E (clean-up).
 
 - `fix/indirect-levels` merged: clearer red-team objectives for levels 2 and 3, a corrected offer-review system
   prompt (it named tools and arguments that do not exist), `UnexpectedModelBehavior` reported as a case error.
-- The offer-review system prompt now deliberately differs from the legacy implementation. The parity tests put the
-  legacy prompt back for the comparison (`backend/tests/arena/legacy_models.py`), as they already do for the model
-  settings; the static test checks that the new prompt names the real tool signatures.
+- The offer-review system prompt now deliberately differs from the legacy implementation. (On 2026-10-29 `main`
+  retired the parity tests altogether — arena levels now evolve independently of the legacy challenges — so the
+  parity helper `legacy_models.py` written for this was removed with them in the merge of `main`.)
 - Leftovers of `claude/levels-glm-b300` taken over (README/TESTING wording for GLM-5.3-Flash, loader test); the
   level files there were identical to `main`.
 - `test_a_second_stop_does_not_interrupt_saving_the_stopped_run` was timing-dependent (a fixed 0.2 s hold); the

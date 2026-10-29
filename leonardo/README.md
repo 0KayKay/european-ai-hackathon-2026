@@ -13,13 +13,16 @@ moderation classifiers. It is a reusable template: everything below starts from 
 | `glm53` | GLM-5.3-Flash | `glm-5.3-flash-leonardo` | 2 nodes, 8 A100 | 9.1 min | GPU-validated, current CLI and router |
 | `deepseek41` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-leonardo` | 2 nodes, 8 A100 | 24.5 min | GPU-validated, current CLI and router |
 | `deepseek41-16gpu` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | 4 nodes, 16 A100 | 18.3 min | GPU-validated, current CLI and router |
+| `glm53-16gpu` | GLM-5.3-Flash, 131,072-token context | `glm-5.3-flash-16gpu-leonardo` | 4 nodes, 16 A100 | | not yet GPU-validated; see [docs/glm16.md](docs/glm16.md) |
 | `qwen06b` | Qwen3-0.6B | `qwen3-0.6b-leonardo` | 1 A100 | 1.5 min | GPU-validated, current launcher |
 | `qwen235b-stock` | Qwen3-235B-A22B-FP8 on stock vLLM | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | | ran on 8 Oct, not with this launcher |
 
 The large models run with a 2,048-token context and 4 concurrent sequences (DeepSeek: 2) for up to two
 hours per job. The separate sixteen-GPU DeepSeek profile has 8 sequence slots and GPU-resident
 Engram; see [its guide and patch details](docs/deepseek16.md). The eight-GPU large-model profiles were
-revalidated through the current CLI and router on 21 October; the sixteen-GPU profile passed on 20 October.
+revalidated through the current CLI and router on 21 October; the sixteen-GPU DeepSeek profile passed on
+20 October. The sixteen-GPU GLM profile has a 131,072-token context with 8 slots on the same patched
+runtime and is not yet GPU-validated; see [its sizing](docs/glm16.md).
 Observed times exclude queue wait and can include reused private caches; they are not cold-start benchmarks.
 Fine-tunes added with [`cli.py profiles add`](#add-a-model) need no row here: `./leonardo/cli.py profiles`
 lists every profile and its status. See [Validation status](#validation-status). `qwen235b-stock` is the configuration that first ran Qwen-235B on
@@ -251,7 +254,7 @@ leonardo/
   diagnostics/    check job scripts (probe, reach, NCCL, compatibility)
   curiosity/      first-hour checks for NVIDIA's Curiosity v2 cluster (docs/curiosity.md)
   validation/     evidence from GPU runs, hashes of the code that passed them
-  docs/           how-it-works.md, slurm-jobs.md, research.md, deepseek16.md, history.md
+  docs/           how-it-works.md, slurm-jobs.md, research.md, deepseek16.md, glm16.md, history.md
   tools/          profiles add and listing, generators, the repository check
   tests/          local tests with simulated Slurm, containers, SSH and HTTP
 infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
@@ -266,6 +269,8 @@ infrastructure/leonardo/   opt-in Kubernetes component for the cluster link
   solved, and what was consolidated from Junghwa's repository and the starter kit.
 - [docs/deepseek16.md](docs/deepseek16.md): optional four-node DeepSeek configuration, pinned PP KV
   cache patch, runtime installation, historical load evidence and remaining integration validation.
+- [docs/glm16.md](docs/glm16.md): optional four-node GLM configuration with a 131,072-token context,
+  its KV cache sizing and the startup lines to report.
 - [docs/cluster-link.md](docs/cluster-link.md): how the cluster reaches the router, and the alternatives.
 - [infrastructure/leonardo/README.md](../infrastructure/leonardo/README.md): the Kubernetes side of the
   cluster link, for the cluster's maintainers.

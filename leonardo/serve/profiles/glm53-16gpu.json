@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "id": "glm53-16gpu",
+  "model_id": "zai-org/GLM-5.3-Flash",
+  "revision": "91b69215804f2d2036a8867f6ce44848e278dcda",
+  "checkpoint": "glm53",
+  "expected_shards": 62,
+  "runtime": "vllm-backport-sm80-0.13.1-ppkv1",
+  "served_model": "glm-5.3-flash-16gpu-leonardo",
+  "resources": {
+    "nodes": 4,
+    "gpus_per_node": 4,
+    "cpus_per_task": 32,
+    "memory": "480GB",
+    "time": "02:00:00"
+  },
+  "parallelism": {
+    "tensor": 4,
+    "pipeline": 4
+  },
+  "engine_args": [
+    "--dtype",
+    "bfloat16",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--max-model-len",
+    "131072",
+    "--max-num-seqs",
+    "8",
+    "--max-num-batched-tokens",
+    "8192",
+    "--enforce-eager",
+    "--disable-custom-all-reduce",
+    "--limit-mm-per-prompt",
+    "{\"image\":0,\"video\":0}",
+    "--safetensors-load-strategy",
+    "eager",
+    "--attention-backend",
+    "TRITON_MLA_SPARSE",
+    "--reasoning-parser",
+    "glm45",
+    "--tool-call-parser",
+    "glm47",
+    "--enable-auto-tool-choice"
+  ],
+  "environment": {},
+  "hooks": [],
+  "client": {
+    "local_port": 18089,
+    "timeout_seconds": 300,
+    "chat_template_kwargs": {
+      "reasoning_effort": "low",
+      "clear_thinking": true
+    }
+  },
+  "startup_timeout_seconds": 4800,
+  "validation": "Not yet GPU-validated. Separate 16-GPU configuration (4 nodes, TP4/PP4, 131,072-token context, 8 sequences) on the PP KV-patched runtime, reusing the glm53 checkpoint. The KV cache fit is a sizing estimate until a first start reports its vLLM KV cache size. See docs/glm16.md."
+}

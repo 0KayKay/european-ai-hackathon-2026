@@ -85,6 +85,13 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
+    - name: glm-5.3-flash-16gpu-leonardo
+      provider: openAI
+      params:
+        baseUrl: http://leonardo-router:8080/v1
+      auth:
+        key:
+          file: /var/run/leonardo-router/token
     - name: glm-5.3-flash-b300
       provider: openAI
       params:

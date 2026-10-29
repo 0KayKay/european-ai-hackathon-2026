@@ -73,7 +73,7 @@ access to Secrets):
 SERVER_KEY=$(docker run --rm jpillora/chisel:1.13.0 server --keygen -)
 LINK_PASSWORD=$(openssl rand -hex 24)
 kubectl create secret generic leonardo-link --from-literal=server.key="$SERVER_KEY" \
-  --from-literal=users.json="{\"leonardo:$LINK_PASSWORD\": [\"^R:0.0.0.0:9000\$\"]}"
+  --from-literal=users.json="{\"leonardo:$LINK_PASSWORD\": [\"^R:0.0.0.0:9000\$\", \"^R:0.0.0.0:9001\$\"]}"
 kubectl create secret generic leonardo-router --from-file=token=<router token file>
 ```
 

@@ -85,6 +85,15 @@ llm:
       auth:
         key:
           file: /var/run/leonardo-router/token
+    - name: glm-5.3-flash-b300
+      provider: openAI
+      params:
+        baseUrl: http://b300-router:8080/v1
+      auth:
+        key:
+          file: /var/run/leonardo-router/token
+      transformation:
+        model: '"glm-5.3-flash-leonardo"'
     - name: glm-5.3-flash-leonardo
       provider: openAI
       params:
@@ -95,21 +104,21 @@ llm:
     - name: gpt-oss-safeguard-20b-b300
       provider: openAI
       params:
-        baseUrl: http://leonardo-router:8080/v1
+        baseUrl: http://b300-router:8080/v1
       auth:
         key:
           file: /var/run/leonardo-router/token
     - name: nemotron-content-safety-reasoning-4b-b300
       provider: openAI
       params:
-        baseUrl: http://leonardo-router:8080/v1
+        baseUrl: http://b300-router:8080/v1
       auth:
         key:
           file: /var/run/leonardo-router/token
     - name: nemotron-ultra-550b-b300
       provider: openAI
       params:
-        baseUrl: http://leonardo-router:8080/v1
+        baseUrl: http://b300-router:8080/v1
       auth:
         key:
           file: /var/run/leonardo-router/token

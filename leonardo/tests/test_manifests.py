@@ -50,6 +50,12 @@ class GkeWithLeonardo(unittest.TestCase):
         self.assertIn('european-ai-hackathon-2026.codify.ch', ingress)
         self.assertIn('timeoutSec: 86400', self.after['BackendConfig/leonardo-link'])
 
+    def test_b300_has_a_separate_reverse_port(self):
+        self.assertIn('targetPort: router', self.after['Service/leonardo-router'])
+        self.assertIn('containerPort: 9000', self.after['Deployment/leonardo-link'])
+        self.assertIn('targetPort: 9001', self.after['Service/b300-router'])
+        self.assertIn('port: 9001', self.after['NetworkPolicy/leonardo-link'])
+
 
 if __name__ == '__main__':
     unittest.main()

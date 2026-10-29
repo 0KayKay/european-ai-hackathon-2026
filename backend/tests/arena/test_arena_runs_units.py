@@ -107,7 +107,7 @@ async def test_deepteam_generate_speaks_the_ndjson_contract():
     assert set(body["objective"]) == {"purpose", "criteria", "attacker_knowledge"}
     # `endpoint: agentgateway` is resolved to the gateway base URL; no credentials in the body.
     assert body["models"]["attacker"] == {
-        "model": "glm-5.3-flash-leonardo",
+        "model": "glm-5.3-flash-b300",
         "endpoint": "http://localhost:4000/v1",
         "params": {"temperature": 0.7, "max_tokens": 2048, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
     }
@@ -290,10 +290,10 @@ async def test_green_generator_direct_level():
     assert cases == [{"input": f"<message {n}>"} for n in (1, 2, 3)]
     assert fake.options["base_url"] == "http://localhost:4000/v1"
     assert fake.options["api_key"] == get_settings().AGENTGATEWAY_API_KEY
-    assert fake.options["default_headers"]["x-model"] == "glm-5.3-flash-leonardo"
+    assert fake.options["default_headers"]["x-model"] == "glm-5.3-flash-b300"
     assert fake.options["default_headers"]["x-user-id"] == "tester"
     first = fake.requests[0]
-    assert first["temperature"] == 0.9 and first["model"] == "glm-5.3-flash-leonardo"
+    assert first["temperature"] == 0.9 and first["model"] == "glm-5.3-flash-b300"
     assert first["max_completion_tokens"] == 4096
     assert first["extra_body"] == {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}
     schema = first["response_format"]["json_schema"]["schema"]

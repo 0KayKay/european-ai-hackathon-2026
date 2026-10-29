@@ -270,16 +270,18 @@ is an error, not an accepted safe verdict.
 ### Connect to agentgateway (cluster link)
 
 The app's agentgateway in GKE can call a B300 run's models, for example GLM as
-`glm-5.3-flash-leonardo`, which already has a route there. It uses Leonardo's
-cluster link unchanged ([design](../leonardo/docs/cluster-link.md),
+`glm-5.3-flash-b300`, which already has a route there. It uses Leonardo's
+cluster link server ([design](../leonardo/docs/cluster-link.md),
 [Kubernetes side](../infrastructure/leonardo/README.md)): agentgateway calls the
-`leonardo-router` Service with a fixed router token, and the chisel server in GKE
-forwards that to reverse port 9000.
+`b300-router` Service with a fixed router token, and the chisel server in GKE
+forwards that to reverse port 9001. Leonardo keeps port 9000, so both can connect
+at the same time. GLM's gateway alias translates to its legacy native server name,
+`glm-5.3-flash-leonardo`; direct laptop clients still use the native name.
 
 On B300, `up PROFILE --link` starts `serve/link.py` in the serving job, on the
 batch host next to the model servers. Once the run's endpoint is published, it
 starts a relay on `127.0.0.1` and an outbound chisel client to the link server
-(`R:9000` → relay). The relay checks the router token, picks the model server by
+(`R:9001` → relay). The relay checks the router token, picks the model server by
 the request's `model` and calls it with that run's per-model key, which never
 leaves the node. It stops when the run's endpoint disappears or the job ends.
 `status` shows the link state (`waiting_for_models`, `connecting`, `connected`,
@@ -288,14 +290,15 @@ The settings, the router token and the chisel password are kept in your private
 `users/LOGIN/link/`. The pinned chisel 1.13.0 is downloaded there on first use and
 checked against its SHA-256.
 
-One person's run holds the link: the GKE server accepts one client on port 9000,
+One person's B300 run holds the link: the GKE server accepts one client on port 9001,
 and the CLI refuses a second linked run of yours while one is active. The
 outbound connection needs internet on the compute node, which Curiosity has.
 Confirm with the organisers that a long-lived outbound connection is acceptable.
 
 **Kubernetes side, once** (see [deployment](../docs/deployment.md#4-activate-leonardo-only-after-cineca-approval)):
 create the `leonardo-link` Secret (chisel server key and `users.json` with the
-`leonardo:PASSWORD` user) and the `leonardo-router` Secret (router token), set
+`leonardo:PASSWORD` user permitted to open reverse ports 9000 and 9001) and the
+`leonardo-router` Secret (router token), set
 the GitHub variable `LEONARDO_ENABLED=true` and deploy. Get the router token from
 B300 so the two match:
 
@@ -316,6 +319,11 @@ FINGERPRINT=$(kubectl logs deployment/leonardo-link | grep -o 'Fingerprint .*' |
 ./b300/cli.py status          # ready, then cluster_link: connected
 ```
 
+Every new allocation needs `--link`; link settings alone do not connect a run.
+A ready model without `cluster_link: connected` is not reachable from GKE.
+`up PROFILE --link` refuses an already-active run that was started without the link;
+stop that run before starting it again with `--link`.
+
 `link_auth` holds `leonardo:PASSWORD`, the same user as in `users.json`. It is
 sent over SSH stdin, never on a command line. Then, from your machine:
 
@@ -323,7 +331,7 @@ sent over SSH stdin, never on a command line. Then, from your machine:
 kubectl port-forward svc/agentgateway 13000:3000 &
 KEY=$(kubectl get secret gateway-internal -o jsonpath='{.data.key}' | base64 -d)
 curl -sS http://127.0.0.1:13000/v1/chat/completions -H "Authorization: Bearer $KEY" \
-  -H 'Content-Type: application/json' -d '{"model":"glm-5.3-flash-leonardo",
+  -H 'Content-Type: application/json' -d '{"model":"glm-5.3-flash-b300",
   "messages":[{"role":"user","content":"Hi"}],"chat_template_kwargs":{"reasoning_effort":"low"}}'
 ```
 

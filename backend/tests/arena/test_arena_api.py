@@ -83,7 +83,7 @@ def test_level_view():
     assert body["models"][0] == {
         "role": "agent",
         "node": "agent",
-        "model": "glm-5.3-flash-leonardo",
+        "model": "glm-5.3-flash-b300",
         "endpoint": "agentgateway",
         "params": {"max_tokens": 4096, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
     }

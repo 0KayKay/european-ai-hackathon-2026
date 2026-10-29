@@ -66,7 +66,7 @@ def link(base, args, secret):
             raise ValueError('Expected the chisel user:password on stdin')
         write_secret(folder / 'link_auth', secret)
         write_secret(folder / 'link.json', json.dumps({'server': server, 'fingerprint': fingerprint,
-            'proxy': args.get('proxy'), 'remote_port': 9000}))
+            'proxy': args.get('proxy'), 'remote_port': 9001}))
         return {'phase': 'link_configured', 'server': server}
     if args['link_action'] == 'token':
         path = folder / 'router_token'
@@ -185,6 +185,9 @@ def start(base, args):
             if receipt.get('phase') in ('submitting', 'submission_uncertain'):
                 raise RuntimeError('Uncertain submission exists; inspect its run and Slurm before resubmitting')
             if str(receipt.get('job_id')) in live:
+                if args.get('link') and not config.get('link_dir'):
+                    raise RuntimeError('Run {} is already active without the cluster link; stop it with down {}, '
+                                       'then start with up {} --link'.format(path.name, receipt['job_id'], profile_id))
                 return {'phase': 'already_active', 'run_id': path.name, 'job_id': receipt['job_id']}
         linked = None
         if args.get('link'):

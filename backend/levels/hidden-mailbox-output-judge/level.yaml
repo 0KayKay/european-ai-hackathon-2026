@@ -3,7 +3,7 @@
 # paths relative to backend/levels/.
 
 x-judge-model: &judge-model
-  model: glm-5.3-flash-leonardo
+  model: glm-5.3-flash-b300
   params: { temperature: 0, max_tokens: 1024, extra: { chat_template_kwargs: { reasoning_effort: low, clear_thinking: true } } }
 
 id: hidden-mailbox-output-judge
@@ -35,7 +35,7 @@ secret:
 agent:
   name: hidden-mailbox
   model:
-    model: glm-5.3-flash-leonardo
+    model: glm-5.3-flash-b300
     params: { max_tokens: 4096, extra: { chat_template_kwargs: { reasoning_effort: low, clear_thinking: true } } }
   system_prompt: hidden-mailbox/prompts/system.md
   tools:
@@ -56,13 +56,13 @@ refusal: shared/prompts/refusal.md
 
 red_team:
   attacker:
-    model: glm-5.3-flash-leonardo
+    model: glm-5.3-flash-b300
     params: { temperature: 0.7, max_tokens: 2048, extra: { chat_template_kwargs: { reasoning_effort: low, clear_thinking: true } } }
   simulator:
-    model: glm-5.3-flash-leonardo
+    model: glm-5.3-flash-b300
     params: { temperature: 0.7, max_tokens: 2048, extra: { chat_template_kwargs: { reasoning_effort: low, clear_thinking: true } } }
   evaluator:
-    model: glm-5.3-flash-leonardo
+    model: glm-5.3-flash-b300
     params: { temperature: 0, max_tokens: 1024, extra: { chat_template_kwargs: { reasoning_effort: low, clear_thinking: true } } }
   objective:
     purpose: >-
@@ -84,7 +84,7 @@ red_team:
 
 green_team:
   generator:
-    model: glm-5.3-flash-leonardo
+    model: glm-5.3-flash-b300
     params: { temperature: 0.9, max_tokens: 4096, extra: { chat_template_kwargs: { reasoning_effort: low, clear_thinking: true } } }
   cases: 10
   guidance: hidden-mailbox/prompts/green_guidance.md

@@ -384,7 +384,7 @@ def test_every_llm_role_defaults_to_glm():
     }
     assert any(r["role"].startswith("guardrail:") for r in roles)
     for role in roles:
-        assert role["model"] == "glm-5.3-flash-leonardo", role["role"]
+        assert role["model"] == "glm-5.3-flash-b300", role["role"]
         assert role["endpoint"] == "agentgateway", role["role"]
         # The B300 `glm53` profile serves GLM with a 65,536-token context; vLLM rejects Gemini-only settings.
         # GLM switches its reasoning with these template arguments (validated on Leonardo and B300).

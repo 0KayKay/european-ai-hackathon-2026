@@ -230,6 +230,10 @@ changes only that role; the values used are recorded with every run and shown in
 "Models used". Open-weight models on Leonardo are used by name through agentgateway; see
 [TESTING.md · Connecting real models](../../docs/spec/config-driven-arena/TESTING.md#connecting-real-models).
 
+Bundled levels default every LLM role to `glm-5.3-flash-b300`, served on B300 through
+agentgateway's `b300-router` route. The gateway translates GLM's alias to the native
+server name; it keeps Leonardo routes on their own reverse port.
+
 ## Red team and green team
 
 ```yaml

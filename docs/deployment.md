@@ -193,7 +193,7 @@ from pathlib import Path
 
 folder = Path(os.environ['HACKATHON_LINK_PRIVATE'])
 auth = 'leonardo:' + secrets.token_hex(32)
-(folder / 'users.json').write_text(json.dumps({auth: ['^R:0.0.0.0:9000$']}))
+(folder / 'users.json').write_text(json.dumps({auth: ['^R:0.0.0.0:9000$', '^R:0.0.0.0:9001$']}))
 (folder / 'link_auth').write_text(auth + '\n')
 PY
 ./leonardo/cli.py router up --hours 12

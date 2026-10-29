@@ -330,7 +330,7 @@ async def test_direct_level_full_run():
         "red_team.evaluator",
         "green_team.generator",
     ]
-    assert run["models"][0]["model"] == "glm-5.3-flash-leonardo"
+    assert run["models"][0]["model"] == "glm-5.3-flash-b300"
 
     # Direct level: only the green cases are stored as a dataset (R-DAT-1).
     assert run["datasets"]["red"] is None and run["datasets"]["green"]

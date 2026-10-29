@@ -163,7 +163,7 @@ def test_node_details_show_settings_full_prompts_and_models():
     g = build_graph(level)
     agent = g.node("agent")
     assert agent.details.model == {
-        "model": "glm-5.3-flash-leonardo",
+        "model": "glm-5.3-flash-b300",
         "endpoint": "agentgateway",
         "params": {"max_tokens": 4096, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
     }
@@ -194,7 +194,7 @@ def test_node_details_show_settings_full_prompts_and_models():
 
     attacker = g.node("attacker")
     assert attacker.subtitle == "DeepTeam · 1 attack type · 5 cases"
-    assert attacker.details.model["model"] == "glm-5.3-flash-leonardo"
+    assert attacker.details.model["model"] == "glm-5.3-flash-b300"
     assert {p.name for p in attacker.details.prompts} == {
         "Purpose",
         "Success criteria",

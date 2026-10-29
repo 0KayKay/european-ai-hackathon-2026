@@ -153,6 +153,7 @@ class Settings(unittest.TestCase):
         token = manage.link(self.base, {'link_action': 'token'}, None)['token']
         self.assertEqual(manage.link(self.base, {'link_action': 'token'}, None)['token'], token)
         folder = manage.link_dir(self.base)
+        self.assertEqual(common.load(folder / 'link.json')['remote_port'], 9001)
         for name in ('link.json', 'link_auth', 'router_token'):
             self.assertEqual((folder / name).stat().st_mode & 0o777, 0o600, name)
         self.assertEqual(folder.stat().st_mode & 0o777, 0o700)
@@ -189,6 +190,19 @@ class Settings(unittest.TestCase):
             rows = {r['profile']: r for r in manage.status(self.base)['runs']}
         self.assertIn('cluster_link', rows['glm53'])
         self.assertNotIn('cluster_link', rows['safety'])
+
+    def test_up_link_rejects_an_existing_unlinked_run_without_submitting_again(self):
+        run = common.private(manage.mine(self.base) / 'runs/glm53-fixture')
+        common.save(run / 'RUN_CONFIG.json', {'profile': 'glm53', 'mode': 'serve'})
+        common.save(run / 'submission.json', {'job_id': '4242'})
+        with patch.object(manage, 'jobs', return_value={'4242': {'state': 'RUNNING', 'uid': os.getuid()}}), \
+                patch.object(manage, 'execute') as execute:
+            with self.assertRaisesRegex(RuntimeError, 'already active without the cluster link'):
+                manage.start(self.base, {'profile': 'glm53', 'mode': 'serve', 'link': True})
+            self.assertEqual(manage.start(self.base, {'profile': 'glm53', 'mode': 'serve'})['phase'], 'already_active')
+            common.save(run / 'RUN_CONFIG.json', {'profile': 'glm53', 'mode': 'serve', 'link_dir': str(manage.link_dir(self.base))})
+            self.assertEqual(manage.start(self.base, {'profile': 'glm53', 'mode': 'serve', 'link': True})['phase'], 'already_active')
+            execute.assert_not_called()
 
 
 FAKE_CHISEL = '''#!/bin/sh

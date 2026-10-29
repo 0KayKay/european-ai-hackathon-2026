@@ -1,5 +1,5 @@
 {
-  "served_model": "glm-5.3-flash-leonardo",
+  "served_model": "glm-5.3-flash-b300",
   "client": {
     "local_port": 18083,
     "timeout_seconds": 300,

@@ -3,12 +3,12 @@
     "kind": "chat",
     "repo": "zai-org/GLM-5.3-Flash",
     "revision": "91b69215804f2d2036a8867f6ce44848e278dcda",
-    "model": "glm-5.3-flash-leonardo",
+    "model": "glm-5.3-flash-b300",
     "gpus": 8,
     "tensor_parallel": 8,
     "pipeline_parallel": 1,
     "server_port": 8000,
-    "max_model_len": 65536,
+    "max_model_len": 262144,
     "chat_template_kwargs": {
       "reasoning_effort": "low",
       "clear_thinking": true

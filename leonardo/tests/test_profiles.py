@@ -88,16 +88,16 @@ class GatewayRendering(unittest.TestCase):
         config = (REPO / 'infrastructure/leonardo/agentgateway.yaml').read_text()
         models = json.loads((REPO / 'b300/serve/models.json').read_text())
         for model in models.values():
-            alias = model['served_model'].replace('-leonardo', '-b300')
-            route = '    - name: ' + alias + '\n'
+            route = '    - name: ' + model['served_model'] + '\n'
             self.assertEqual(config.count(route), 1)
             self.assertLess(config.index(route), config.index('    - name: "*"'))
             entry = config.split(route, 1)[1].split('    - name:', 1)[0]
             self.assertIn('baseUrl: http://b300-router:8080/v1', entry)
             self.assertIn('file: /var/run/leonardo-router/token', entry)
-            if alias != model['served_model']:
-                self.assertIn('model: ' + "'" + json.dumps(model['served_model']) + "'", entry)
-        self.assertIn('    - name: glm-5.3-flash-leonardo\n', config)
+        # Route name == served name: no rewrite towards either upstream (only the "*" fallback has one).
+        self.assertNotIn('transformation:', config[:config.index('    - name: "*"')])
+        self.assertEqual(config.count('    - name: glm-5.3-flash-b300\n'), 1)
+        self.assertEqual(config.count('    - name: glm-5.3-flash-leonardo\n'), 1)
 
 
 class Profiles(unittest.TestCase):

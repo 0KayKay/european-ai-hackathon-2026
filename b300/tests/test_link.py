@@ -67,7 +67,7 @@ class Relay(unittest.TestCase):
     def setUp(self):
         FakeVllm.seen = []
         self.upstream = serve(HTTPServer(('127.0.0.1', 0), FakeVllm))
-        table = {'glm-5.3-flash-leonardo': {'host': '127.0.0.1', 'port': self.upstream.server_address[1], 'key': KEY}}
+        table = {'glm-5.3-flash-b300': {'host': '127.0.0.1', 'port': self.upstream.server_address[1], 'key': KEY}}
         self.relay = serve(link.Server(('127.0.0.1', 0), link.handler(table, TOKEN, lambda: 'connected')))
         self.port = self.relay.server_address[1]
 
@@ -81,7 +81,7 @@ class Relay(unittest.TestCase):
         self.assertEqual((status, json.loads(body)), (200, {'status': 'ok', 'cluster_link': 'connected'}))
 
     def test_router_token_is_required(self):
-        body = {'model': 'glm-5.3-flash-leonardo', 'messages': []}
+        body = {'model': 'glm-5.3-flash-b300', 'messages': []}
         self.assertEqual(call(self.port, '/v1/chat/completions', None, body)[0], 401)
         self.assertEqual(call(self.port, '/v1/chat/completions', 'wrong', body)[0], 401)
         self.assertEqual(call(self.port, '/v1/models', 'wrong')[0], 401)
@@ -90,10 +90,10 @@ class Relay(unittest.TestCase):
     def test_models_lists_this_run(self):
         status, body = call(self.port, '/v1/models', TOKEN)
         self.assertEqual(status, 200)
-        self.assertEqual([m['id'] for m in json.loads(body)['data']], ['glm-5.3-flash-leonardo'])
+        self.assertEqual([m['id'] for m in json.loads(body)['data']], ['glm-5.3-flash-b300'])
 
     def test_request_reaches_the_model_with_its_own_key_and_streams_back(self):
-        body = {'model': 'glm-5.3-flash-leonardo', 'messages': [{'role': 'user', 'content': 'Hi'}], 'stream': True}
+        body = {'model': 'glm-5.3-flash-b300', 'messages': [{'role': 'user', 'content': 'Hi'}], 'stream': True}
         status, text = call(self.port, '/v1/chat/completions', TOKEN, body)
         self.assertEqual(status, 200)
         self.assertEqual(text, 'data: {"a":1}\n\ndata: [DONE]\n\n')
@@ -104,12 +104,12 @@ class Relay(unittest.TestCase):
         status, text = call(self.port, '/v1/chat/completions', TOKEN, {'model': 'qwen3-0.6b-leonardo'})
         self.assertEqual((status, json.loads(text)['error']['code']), (404, 'model_not_found'))
         self.assertEqual(call(self.port, '/v1/chat/completions', TOKEN, ['not', 'an', 'object'])[0], 400)
-        self.assertEqual(call(self.port, '/admin', TOKEN, {'model': 'glm-5.3-flash-leonardo'})[0], 400)
+        self.assertEqual(call(self.port, '/admin', TOKEN, {'model': 'glm-5.3-flash-b300'})[0], 400)
 
     def test_unreachable_model_server_is_502(self):
         self.upstream.shutdown()
         self.upstream.server_close()
-        status, text = call(self.port, '/v1/chat/completions', TOKEN, {'model': 'glm-5.3-flash-leonardo'})
+        status, text = call(self.port, '/v1/chat/completions', TOKEN, {'model': 'glm-5.3-flash-b300'})
         self.assertEqual((status, json.loads(text)['error']['code']), (502, 'upstream_unreachable'))
 
 
@@ -231,7 +231,7 @@ class EndToEnd(unittest.TestCase):
                 time.sleep(0.5)  # the link must wait for the published endpoint
                 manage.write_secret(run / 'glm.api-key', KEY)
                 common.save(run / 'endpoint.json', {'job_id': '7', 'host_ip': '127.0.0.1', 'models': {'glm': {
-                    'port': upstream.server_address[1], 'model': 'glm-5.3-flash-leonardo'}}})
+                    'port': upstream.server_address[1], 'model': 'glm-5.3-flash-b300'}}})
                 for _ in range(100):
                     if (folder / 'argv').exists() and 'connected' in (run / 'link-state.json').read_text():
                         break
@@ -239,7 +239,7 @@ class EndToEnd(unittest.TestCase):
                 argv = (folder / 'argv').read_text().split('\n')
                 self.results['argv'] = argv
                 port = argv[-2].rsplit(':', 1)[1]
-                self.results['call'] = call(port, '/v1/chat/completions', TOKEN, {'model': 'glm-5.3-flash-leonardo'})
+                self.results['call'] = call(port, '/v1/chat/completions', TOKEN, {'model': 'glm-5.3-flash-b300'})
                 (run / 'endpoint.json').unlink()  # the server stopped
 
             self.results = {}

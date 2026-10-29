@@ -9,7 +9,8 @@ saved. See the [full CLI report](CLI_ALL_PROFILES_20261028.md).
 | Standalone Ultra, four GPUs | Job 12334; node and Mac API suites, common CLI query and verified cleanup | Passed with the atomic-session client. |
 | Ultra + Safety, five GPUs | Job 12320; both API suites, independent keys, cross-key rejection and simultaneous CLI calls | Passed; both servers stopped and keys removed. |
 | Retained native GLM, eight GPUs | Job 12342; original seven checks on node and Mac, common query, private-IP route and shutdown | Passed at 2,048 tokens / 4 slots; generated functions were not executed. |
-| GLM at 65,536 tokens / 16 slots / 16,384-token chunked prefill | None yet; sizing is an estimate ([GLM context](glm-context.md)) | Not GPU-validated. Record the vLLM KV cache size and maximum concurrency lines from the next start. |
+| Earlier GLM at 65,536 tokens / 16 slots / 16,384-token chunked prefill | 29 October start: KV cache 16,784,237 tokens, 256.11x concurrency ([GLM context](glm-context.md)) | KV cache size measured; no acceptance-suite result recorded here. Basis for the current sizing. |
+| Current `glm53`: 262,144 tokens / 32 slots / 16,384-token chunked prefill, served as `glm-5.3-flash-b300` | None yet; sizing from the 65,536 measurement ([GLM context](glm-context.md)) | Not GPU-validated. Record the KV cache and maximum concurrency lines from the first start. |
 | GPT-OSS-Safeguard, one GPU | Job 12360; native policy/JSON protocol, node/Mac normal and unauthorized requests | Passed; strict boolean verdict parser rejects malformed/truncated outputs. |
 | Standalone Safety, one GPU | Earlier job 12204; current Safety also checked in paired job 12320 | Earlier standalone smoke preserved; current paired path passed. |
 | Same-owner, same-image cache reuse | Safety → initial Ultra; paired cache → current Ultra; GLM → Safeguard | Exercised live. Reuse pins a node and does not skip all tuning. |

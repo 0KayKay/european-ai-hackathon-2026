@@ -4,6 +4,7 @@ import type {
 	DecidedBy,
 	Rate,
 	RunStatus,
+	RunSummary,
 	Team,
 } from "./types";
 
@@ -26,6 +27,46 @@ export function formatDuration(seconds: number | null | undefined): string {
 	if (seconds < 60) return `${seconds.toFixed(1)} s`;
 	const total = Math.round(seconds);
 	return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+const DATE_TIME = new Intl.DateTimeFormat("en-GB", {
+	day: "numeric",
+	month: "short",
+	hour: "2-digit",
+	minute: "2-digit",
+});
+const DATE_TIME_SECONDS = new Intl.DateTimeFormat("en-GB", {
+	day: "numeric",
+	month: "short",
+	hour: "2-digit",
+	minute: "2-digit",
+	second: "2-digit",
+});
+
+/** An ISO timestamp as local date and time, e.g. `28 Oct, 21:14` (`28 Oct, 21:14:05` with seconds). */
+export function formatDateTime(
+	iso: string | null | undefined,
+	{ seconds = false }: { seconds?: boolean } = {},
+): string {
+	if (!iso) return "—";
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return "—";
+	return (seconds ? DATE_TIME_SECONDS : DATE_TIME).format(date);
+}
+
+/** Both rates of a run summary; computed from `counts` (R-RES-1) for a backend without `rates`. */
+export function summaryRates(run: Pick<RunSummary, "counts" | "rates">) {
+	if (run.rates) return run.rates;
+	const rate = (numerator: number, denominator: number): Rate => ({
+		value: denominator ? numerator / denominator : null,
+		numerator,
+		denominator,
+	});
+	const c = run.counts;
+	return {
+		attack_success: rate(c.succeeded, c.succeeded + c.defended),
+		false_positive: rate(c.false_positive, c.false_positive + c.passed),
+	};
 }
 
 /** Event time since case start, e.g. `0.88s`. */

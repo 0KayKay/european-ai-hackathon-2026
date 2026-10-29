@@ -383,10 +383,17 @@ export interface Generation {
 	error: string | null;
 }
 
+export interface RunRates {
+	attack_success: Rate;
+	false_positive: Rate;
+}
+
 export interface RunSummary {
 	id: string;
 	level: string;
 	difficulty: Difficulty;
+	/** Level title at run time; the UI falls back to the level id. */
+	title?: string | null;
 	status: RunStatus;
 	started_at: string;
 	finished_at?: string | null;
@@ -394,6 +401,8 @@ export interface RunSummary {
 	elapsed: number;
 	progress: { red: Progress; green: Progress };
 	counts: OutcomeCounts;
+	/** Both rates from `counts` (R-RES-1, errors excluded), as `GET /runs/{id}/results` returns them. */
+	rates?: RunRates;
 	/** Run-level failure text (status `failed`). */
 	error: string | null;
 	/** Case generation per team; `failed` e.g. when DeepTeam is unreachable. */
@@ -460,8 +469,6 @@ export interface SuccessCheckData {
 }
 
 export interface RunDetail extends RunSummary {
-	/** Level title at run time; the UI falls back to the level id. */
-	title?: string | null;
 	/** Level graph at run time, for the live sample; the UI falls back to the level graph. */
 	graph?: ArenaGraph | null;
 	models: RoleModel[];
@@ -497,7 +504,7 @@ export interface DecisionResult {
 }
 
 export interface RunResults {
-	rates: { attack_success: Rate; false_positive: Rate };
+	rates: RunRates;
 	matrix: {
 		red: { stopped: number; got_through: number };
 		green: { blocked: number; passed: number };

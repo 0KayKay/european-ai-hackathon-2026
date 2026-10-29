@@ -411,6 +411,32 @@ async def test_direct_level_full_run():
     runs = await harness.get("/runs", params={"level": "hidden-mailbox"})
     assert [r["id"] for r in runs] == [run["id"]]
     assert await harness.get("/runs", params={"level": "email-review"}) == []
+    # The list carries what the runs overview shows: level title, end time and both rates as recorded.
+    listed = runs[0]
+    assert listed["title"] == run["title"] and listed["title"]
+    assert listed["finished_at"] == run["finished_at"]
+    assert listed["rates"] == results["rates"]
+    assert summary["title"] == run["title"]
+
+
+@pytest.mark.asyncio
+async def test_run_list_titles_runs_stored_without_a_title():
+    """Runs stored before the title was recorded (and listed without the snapshot) get the level title."""
+    store = MemoryRunStore()
+    harness = Harness(store=store)
+    run = await harness.run("email-review", "easy")
+    stored = await store.get_run(run["id"])
+    del stored["title"]
+    await store.save_run({**stored, "snapshot": {}})
+    [listed] = await harness.get("/runs")
+    assert listed["title"] == run["title"]
+    assert listed["rates"]["attack_success"]["denominator"] == (
+        listed["counts"]["succeeded"] + listed["counts"]["defended"]
+    )
+    # A run whose level is no longer in the catalog falls back to the level id.
+    await store.save_run({**stored, "level": "removed-level", "snapshot": {}})
+    [listed] = await harness.get("/runs")
+    assert listed["title"] == "removed-level"
 
 
 @pytest.mark.asyncio
@@ -645,17 +671,21 @@ async def test_generated_inputs_and_live_case_are_visible_and_stop_keeps_complet
 class HoldingStore(MemoryRunStore):
     """Holds the first save that matches `case` / `run` until the run task is cancelled (a slow database)."""
 
-    def __init__(self, *, case=None, run=None):
+    def __init__(self, *, case=None, run=None, release: asyncio.Event | None = None):
         super().__init__()
         self.match = {"case": case, "run": run}
         self.held = asyncio.Event()
+        self.release = release
 
     async def _hold(self, kind, record):
         match = self.match[kind]
         if match and match(record):
             self.match[kind] = None
             self.held.set()
-            await asyncio.sleep(0.2)
+            if self.release:
+                await asyncio.wait_for(self.release.wait(), 10)
+            else:
+                await asyncio.sleep(0.2)
 
     async def save_case(self, case):
         await self._hold("case", case)
@@ -685,20 +715,41 @@ async def test_stop_while_a_decided_case_is_saved_keeps_its_result():
 @pytest.mark.asyncio
 async def test_a_second_stop_does_not_interrupt_saving_the_stopped_run():
     gate = {"<body 2>": asyncio.Event()}
-    store = HoldingStore(run=lambda run: run["status"] == "stopped")
+    release = asyncio.Event()  # the first stop's save waits for it, however slow the machine is
+    store = HoldingStore(run=lambda run: run["status"] == "stopped", release=release)
     harness = Harness(models=engine_models(gate), store=store)
     summary = await harness.start("email-review", "easy")
     run_id = summary["id"]
 
     async def blocked():
-        live = (await harness.get(f"/runs/{run_id}"))["live"] or {"events": []}
-        return any(event["kind"] == "tool_result" for event in live["events"])
+        # Case 02 (gated) must be the one holding, not case 01 passing by on a slow machine.
+        run = await harness.get(f"/runs/{run_id}")
+        live = run["live"] or {"case_id": None, "events": []}
+        return live["case_id"] == by_label(run["cases"])["02"]["id"] and any(
+            event["kind"] == "tool_result" for event in live["events"]
+        )
 
     await until(blocked)
+    active = harness.runs.active[run_id]
+    cancels: list[str] = []
+    cancel = active.cancel
+
+    def counted_cancel(status: str) -> None:
+        cancels.append(status)
+        cancel(status)
+
+    active.cancel = counted_cancel
     first = asyncio.create_task(harness.http.post(f"/api/v1/arena/runs/{run_id}/stop"))
     await asyncio.wait_for(store.held.wait(), 10)  # the first stop is saving the run
-    second = await harness.http.post(f"/api/v1/arena/runs/{run_id}/stop")
-    assert (await first).status_code == second.status_code == 200
+
+    async def second_stop_cancelled():
+        return len(cancels) == 2
+
+    second = asyncio.create_task(harness.http.post(f"/api/v1/arena/runs/{run_id}/stop"))
+    # The second stop has tried to cancel while the save is held.
+    await until(second_stop_cancelled)
+    release.set()
+    assert (await first).status_code == (await second).status_code == 200
     assert (await store.get_run(run_id))["status"] == "stopped"
     assert run_id not in harness.runs.active
     run = await harness.get(f"/runs/{run_id}")

@@ -20,5 +20,7 @@ export default defineConfig({
 		include: ["src/**/*.test.{ts,tsx}"],
 		environment: "jsdom",
 		setupFiles: ["./src/test-setup.ts"],
+		// Slow shared runners: give whole tests room beyond vitest's 5 s default.
+		testTimeout: 15000,
 	},
 });

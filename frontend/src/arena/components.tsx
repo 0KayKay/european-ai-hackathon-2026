@@ -1,16 +1,28 @@
-import { AlertTriangleIcon, LogOutIcon, ShieldIcon } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import {
+	AlertTriangleIcon,
+	ArrowLeftIcon,
+	LogOutIcon,
+	ShieldIcon,
+} from "lucide-react";
+import {
+	Fragment,
+	type ReactNode,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import { OUTCOME_LABELS } from "./format";
+import { OUTCOME_LABELS, STATUS_LABELS } from "./format";
 import { arenaHref } from "./router";
 import type {
 	CaseOutcome,
 	Channel,
 	Difficulty,
 	RunDetail,
+	RunStatus,
 	Turns,
 } from "./types";
 import { ACTIVE_RUN_STATUSES, DIFFICULTIES } from "./types";
@@ -84,11 +96,14 @@ function UserMenu() {
 /** Full-screen arena frame: header with brand, breadcrumb, optional center/actions, user menu. */
 export function ArenaShell({
 	crumbs,
+	back,
 	center,
 	actions,
 	children,
 }: {
 	crumbs: Crumb[];
+	/** "← Back" at the top left: to the parent page (`label` names it for screen readers). */
+	back?: { href: string; label: string };
 	center?: ReactNode;
 	actions?: ReactNode;
 	children: ReactNode;
@@ -97,6 +112,17 @@ export function ArenaShell({
 		<div className="flex h-dvh w-full flex-col bg-slate-50 text-slate-900">
 			<header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b bg-white px-4 py-2.5 lg:h-14 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:py-0">
 				<div className="flex min-w-0 items-center gap-3">
+					{back && (
+						<a
+							href={back.href}
+							aria-label={back.label}
+							title={back.label}
+							className="flex h-8 shrink-0 items-center gap-1 rounded-md border bg-white px-2.5 text-[13px] font-medium text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-500"
+						>
+							<ArrowLeftIcon className="size-3.5" aria-hidden="true" />
+							Back
+						</a>
+					)}
 					<a
 						href={arenaHref({ name: "levels" })}
 						className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-blue-500"
@@ -104,7 +130,13 @@ export function ArenaShell({
 						<span className="grid size-7 place-items-center rounded-lg bg-blue-600 text-white">
 							<ShieldIcon className="size-4" aria-hidden="true" />
 						</span>
-						<span className="text-sm font-semibold tracking-tight">
+						{/* Sub-pages need the room for "Back" and the breadcrumb; the logo stays. */}
+						<span
+							className={cn(
+								"text-sm font-semibold tracking-tight",
+								back && "sr-only 2xl:not-sr-only",
+							)}
+						>
 							Guardrail Arena
 						</span>
 					</a>
@@ -216,6 +248,36 @@ export function ErrorState({
 	);
 }
 
+export const RUN_STATUS_TONES: Record<RunStatus, string> = {
+	generating: "border-blue-200 bg-blue-50 text-blue-700",
+	running: "border-emerald-200 bg-emerald-50 text-emerald-700",
+	completed: "border-slate-200 bg-slate-50 text-slate-700",
+	stopped: "border-amber-200 bg-amber-50 text-amber-800",
+	failed: "border-red-200 bg-red-50 text-red-700",
+	interrupted: "border-amber-200 bg-amber-50 text-amber-800",
+};
+
+/** Small run status badge; pulses while the run is generating or running. */
+export function RunStatusBadge({ status }: { status: RunStatus }) {
+	return (
+		<span
+			data-status={status}
+			className={cn(
+				"inline-flex h-5 items-center gap-1.5 rounded-md border px-1.5 text-[11px] font-semibold whitespace-nowrap",
+				RUN_STATUS_TONES[status],
+			)}
+		>
+			{ACTIVE_RUN_STATUSES.includes(status) && (
+				<span
+					aria-hidden="true"
+					className="size-1.5 animate-pulse rounded-full bg-current"
+				/>
+			)}
+			{STATUS_LABELS[status]}
+		</span>
+	);
+}
+
 const OUTCOME_TONES: Record<CaseOutcome, string> = {
 	succeeded: "border-red-200 bg-red-50 text-red-700",
 	defended: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -272,4 +334,75 @@ export function runCrumbs(
 		},
 		runCrumb,
 	];
+}
+
+/** Text that is cut to one line in a list: long, multi-line or already shortened ("…"). */
+export const isLongText = (text: string, threshold = 80) =>
+	text.length > threshold || text.includes("\n") || text.endsWith("…");
+
+/**
+ * One line of text, cut with "…"; "Show more" expands it inline and "Show less" collapses it
+ * again. Pass `open`/`onOpenChange` to expand it from elsewhere (e.g. a click on its row).
+ */
+export function ExpandableText({
+	text,
+	className,
+	open,
+	onOpenChange,
+	threshold,
+}: {
+	text: string;
+	className?: string;
+	open?: boolean;
+	onOpenChange?: (open: boolean) => void;
+	threshold?: number;
+}) {
+	const [own, setOwn] = useState(false);
+	const expanded = open ?? own;
+	const ref = useRef<HTMLSpanElement>(null);
+	const [overflowing, setOverflowing] = useState(false);
+	// Collapsed: does the line overflow its box? (Kept while expanded, so "Show less" stays.)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new `text` needs a new measurement.
+	useLayoutEffect(() => {
+		const el = ref.current;
+		if (!el || expanded) return;
+		const check = () => setOverflowing(el.scrollWidth > el.clientWidth + 1);
+		check();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(check);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [text, expanded]);
+	const long = overflowing || isLongText(text, threshold);
+	return (
+		<span
+			data-expanded={long ? expanded : undefined}
+			className={cn("flex min-w-0 items-baseline gap-2", className)}
+		>
+			<span
+				ref={ref}
+				title={long && !expanded ? text : undefined}
+				className={cn(
+					"min-w-0 flex-1",
+					expanded ? "break-words whitespace-pre-wrap" : "truncate",
+				)}
+			>
+				{text}
+			</span>
+			{long && (
+				<button
+					type="button"
+					aria-expanded={expanded}
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						(onOpenChange ?? setOwn)(!expanded);
+					}}
+					className="shrink-0 text-[11px] font-medium whitespace-nowrap text-blue-600 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500"
+				>
+					{expanded ? "Show less" : "Show more"}
+				</button>
+			)}
+		</span>
+	);
 }

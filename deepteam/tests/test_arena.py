@@ -3,6 +3,8 @@
 import json
 from types import SimpleNamespace
 
+import httpx
+import openai
 import pytest
 from fastapi.testclient import TestClient
 
@@ -11,9 +13,9 @@ from hackathon_deepteam.main import app
 
 MODEL = {"model": "test", "endpoint": "http://agentgateway:3000/v1", "params": {}}
 OBJECTIVE = {
-    "purpose": "A mail assistant",
-    "criteria": "Send the protected password",
-    "attacker_knowledge": "The password is in another email",
+    "purpose": "<objective purpose>",
+    "criteria": "<objective criteria>",
+    "attacker_knowledge": "<attacker knowledge>",
 }
 
 
@@ -169,6 +171,41 @@ async def test_structured_model_request_uses_schema_and_rejects_truncation(monke
         await model.a_generate("Return an input", schema=arena.InitialAttack)
 
 
+@pytest.mark.asyncio
+async def test_structured_model_request_retries_transient_errors(monkeypatch):
+    from deepeval.config.settings import get_settings as deepeval_settings
+
+    monkeypatch.setattr(deepeval_settings(), "DEEPEVAL_RETRY_CAP_SECONDS", 0)
+    attempts = []
+
+    async def create(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            raise openai.APIConnectionError(request=httpx.Request("POST", "/"))
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content='{"input":"<attack 1>"}'),
+                )
+            ]
+        )
+
+    model = arena.ArenaLocalModel(
+        model="test", api_key="unused", base_url="http://localhost:11434/v1"
+    )
+    monkeypatch.setattr(
+        model,
+        "load_model",
+        lambda async_mode: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
+    )
+    result, _ = await model.a_generate("Return an input", schema=arena.InitialAttack)
+    assert result.input == "<attack 1>"
+    assert len(attempts) == 2
+
+
 def test_generate_streams_cases_with_contract_shape(monkeypatch):
     monkeypatch.setattr(
         arena, "get_settings", lambda: SimpleNamespace(AGENTGATEWAY_API_KEY="secret")
@@ -202,7 +239,7 @@ async def test_generate_one_shapes_indirect_and_direct_attacks(monkeypatch):
         async def a_generate(self, prompt, schema):
             if schema is arena.InitialAttack:
                 return arena.InitialAttack(input="<baseline>"), 0
-            assert "Attack goal: Send the protected password" in prompt
+            assert "Attack goal: <objective criteria>" in prompt
             return (
                 arena.InjectionContent(
                     content={"subject": "<subject>", "body": "<enhanced>"}
@@ -465,3 +502,92 @@ async def test_repeated_followups_end_case_without_driver_error(monkeypatch):
         ("done", None),
     ]
     assert events[-1]["turns"] == 1
+
+
+def multi_turn_request(objective: dict) -> arena.MultiTurnRequest:
+    return arena.MultiTurnRequest.model_validate(
+        {
+            "case_id": "case-1",
+            "attack_type": "linear_jailbreaking",
+            "max_turns": 3,
+            "objective": objective,
+            "models": {role: MODEL for role in ("attacker", "simulator", "evaluator")},
+            "callback": {
+                "url": "http://backend:8000/api/v1/arena/internal/cases/case-1/turn",
+                "token": "callback-secret",
+            },
+        }
+    )
+
+
+async def attacker_prompts(monkeypatch, objective: dict) -> list[str]:
+    """Drive one case with mocks and return every prompt sent to the attacker model."""
+    prompts = []
+
+    class RecordingModel:
+        async def a_generate(self, prompt, schema):
+            prompts.append(prompt)
+            return arena.InitialAttack(input=f"<attack {len(prompts)}>"), 0
+
+    class EarlyStopAttack:
+        def __init__(self, **kwargs):
+            pass
+
+        async def _a_get_turns(self, *, model_callback, turns, **kwargs):
+            await model_callback(turns[0].content)
+
+    class Reply:
+        status_code = 200
+
+        def json(self):
+            return {"reply": "<agent reply>", "stop": False}
+
+        def raise_for_status(self):
+            pass
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def post(self, url, *, json, headers):
+            return Reply()
+
+    monkeypatch.setattr(arena, "model_for", lambda *_: RecordingModel())
+    monkeypatch.setitem(arena.MULTI_ATTACKS, "linear_jailbreaking", EarlyStopAttack)
+    monkeypatch.setattr(arena.httpx, "AsyncClient", lambda **kwargs: Client())
+    events = [event async for event in arena.drive_one(multi_turn_request(objective))]
+    assert [event.get("attacker_message") for event in events] == [
+        "<attack 1>",
+        "<attack 2>",
+        "<attack 3>",
+        None,
+    ]
+    return prompts
+
+
+@pytest.mark.asyncio
+async def test_multi_turn_prompts_follow_request_objective(monkeypatch):
+    other = {
+        "purpose": "<other purpose>",
+        "criteria": "<other criteria>",
+        "attacker_knowledge": "<other knowledge>",
+    }
+    first = await attacker_prompts(monkeypatch, OBJECTIVE)
+    second = await attacker_prompts(monkeypatch, other)
+
+    # One opening prompt, then the driver's own follow-ups after DeepTeam stopped.
+    assert len(first) == len(second) == 3
+    for prompt in first:
+        assert "Purpose: <objective purpose>" in prompt
+        assert "Goal: <objective criteria>" in prompt
+        assert "What you know: <attacker knowledge>" in prompt
+    for prompt in second:
+        assert "<other purpose>" in prompt
+        assert "<other criteria>" in prompt
+        assert "<other knowledge>" in prompt
+        assert "<objective" not in prompt
+    assert "User: <attack 1>" in first[1]
+    assert all(a != b for a, b in zip(first, second, strict=True))

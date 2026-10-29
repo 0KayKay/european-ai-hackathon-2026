@@ -361,8 +361,12 @@ Live updates: the frontend polls `GET /runs/{id}` (≈1 s) while a run is active
   `frontend/src/arena/fixtures/{hidden-mailbox,email-review}-hard.ts` are such dumps.
 - Run summary (`POST /runs`, `GET /runs`, `POST /runs/{id}/stop`) adds `error` (run-level failure text or `null`) and
   `generation: { red, green }`, each `{ status: pending | generating | done | failed | dataset, error }`
-  (`failed` e.g. when DeepTeam is unreachable; the run still executes the other team). `GET /runs/{id}` also has
-  `title`, `graph` and `sources: { red, green }` (the request's `{source, dataset_id}`).
+  (`failed` e.g. when DeepTeam is unreachable; the run still executes the other team). It also carries `title`
+  (level title at run time, recorded with the run; runs stored without it get the level's current title) and
+  `rates: { attack_success, false_positive }`, each `{ value, numerator, denominator }`, computed from `counts` by
+  `R-RES-1` (errors excluded, the same values as `GET /runs/{id}/results`), so the runs overview needs no extra
+  request per run. `GET /runs/{id}` also has `graph` and `sources: { red, green }` (the request's
+  `{source, dataset_id}`).
 - Case summary adds `status: pending | running | done | stopped` (`stopped` = interrupted by a stop request, not
   decided) and `error`. Red cases that could not be generated (service error, too few cases) or were generated
   invalid (wrong injection fields, over `max_length`) are recorded as decided `error` cases without events, so

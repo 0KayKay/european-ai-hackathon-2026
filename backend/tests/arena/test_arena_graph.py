@@ -165,7 +165,7 @@ def test_node_details_show_settings_full_prompts_and_models():
     assert agent.details.model == {
         "model": "glm-5.3-flash-leonardo",
         "endpoint": "agentgateway",
-        "params": {"max_tokens": 512, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
+        "params": {"max_tokens": 4096, "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}}},
     }
     prompts = {prompt.name: prompt for prompt in agent.details.prompts}
     assert prompts["System prompt"].text == challenge1_prompt("User", "HARD")
@@ -178,7 +178,7 @@ def test_node_details_show_settings_full_prompts_and_models():
     judge = g.node("guardrail:input-judge")
     assert judge.details.model["params"] == {
         "temperature": 0,
-        "max_tokens": 384,
+        "max_tokens": 1024,
         "extra": {"chat_template_kwargs": {"reasoning_effort": "low", "clear_thinking": True}},
     }
     judge_prompts = {prompt.name: prompt for prompt in judge.details.prompts}
@@ -276,4 +276,4 @@ def test_guardrail_labels_are_readable_and_configurable():
 def test_model_parameters_are_shown_as_json_values():
     agent = graph("hidden-mailbox", "easy").node("agent")
     settings = {s.label: s.value for s in agent.details.settings}
-    assert "max_tokens 512" in settings["Model parameters"]
+    assert "max_tokens 4096" in settings["Model parameters"]

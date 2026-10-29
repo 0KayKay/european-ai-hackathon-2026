@@ -67,6 +67,21 @@ jobs:
       - run: uvx vermin==1.9.2 --target=3.6- --no-tips --violations --exclude-regex 'compat_check\.py$|cluster_link_poc/' serve tools diagnostics install tests
       - run: uvx vermin==1.9.2 --target=3.7- --no-tips --violations cli.py
 
+  b300:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: b300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - run: python3 tools/check_repository.py
+      - run: python3 -m unittest discover -s tests -v
+      - run: python3 -m unittest discover -s clients -v
+      # The laptop CLI and the login-node tools declare Python 3.9+. Excluded: cubin_overlay.py, which runs
+      # only inside the pinned vLLM container (it uses hashlib.file_digest, Python 3.11+).
+      - run: uvx vermin==1.9.2 --target=3.9- --no-tips --violations --exclude-regex 'cubin_overlay\.py$' cli.py clients serve tools tests
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

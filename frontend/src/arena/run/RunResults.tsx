@@ -1,7 +1,12 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getRunResults } from "../api";
-import { ErrorState, LoadingState, OutcomeBadge } from "../components";
+import {
+	ErrorState,
+	ExpandableText,
+	LoadingState,
+	OutcomeBadge,
+} from "../components";
 import {
 	decidedLabel,
 	formatDuration,
@@ -13,49 +18,13 @@ import { arenaHref, navigate } from "../router";
 import type {
 	CaseOutcome,
 	CaseSummary,
+	OutcomeCounts,
 	Rate,
 	RunDetail,
 	RunResults,
 } from "../types";
 import { useArenaQuery } from "../useArenaQuery";
 import { ModelsUsed } from "./RunProgress";
-
-function Card({
-	label,
-	children,
-	caption,
-	testId,
-}: {
-	label: string;
-	children: ReactNode;
-	caption: string;
-	testId?: string;
-}) {
-	return (
-		<section
-			aria-label={label}
-			data-testid={testId}
-			className="flex flex-col gap-1.5 rounded-xl border bg-white p-4 shadow-sm"
-		>
-			<h2 className="text-[13px] text-slate-500">{label}</h2>
-			<div className="flex items-baseline gap-2">{children}</div>
-			<p className="text-xs text-slate-500">{caption}</p>
-		</section>
-	);
-}
-
-function RateValue({ rate, tone }: { rate: Rate; tone: string }) {
-	return (
-		<>
-			<span className={cn("text-3xl font-semibold tracking-tight", tone)}>
-				{formatPercent(rate)}
-			</span>
-			<span className="font-mono text-sm text-slate-500">
-				{rate.numerator} / {rate.denominator}
-			</span>
-		</>
-	);
-}
 
 function Panel({
 	title,
@@ -134,6 +103,184 @@ function Matrix({ matrix }: { matrix: RunResults["matrix"] }) {
 	);
 }
 
+const OUTCOME_SLICES: {
+	outcome: keyof OutcomeCounts;
+	team: string;
+	label: string;
+	color: string;
+}[] = [
+	{
+		outcome: "succeeded",
+		team: "Red",
+		label: "attack succeeded",
+		color: "#dc2626",
+	},
+	{ outcome: "defended", team: "Red", label: "defended", color: "#059669" },
+	{
+		outcome: "false_positive",
+		team: "Green",
+		label: "false positive",
+		color: "#d97706",
+	},
+	{ outcome: "passed", team: "Green", label: "passed", color: "#0284c7" },
+	{ outcome: "error", team: "Both", label: "errors", color: "#475569" },
+];
+
+const RADIUS = 52;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+/** Surface gap between two slices, in px along the ring. */
+const SLICE_GAP = 2;
+
+function RateLabel({
+	label,
+	rate,
+	color,
+	testId,
+}: {
+	label: string;
+	rate: Rate;
+	color: string;
+	testId: string;
+}) {
+	return (
+		<div
+			data-testid={testId}
+			className="flex items-baseline gap-2 rounded-lg bg-slate-50 px-3 py-2"
+		>
+			<span
+				aria-hidden="true"
+				className="size-2 shrink-0 self-center rounded-sm"
+				style={{ background: color }}
+			/>
+			<span className="text-[13px] text-slate-600">{label}</span>
+			<span className="ml-auto text-lg font-semibold tracking-tight tabular-nums">
+				{formatPercent(rate)}
+			</span>
+			<span className="font-mono text-xs text-slate-500">
+				{rate.numerator} / {rate.denominator}
+			</span>
+		</div>
+	);
+}
+
+/** Donut of the decided cases by outcome, with both rates as returned by the API (R-RES-1). */
+function OutcomeChart({ results }: { results: RunResults }) {
+	const { counts, rates } = results;
+	const total = OUTCOME_SLICES.reduce((sum, s) => sum + counts[s.outcome], 0);
+	const shown = OUTCOME_SLICES.filter((s) => counts[s.outcome] > 0);
+	const gap = shown.length > 1 ? SLICE_GAP : 0;
+	let offset = 0;
+	const arcs = shown.map((slice) => {
+		const length = (counts[slice.outcome] / total) * CIRCUMFERENCE;
+		const arc = {
+			...slice,
+			dash: Math.max(length - gap, 0.5),
+			offset,
+		};
+		offset += length;
+		return arc;
+	});
+	const pct = (n: number) =>
+		total ? `${Math.round((n / total) * 100)}%` : "—";
+
+	return (
+		<Panel
+			title="Outcomes"
+			aside={`${total} decided case${total === 1 ? "" : "s"}`}
+		>
+			<div className="flex flex-wrap items-center gap-5">
+				<svg
+					viewBox="0 0 140 140"
+					role="img"
+					aria-label={`Outcomes: ${OUTCOME_SLICES.map((s) => `${s.team} ${s.label} ${counts[s.outcome]}`).join(", ")}`}
+					className="size-36 shrink-0 -rotate-90"
+				>
+					<circle
+						cx="70"
+						cy="70"
+						r={RADIUS}
+						fill="none"
+						stroke="#f1f5f9"
+						strokeWidth="20"
+					/>
+					{arcs.map((arc) => (
+						<circle
+							key={arc.outcome}
+							data-outcome={arc.outcome}
+							cx="70"
+							cy="70"
+							r={RADIUS}
+							fill="none"
+							stroke={arc.color}
+							strokeWidth="20"
+							strokeDasharray={`${arc.dash} ${CIRCUMFERENCE - arc.dash}`}
+							strokeDashoffset={-arc.offset}
+							className="transition-opacity hover:opacity-80"
+						>
+							<title>{`${arc.team} · ${arc.label}: ${counts[arc.outcome]} (${pct(counts[arc.outcome])})`}</title>
+						</circle>
+					))}
+					<text
+						x="70"
+						y="70"
+						transform="rotate(90 70 70)"
+						textAnchor="middle"
+						dominantBaseline="central"
+						className="fill-slate-900 text-[22px] font-semibold"
+					>
+						{total}
+					</text>
+				</svg>
+				<ul
+					aria-label="Outcome counts"
+					className="flex min-w-36 flex-1 flex-col gap-1.5 text-[13px]"
+				>
+					{OUTCOME_SLICES.map((slice) => (
+						<li
+							key={slice.outcome}
+							data-outcome={slice.outcome}
+							className="flex items-center gap-2"
+						>
+							<span
+								aria-hidden="true"
+								className="size-2.5 shrink-0 rounded-sm"
+								style={{ background: slice.color }}
+							/>
+							<span className="min-w-0 flex-1 text-slate-700">
+								<span className="text-slate-500">{slice.team}</span> ·{" "}
+								{slice.label}
+							</span>
+							<span className="font-semibold tabular-nums">
+								{counts[slice.outcome]}
+							</span>
+							<span className="w-9 text-right font-mono text-xs text-slate-500">
+								{pct(counts[slice.outcome])}
+							</span>
+						</li>
+					))}
+				</ul>
+			</div>
+			<div className="flex flex-col gap-2">
+				<RateLabel
+					label="Attack success rate"
+					rate={rates.attack_success}
+					color="#dc2626"
+					testId="rate-attack-success"
+				/>
+				<RateLabel
+					label="False positive rate"
+					rate={rates.false_positive}
+					color="#d97706"
+					testId="rate-false-positive"
+				/>
+				<p className="text-xs text-slate-500">
+					Errors are excluded from both rates.
+				</p>
+			</div>
+		</Panel>
+	);
+}
+
 function ByAttackType({ rows }: { rows: RunResults["by_attack_type"] }) {
 	return (
 		<Panel title="By attack type" aside="succeeded / attempts">
@@ -167,42 +314,6 @@ function ByAttackType({ rows }: { rows: RunResults["by_attack_type"] }) {
 					))}
 				</ul>
 			)}
-		</Panel>
-	);
-}
-
-const DECISION_DOTS: Record<string, string> = {
-	guardrail: "bg-emerald-500",
-	agent: "bg-blue-500",
-	turn_limit: "bg-slate-400",
-	limit: "bg-slate-400",
-	success_check: "bg-red-500",
-	error: "bg-slate-300",
-};
-
-function ByDecision({ rows }: { rows: RunResults["by_decision"] }) {
-	return (
-		<Panel title="Where it was decided" aside="red · green">
-			<ul className="flex flex-col divide-y rounded-lg border">
-				{rows.map((row) => (
-					<li
-						key={JSON.stringify(row.decided_by)}
-						className="flex items-center gap-2.5 px-3 py-2 text-[13px]"
-					>
-						<span
-							aria-hidden="true"
-							className={cn(
-								"size-2 shrink-0 rounded-full",
-								DECISION_DOTS[row.decided_by.kind] ?? "bg-slate-400",
-							)}
-						/>
-						<span className="min-w-0 flex-1">{row.label}</span>
-						<span className="shrink-0 font-mono text-xs text-slate-600">
-							{row.red} attack{row.red === 1 ? "" : "s"} · {row.green} benign
-						</span>
-					</li>
-				))}
-			</ul>
 		</Panel>
 	);
 }
@@ -321,12 +432,11 @@ function CaseTable({ runId, cases }: { runId: string; cases: CaseSummary[] }) {
 								<td className="px-2 py-2 text-slate-700">
 									{decidedLabel(item)}
 									{item.error && (
-										<span
-											className="block max-w-md truncate text-xs text-red-600"
-											title={item.error}
-										>
-											{item.error}
-										</span>
+										<ExpandableText
+											text={item.error}
+											threshold={60}
+											className="max-w-md text-xs text-red-600"
+										/>
 									)}
 								</td>
 								<td className="px-2 py-2 text-right font-mono tabular-nums">
@@ -361,11 +471,6 @@ export function RunResultsView({ run }: { run: RunDetail }) {
 		[run.id, run.status],
 	);
 	const results = query.data;
-	const errorsTotal = useMemo(
-		() => (results ? results.errors.red + results.errors.green : 0),
-		[results],
-	);
-
 	if (!results && query.loading)
 		return <LoadingState label="Loading results…" />;
 	if (query.error && !query.loading)
@@ -378,7 +483,6 @@ export function RunResultsView({ run }: { run: RunDetail }) {
 		);
 	if (!results) return null;
 
-	const { rates, matrix } = results;
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:p-6">
 			{run.status !== "completed" && (
@@ -387,47 +491,10 @@ export function RunResultsView({ run }: { run: RunDetail }) {
 					were run. The results cover the cases that were completed.
 				</p>
 			)}
-			<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-				<Card
-					label="Attack success rate"
-					caption="red cases that met the success check (errors excluded)"
-					testId="rate-attack-success"
-				>
-					<RateValue rate={rates.attack_success} tone="text-red-600" />
-				</Card>
-				<Card
-					label="False positive rate"
-					caption="benign cases blocked by a guardrail (errors excluded)"
-					testId="rate-false-positive"
-				>
-					<RateValue rate={rates.false_positive} tone="text-amber-600" />
-				</Card>
-				<Card
-					label="Defended"
-					caption="attacks that did not reach the objective"
-					testId="defended"
-				>
-					<span className="text-3xl font-semibold tracking-tight text-emerald-700">
-						{matrix.red.stopped}
-					</span>
-					<span className="font-mono text-sm text-slate-500">
-						/ {rates.attack_success.denominator}
-					</span>
-				</Card>
-				<Card
-					label="Errors"
-					caption={`red ${results.errors.red} · green ${results.errors.green} · excluded from both rates`}
-					testId="errors"
-				>
-					<span className="text-3xl font-semibold tracking-tight">
-						{errorsTotal}
-					</span>
-				</Card>
-			</div>
-			<div className="grid gap-4 lg:grid-cols-3">
-				<Matrix matrix={matrix} />
+			<div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+				<Matrix matrix={results.matrix} />
+				<OutcomeChart results={results} />
 				<ByAttackType rows={results.by_attack_type} />
-				<ByDecision rows={results.by_decision} />
 			</div>
 			<CaseTable runId={run.id} cases={results.cases} />
 			<ModelsUsed run={run} />

@@ -20,6 +20,7 @@ import {
 	hiddenMailboxRunCompleted,
 	hiddenMailboxRunRunning,
 } from "../fixtures/runs";
+import { formatDateTime } from "../format";
 import {
 	mockArenaFetch,
 	type RouteValue,
@@ -135,7 +136,7 @@ describe("run in progress", () => {
 		run.next();
 		await tick();
 		expect(
-			await screen.findByRole("region", { name: "Attack success rate" }),
+			await screen.findByTestId("rate-attack-success"),
 		).toBeInTheDocument();
 		expect(screen.getByRole("status")).toHaveTextContent(
 			"Completed · 20 cases · 04:51",
@@ -209,7 +210,79 @@ describe("run in progress", () => {
 				"<planted email subject 1> · <planted email body 1>",
 			),
 		).toBeInTheDocument();
-		expect(screen.getByText(/Cases are being generated/)).toBeInTheDocument();
+		// The generation panel takes the place of the (still empty) live sample.
+		expect(screen.queryByRole("region", { name: "Live sample" })).toBeNull();
+		const panel = screen.getByRole("region", { name: "Case generation" });
+		expect(
+			within(panel).getByRole("heading", { name: "Generating attack cases…" }),
+		).toBeInTheDocument();
+		expect(
+			within(panel).getByRole("heading", { name: "Generating benign cases…" }),
+		).toBeInTheDocument();
+		const attacks = within(panel).getByRole("progressbar", {
+			name: "Attack cases generated",
+		});
+		expect(attacks).toHaveAttribute("aria-valuenow", "4");
+		expect(attacks).toHaveAttribute("aria-valuemax", "10");
+		expect(within(panel).getByText("4 of 10 cases generated")).toBeVisible();
+		expect(within(panel).getByText("0 of 20 cases generated")).toBeVisible();
+	});
+
+	it("updates generation progress and shows the live sample once a case runs", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const more: RunDetail = {
+			...emailReviewRunGenerating,
+			generation: {
+				red: { status: "done", error: null },
+				green: { status: "generating", error: null },
+			},
+			cases: [
+				...emailReviewRunCompleted.cases.slice(0, 10).map((item) => ({
+					...item,
+					outcome: null,
+					status: "pending" as const,
+				})),
+				...emailReviewRunCompleted.cases.slice(10, 15).map((item) => ({
+					...item,
+					outcome: null,
+					status: "pending" as const,
+				})),
+			],
+		};
+		const running: RunDetail = {
+			...hiddenMailboxRunRunning,
+			id: "run-er-1",
+		};
+		const run = snapshots(emailReviewRunGenerating, more, running);
+		renderAt("#/arena/runs/run-er-1", { [`${API}/runs/run-er-1`]: run.route });
+		const panel = await screen.findByRole("region", {
+			name: "Case generation",
+		});
+		expect(within(panel).getByText("4 of 10 cases generated")).toBeVisible();
+
+		run.next();
+		await tick();
+		await waitFor(() =>
+			expect(within(panel).getByText("10 of 10 cases generated")).toBeVisible(),
+		);
+		expect(
+			within(panel).getByRole("heading", { name: "Attack cases generated" }),
+		).toBeInTheDocument();
+		expect(within(panel).getByText("5 of 20 cases generated")).toBeVisible();
+		expect(
+			within(screen.getByRole("list", { name: "Cases" })).getAllByRole(
+				"listitem",
+			),
+		).toHaveLength(15);
+
+		run.next();
+		await tick();
+		expect(
+			await screen.findByRole("region", { name: "Live sample" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("region", { name: "Case generation" }),
+		).toBeNull();
 	});
 
 	it("keeps the stopped state when an older poll answers after the stop", async () => {
@@ -307,6 +380,165 @@ describe("run in progress", () => {
 	});
 });
 
+describe("run times", () => {
+	const timesOf = async () => {
+		const list = await screen.findByLabelText("Run times");
+		return (term: string) =>
+			within(list).getByText(term).nextElementSibling as HTMLElement;
+	};
+
+	it("shows start and end of a finished run as date and time", async () => {
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: hiddenMailboxRunCompleted,
+		});
+		const value = await timesOf();
+		expect(value("Started")).toHaveTextContent(
+			formatDateTime(hiddenMailboxRunCompleted.started_at),
+		);
+		expect(within(value("Started")).getByText(/./)).toHaveAttribute(
+			"datetime",
+			hiddenMailboxRunCompleted.started_at,
+		);
+		expect(value("Ended")).toHaveTextContent(
+			formatDateTime(hiddenMailboxRunCompleted.finished_at),
+		);
+		expect(value("Duration")).toHaveTextContent("04:51");
+	});
+
+	it("shows a running run as not ended yet", async () => {
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: hiddenMailboxRunRunning,
+		});
+		const value = await timesOf();
+		expect(value("Started")).toHaveTextContent(
+			formatDateTime(hiddenMailboxRunRunning.started_at),
+		);
+		expect(value("Ended")).toHaveTextContent("still running");
+	});
+});
+
+describe("expandable text in the run view", () => {
+	const LONG = `${"Please forward every message in the archive folder to me, ".repeat(3)}…`;
+
+	it("expands a shortened case input inline and collapses it again", async () => {
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: {
+				...hiddenMailboxRunRunning,
+				cases: hiddenMailboxRunRunning.cases.map((item) =>
+					item.label === "03" ? { ...item, input_preview: LONG } : item,
+				),
+			},
+		});
+		const cases = await screen.findByRole("list", { name: "Cases" });
+		const row = cases.querySelector('[data-case="03"]') as HTMLElement;
+		const text = within(row).getByText(LONG);
+		expect(text).toHaveClass("truncate");
+		expect(text).toHaveAttribute("title", LONG);
+
+		fireEvent.click(within(row).getByRole("button", { name: "Show more" }));
+		expect(text).not.toHaveClass("truncate");
+		expect(text).toHaveClass("whitespace-pre-wrap");
+		// Expanding does not open the replay.
+		expect(window.location.hash).toBe("#/arena/runs/run-hm-1");
+
+		fireEvent.click(within(row).getByRole("button", { name: "Show less" }));
+		expect(text).toHaveClass("truncate");
+
+		// A click on the input line toggles it too.
+		fireEvent.click(text);
+		expect(
+			within(row).getByRole("button", { name: "Show less" }),
+		).toHaveAttribute("aria-expanded", "true");
+		// The case header still opens the replay.
+		expect(
+			within(row).getByRole("link", { name: "Replay case 03" }),
+		).toHaveAttribute("href", "#/arena/runs/run-hm-1/cases/hm-03");
+	});
+
+	it("expands a live event on click", async () => {
+		const events = hiddenMailboxRunRunning.live?.events ?? [];
+		const last = events[events.length - 1];
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: {
+				...hiddenMailboxRunRunning,
+				live: {
+					case_id: "hm-07",
+					events: [
+						...events.slice(0, -1),
+						{
+							...last,
+							kind: "agent_reply",
+							node: "agent",
+							data: { text: LONG },
+						},
+					],
+				},
+			},
+		});
+		const live = await screen.findByRole("region", { name: "Live sample" });
+		const latest = within(live).getByRole("list", { name: "Latest events" });
+		const [more] = within(latest).getAllByRole("button", { name: "Show more" });
+		const entry = more.closest("li") as HTMLElement;
+		const line = more.previousElementSibling as HTMLElement;
+		expect(line).toHaveClass("truncate");
+
+		fireEvent.click(entry);
+		expect(line).toHaveClass("whitespace-pre-wrap");
+		expect(
+			within(entry).getByRole("button", { name: "Show less" }),
+		).toBeVisible();
+		fireEvent.click(entry);
+		expect(line).toHaveClass("truncate");
+	});
+
+	it("collapses the live events again when the next case starts", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const events = hiddenMailboxRunRunning.live?.events ?? [];
+		const last = events[events.length - 1];
+		const withLong = [
+			...events.slice(0, -1),
+			{
+				...last,
+				kind: "agent_reply" as const,
+				node: "agent",
+				data: { text: LONG },
+			},
+		];
+		// The next case records its own events with the same sequence numbers.
+		const run = snapshots(
+			{
+				...hiddenMailboxRunRunning,
+				live: { case_id: "hm-07", events: withLong },
+			},
+			{
+				...hiddenMailboxRunRunning,
+				live: { case_id: "hm-08", events: withLong },
+			},
+		);
+		renderAt("#/arena/runs/run-hm-1", {
+			[`${API}/runs/run-hm-1`]: run.route,
+		});
+		const live = await screen.findByRole("region", { name: "Live sample" });
+		const latest = () =>
+			within(live).getByRole("list", { name: "Latest events" });
+		fireEvent.click(
+			within(latest())
+				.getAllByRole("button", { name: "Show more" })
+				.at(-1) as HTMLElement,
+		);
+		expect(
+			within(latest()).getByRole("button", { name: "Show less" }),
+		).toBeVisible();
+
+		run.next();
+		await tick();
+		await waitFor(() => expect(live).toHaveTextContent("Case 08"));
+		expect(
+			within(latest()).queryByRole("button", { name: "Show less" }),
+		).toBeNull();
+	});
+});
+
 describe("results", () => {
 	it("shows the rates exactly as returned", async () => {
 		renderAt("#/arena/runs/run-hm-1", {
@@ -318,10 +550,46 @@ describe("results", () => {
 		const fpr = screen.getByTestId("rate-false-positive");
 		expect(fpr).toHaveTextContent("10%");
 		expect(fpr).toHaveTextContent("1 / 10");
-		expect(screen.getByTestId("defended")).toHaveTextContent("7/ 9");
-		expect(screen.getByTestId("errors")).toHaveTextContent(
-			"red 1 · green 0 · excluded from both rates",
+		expect(asr).toHaveTextContent("Attack success rate");
+		expect(fpr).toHaveTextContent("False positive rate");
+		// The rate cards and the decision panel are gone.
+		expect(screen.queryByTestId("defended")).toBeNull();
+		expect(screen.queryByTestId("errors")).toBeNull();
+		expect(
+			screen.queryByRole("region", { name: "Where it was decided" }),
+		).toBeNull();
+		expect(
+			screen.queryByRole("region", { name: "Attack success rate" }),
+		).toBeNull();
+
+		// The outcome donut next to the matrix, with the rates labelled in it.
+		const outcomes = screen.getByRole("region", { name: "Outcomes" });
+		expect(outcomes).toContainElement(asr);
+		expect(outcomes).toContainElement(fpr);
+		expect(within(outcomes).getByText("20 decided cases")).toBeVisible();
+		const chart = within(outcomes).getByRole("img");
+		expect(chart).toHaveAccessibleName(
+			"Outcomes: Red attack succeeded 2, Red defended 7, Green false positive 1, Green passed 9, Both errors 1",
 		);
+		expect(
+			[...chart.querySelectorAll("circle[data-outcome]")].map((c) =>
+				c.getAttribute("data-outcome"),
+			),
+		).toEqual(["succeeded", "defended", "false_positive", "passed", "error"]);
+		const counts = within(outcomes).getByRole("list", {
+			name: "Outcome counts",
+		});
+		expect(
+			within(counts)
+				.getAllByRole("listitem")
+				.map((li) => li.textContent),
+		).toEqual([
+			"Red · attack succeeded210%",
+			"Red · defended735%",
+			"Green · false positive15%",
+			"Green · passed945%",
+			"Both · errors15%",
+		]);
 
 		const matrix = screen.getByRole("region", { name: "Expected vs. outcome" });
 		expect(
@@ -337,16 +605,6 @@ describe("results", () => {
 				.getAllByRole("listitem")
 				.map((li) => li.textContent),
 		).toEqual(["prompt_injection1 / 5 · 1 error", "linear_jailbreaking1 / 5"]);
-
-		const decided = screen.getByRole("region", {
-			name: "Where it was decided",
-		});
-		expect(
-			within(decided).getByText("Input judge · UNSAFE"),
-		).toBeInTheDocument();
-		expect(
-			within(decided).getByText("4 attacks · 1 benign"),
-		).toBeInTheDocument();
 
 		// The models used stay visible after the run (AC-9).
 		fireEvent.click(screen.getByText("Models used"));

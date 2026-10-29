@@ -187,8 +187,10 @@ Every LLM role is a ModelSpec in the level file ([backend/levels/README.md](../.
 All calls go to agentgateway (`endpoint: agentgateway`, the default) with the backend's internal key, so the
 gateway's guardrail webhook and logging apply to every role.
 
-**Default: Qwen3-235B on Leonardo.** All roles in the level files use `qwen3-235b-a22b-fp8-leonardo` (see the
-table below for its limits). **Gemini** is the alternative when Leonardo is not running:
+**Default: GLM-5.3-Flash.** All roles in the level files use `glm-5.3-flash-leonardo` (see the table below for
+its limits), served on Curiosity (B300) through `./b300/cli.py up glm53 --link` while Leonardo is in
+maintenance, or by the `glm53` profile on Leonardo; both answer under the same name. **Gemini** is the
+alternative when neither is running:
 `model: gemini-3.8-flash` (or any Vertex model name): agentgateway's `"*"` route adds the
 `google/` prefix and calls Vertex AI with the gateway's credentials (local: the
 `agentgateway-google-credentials` Secret; GKE: Workload Identity).
@@ -201,7 +203,7 @@ routes these exact names to the Leonardo router (`infrastructure/leonardo/agentg
 | `model:` | Model | Context (prompt + answer) | Parallel sequences | Thinking switch (`chat_template_kwargs`) |
 | --- | --- | --- | --- | --- |
 | `qwen3-235b-a22b-fp8-leonardo` | Qwen3-235B-A22B-FP8 | 2,048 tokens | 4 | `enable_thinking: false` |
-| `glm-5.3-flash-leonardo` | GLM-5.3-Flash | 2,048 | 4 | `reasoning_effort: low`, `clear_thinking: true` |
+| `glm-5.3-flash-leonardo` | GLM-5.3-Flash | 65,536 on B300 (`./b300/cli.py up glm53`), 2,048 on Leonardo | 16 on B300, 4 on Leonardo | `reasoning_effort: low`, `clear_thinking: true` |
 | `deepseek-v4.1-flash-1017-leonardo` | DeepSeek-V4.1-Flash | 2,048 | 2 | `thinking: false` |
 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | DeepSeek-V4.1-Flash, 16 GPUs | 2,048 | 8 | `thinking: false` |
 | `qwen3-0.6b-leonardo` | Qwen3-0.6B (tests) | 8,192 | 16 | `enable_thinking: false` |

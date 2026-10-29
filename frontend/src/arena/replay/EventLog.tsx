@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { formatEventTime } from "../format";
+import { ExpandableText } from "../components";
+import { formatDateTime, formatEventTime } from "../format";
 import type { ArenaGraph, CaseEvent, Team } from "../types";
 import { type EventTone, eventHeading, guardrailData } from "./events";
 
@@ -275,9 +276,16 @@ export function EventEntry({
 	compact?: boolean;
 }) {
 	const heading = eventHeading(event, team, graph);
+	const [open, setOpen] = useState(false);
+	const summary = compact ? eventSummary(event) : "";
+	// Compact entries (live sample) expand their summary line on click.
+	const expandable = compact && !onSelect;
 	const header = (
 		<>
-			<span className="font-mono text-xs text-slate-500 tabular-nums">
+			<span
+				title={formatDateTime(event.at, { seconds: true })}
+				className="font-mono text-xs text-slate-500 tabular-nums"
+			>
 				{formatEventTime(event.t)}
 			</span>
 			<span
@@ -293,11 +301,11 @@ export function EventEntry({
 			data-seq={event.seq}
 			data-kind={event.kind}
 			aria-current={current ? "step" : undefined}
-			onClick={onSelect}
+			onClick={onSelect ?? (expandable ? () => setOpen((o) => !o) : undefined)}
 			className={cn(
 				"grid grid-cols-[4rem_minmax(0,1fr)] gap-x-3 border-b border-slate-100 px-4 transition-colors",
 				compact ? "gap-y-0.5 py-2" : "gap-y-1.5 py-3",
-				onSelect && "cursor-pointer hover:bg-slate-50",
+				(onSelect || expandable) && "cursor-pointer hover:bg-slate-50",
 				current &&
 					"bg-blue-50/70 shadow-[inset_3px_0_0_#3b82f6] hover:bg-blue-50/70",
 				heading.tone === "fail" && !current && "bg-red-50/40",
@@ -321,12 +329,12 @@ export function EventEntry({
 				</div>
 			)}
 			{compact ? (
-				<p
-					className="col-start-2 truncate text-xs text-slate-600"
-					title={eventSummary(event)}
-				>
-					{eventSummary(event)}
-				</p>
+				<ExpandableText
+					text={summary}
+					open={open}
+					onOpenChange={setOpen}
+					className="col-start-2 text-xs text-slate-600"
+				/>
 			) : (
 				<div className="col-start-2 flex min-w-0 flex-col gap-1.5">
 					<EventBody event={event} />

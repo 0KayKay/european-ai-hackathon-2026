@@ -1,13 +1,20 @@
-import { useMemo } from "react";
+import { AlertTriangleIcon, CheckIcon, Loader2Icon } from "lucide-react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getLevel } from "../api";
-import { OutcomeBadge } from "../components";
+import { ExpandableText, OutcomeBadge } from "../components";
 import { formatParams } from "../format";
 import { ArenaGraph } from "../graph/ArenaGraph";
 import { EventLog } from "../replay/EventLog";
 import { highlightAt } from "../replay/events";
 import { arenaHref } from "../router";
-import type { CaseSummary, Progress, RunDetail } from "../types";
+import type {
+	CaseSummary,
+	GenerationStatus,
+	Progress,
+	RunDetail,
+	Team,
+} from "../types";
 import { useArenaQuery } from "../useArenaQuery";
 
 const LIVE_EVENTS_SHOWN = 8;
@@ -103,6 +110,81 @@ function caseStatus(item: CaseSummary, liveId: string | undefined) {
 	);
 }
 
+/** One generated case: header (links to the replay once decided) and its input, expandable. */
+function CaseQueueRow({
+	runId,
+	item,
+	liveId,
+}: {
+	runId: string;
+	item: CaseSummary;
+	liveId: string | undefined;
+}) {
+	const [open, setOpen] = useState(false);
+	const header = (
+		<>
+			<span className="font-mono text-slate-500">
+				{item.team === "green" ? item.label : `#${item.label}`}
+			</span>
+			<span
+				className={cn(
+					"truncate",
+					item.team === "red" ? "text-slate-700" : "text-emerald-700",
+				)}
+			>
+				{item.attack_type ?? "benign"}
+			</span>
+			<span className="ml-auto shrink-0">{caseStatus(item, liveId)}</span>
+		</>
+	);
+	const headerClass = "flex items-center gap-2 text-xs";
+	return (
+		<li
+			data-case={item.label}
+			className={cn(
+				// New cases slide in as they are generated.
+				"flex flex-col gap-1 border-b border-slate-100 px-4 py-2.5 animate-in fade-in-0 slide-in-from-top-1 duration-300",
+				item.id === liveId && "bg-blue-50/50",
+			)}
+		>
+			{item.outcome !== null ? (
+				<a
+					href={arenaHref({ name: "case", runId, caseId: item.id })}
+					aria-label={`Replay case ${item.label}`}
+					className={cn(
+						headerClass,
+						"-mx-1 rounded px-1 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-500",
+					)}
+				>
+					{header}
+				</a>
+			) : (
+				<span className={headerClass}>{header}</span>
+			)}
+			{item.input_preview ? (
+				// biome-ignore lint/a11y/useKeyWithClickEvents: "Show more" is the keyboard target.
+				// biome-ignore lint/a11y/noStaticElementInteractions: see above.
+				<div
+					onClick={() => setOpen((o) => !o)}
+					className="cursor-pointer text-[13px] text-slate-600"
+				>
+					<ExpandableText
+						text={item.input_preview}
+						open={open}
+						onOpenChange={setOpen}
+					/>
+				</div>
+			) : (
+				<span className="truncate text-[13px] text-slate-400 italic">
+					{item.team === "red"
+						? "Generated when the case starts"
+						: "Not generated yet"}
+				</span>
+			)}
+		</li>
+	);
+}
+
 /** Generated cases with their input, visible as soon as they exist (R-RED-4). */
 function CaseQueue({ run }: { run: RunDetail }) {
 	const liveId = run.live?.case_id;
@@ -125,71 +207,119 @@ function CaseQueue({ run }: { run: RunDetail }) {
 				</p>
 			) : (
 				<ul aria-label="Cases" className="min-h-0 flex-1 overflow-y-auto">
-					{run.cases.map((item) => {
-						const decided = item.outcome !== null;
-						const body = (
-							<>
-								<span className="flex items-center gap-2 text-xs">
-									<span className="font-mono text-slate-500">
-										{item.team === "green" ? item.label : `#${item.label}`}
-									</span>
-									<span
-										className={cn(
-											"truncate",
-											item.team === "red"
-												? "text-slate-700"
-												: "text-emerald-700",
-										)}
-									>
-										{item.attack_type ?? "benign"}
-									</span>
-									<span className="ml-auto shrink-0">
-										{caseStatus(item, liveId)}
-									</span>
-								</span>
-								<span
-									className={cn(
-										"truncate text-[13px]",
-										item.input_preview
-											? "text-slate-600"
-											: "text-slate-400 italic",
-									)}
-								>
-									{item.input_preview ??
-										(item.team === "red"
-											? "Generated when the case starts"
-											: "Not generated yet")}
-								</span>
-							</>
-						);
-						return (
-							<li
-								key={item.id}
-								data-case={item.label}
-								className={cn(
-									"border-b border-slate-100",
-									item.id === liveId && "bg-blue-50/50",
-								)}
-							>
-								{decided ? (
-									<a
-										href={arenaHref({
-											name: "case",
-											runId: run.id,
-											caseId: item.id,
-										})}
-										className="flex flex-col gap-1 px-4 py-2.5 hover:bg-slate-50"
-									>
-										{body}
-									</a>
-								) : (
-									<div className="flex flex-col gap-1 px-4 py-2.5">{body}</div>
-								)}
-							</li>
-						);
-					})}
+					{run.cases.map((item) => (
+						<CaseQueueRow
+							key={item.id}
+							runId={run.id}
+							item={item}
+							liveId={liveId}
+						/>
+					))}
 				</ul>
 			)}
+		</section>
+	);
+}
+
+const GENERATION_TEXT: Record<Team, Record<GenerationStatus, string>> = {
+	red: {
+		pending: "Waiting to generate attack cases…",
+		generating: "Generating attack cases…",
+		done: "Attack cases generated",
+		failed: "Attack case generation failed",
+		dataset: "Attack cases loaded from a dataset",
+	},
+	green: {
+		pending: "Waiting to generate benign cases…",
+		generating: "Generating benign cases…",
+		done: "Benign cases generated",
+		failed: "Benign case generation failed",
+		dataset: "Benign cases loaded from a dataset",
+	},
+};
+
+function TeamGeneration({ run, team }: { run: RunDetail; team: Team }) {
+	const status = run.generation?.[team]?.status ?? "generating";
+	const text = GENERATION_TEXT[team];
+	const generated = run.cases.filter((c) => c.team === team).length;
+	const total = Math.max(run.progress[team].total, generated);
+	const pct = total > 0 ? (generated / total) * 100 : 0;
+	const busy = status === "generating" || status === "pending";
+	const title = text[status];
+	return (
+		<div
+			data-team={team}
+			data-generation={status}
+			className="flex flex-col gap-2 rounded-lg border bg-slate-50/60 p-4"
+		>
+			<div className="flex items-center gap-2.5">
+				{busy ? (
+					<Loader2Icon
+						aria-hidden="true"
+						className={cn(
+							"size-4 shrink-0 animate-spin",
+							team === "red" ? "text-red-500" : "text-emerald-600",
+						)}
+					/>
+				) : status === "failed" ? (
+					<AlertTriangleIcon
+						aria-hidden="true"
+						className="size-4 shrink-0 text-red-600"
+					/>
+				) : (
+					<CheckIcon
+						aria-hidden="true"
+						className="size-4 shrink-0 text-emerald-600"
+					/>
+				)}
+				<h3 className="text-sm font-semibold">{title}</h3>
+			</div>
+			<div
+				role="progressbar"
+				aria-label={`${team === "red" ? "Attack" : "Benign"} cases generated`}
+				aria-valuemin={0}
+				aria-valuemax={total}
+				aria-valuenow={generated}
+				className="relative h-2 overflow-hidden rounded-full bg-slate-200"
+			>
+				<div
+					className={cn(
+						"h-full rounded-full transition-[width] duration-500",
+						team === "red" ? "bg-red-500" : "bg-emerald-500",
+					)}
+					style={{ width: `${pct}%` }}
+				/>
+				{busy && (
+					<div
+						aria-hidden="true"
+						className="absolute inset-0 animate-pulse bg-white/30"
+					/>
+				)}
+			</div>
+			<p className="text-[13px] text-slate-600 tabular-nums">
+				{generated} of {total} cases generated
+			</p>
+		</div>
+	);
+}
+
+/** While the run is generating: progress of case generation per team, instead of an empty sample. */
+function GenerationPanel({ run }: { run: RunDetail }) {
+	return (
+		<section
+			aria-label="Case generation"
+			className="flex min-h-[28rem] flex-col overflow-hidden rounded-xl border bg-white shadow-sm"
+		>
+			<div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+				<h2 className="text-sm font-semibold">Generating cases</h2>
+				<span className="truncate text-xs text-slate-500">
+					the live sample starts with the first case
+				</span>
+			</div>
+			<div className="flex flex-1 flex-col justify-center gap-4 p-6">
+				<TeamGeneration run={run} team="red" />
+				<TeamGeneration run={run} team="green" />
+			</div>
 		</section>
 	);
 }
@@ -234,9 +364,7 @@ function LiveSample({ run }: { run: RunDetail }) {
 			</div>
 			{!live ? (
 				<p className="flex flex-1 items-center justify-center p-6 text-sm text-slate-500">
-					{run.status === "generating"
-						? "Cases are being generated. The live sample starts with the first case."
-						: "No case is running right now."}
+					No case is running right now.
 				</p>
 			) : (
 				<div className="flex min-h-0 flex-1 flex-col xl:flex-row">
@@ -254,6 +382,8 @@ function LiveSample({ run }: { run: RunDetail }) {
 							</p>
 						)}
 						<EventLog
+							// Event seqs restart with each case: a new case must not inherit expanded entries.
+							key={live.case_id}
 							events={shown}
 							team={item?.team ?? "red"}
 							graph={graph}
@@ -363,7 +493,11 @@ export function RunProgress({ run }: { run: RunDetail }) {
 				</section>
 			</div>
 			<div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-				<LiveSample run={run} />
+				{run.status === "generating" && !run.live ? (
+					<GenerationPanel run={run} />
+				) : (
+					<LiveSample run={run} />
+				)}
 				<div className="flex min-h-0 flex-col gap-4">
 					<CaseQueue run={run} />
 					<ModelsUsed run={run} />

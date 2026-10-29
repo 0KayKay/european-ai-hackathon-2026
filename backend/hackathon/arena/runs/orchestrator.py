@@ -258,6 +258,7 @@ class Orchestrator:
             "id": str(uuid4()),
             "level": level.id,
             "difficulty": level.difficulty,
+            "title": level.title,
             "status": "generating",
             "created_by": user_id,
             "started_at": now_iso(),
@@ -738,17 +739,25 @@ class Orchestrator:
         return run, await self.store.list_cases(run_id), None
 
     @staticmethod
-    def summary(run: dict[str, Any]) -> dict[str, Any]:
+    def summary(run: dict[str, Any], *, title: str | None = None) -> dict[str, Any]:
+        """Run summary. `title` is the level title at run time (recorded with the run, else from its
+        snapshot, else the given fallback, else the level id); `rates` follow R-RES-1 from the recorded `counts`."""
+        snapshot = run.get("snapshot") or {}
         return {
             "id": run["id"],
             "level": run["level"],
             "difficulty": run["difficulty"],
+            "title": run.get("title")
+            or snapshot.get("level", {}).get("title")
+            or title
+            or run["level"],
             "status": run["status"],
             "started_at": run["started_at"],
             "finished_at": run["finished_at"],
             "elapsed": _seconds_between(run["started_at"], run["finished_at"]),
             "progress": run["progress"],
             "counts": run["counts"],
+            "rates": result_views.summary_rates(run["counts"]),
             "error": run.get("error"),
             "generation": run.get("generation"),
         }
@@ -783,10 +792,16 @@ class Orchestrator:
         runs = await self.store.list_runs(level)
         return [
             self.summary(
-                self.active[run["id"]].run if run["id"] in self.active else run
+                self.active[run["id"]].run if run["id"] in self.active else run,
+                # Runs stored before the title was recorded (the list leaves out the snapshot).
+                title=self._level_title(run["level"]),
             )
             for run in runs
         ]
+
+    def _level_title(self, level_id: str) -> str | None:
+        level = self.catalog.levels.get(level_id)
+        return level.first.title if level is not None else None
 
     async def results(self, run_id: str) -> dict[str, Any]:
         run, cases, _ = await self._run_and_cases(run_id)

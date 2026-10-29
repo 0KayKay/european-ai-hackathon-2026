@@ -47,8 +47,11 @@ servers were stopped after verification; start an allocation before making API c
 | `safeguard` | `gpt-oss-safeguard-20b-b300`, native MXFP4/BF16 | 1, TP1/PP1 | 18087 |
 
 GLM keeps its historically tested `leonardo` alias. Configured contexts are
-2,048 tokens for GLM, 8,192 for Ultra and Safeguard, and 4,096 for safety. GLM,
-Ultra and safety have four sequence slots; Safeguard has one. The observed team limit was eight GPUs: GLM and the Nemotron pair cannot
+65,536 tokens for GLM, 8,192 for Ultra and Safeguard, and 4,096 for safety. GLM
+has 16 sequence slots with 16,384-token chunked prefill; Ultra and safety have
+four; Safeguard has one. The GLM 65,536/16 settings are **not yet GPU-validated**
+(the recorded GLM runs used 2,048/4); see [GLM context sizing](docs/glm-context.md)
+for the memory estimate and the startup log lines to report. The observed team limit was eight GPUs: GLM and the Nemotron pair cannot
 run together under that limit. Verify current project/QoS limits before use.
 
 ## How does it work?

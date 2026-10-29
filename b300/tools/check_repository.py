@@ -29,15 +29,23 @@ def main():
         assert profile['gpus'] <= 8
         time_seconds(profile['time'])
         assert '@sha256:' in images[profile['image']]
-    for model in models.values():
+    clients = json.loads((ROOT / 'profiles.json').read_text())
+    for name, model in models.items():
         assert re.fullmatch('[a-f0-9]{40}', model['revision'])
+        # The laptop profile, the frozen model spec and the literal engine flags must agree.
+        assert clients[name]['max_model_len'] == model['max_model_len'], name
+        assert clients[name]['tensor_parallel'] == model['tp'], name
+        engine_args = model.get('engine_args', [])
+        if '--max-model-len' in engine_args:
+            value = int(engine_args[engine_args.index('--max-model-len') + 1])
+            assert value == model['max_model_len'], name
     for file in ROOT.rglob('*.md'):
         if '.runtime' in file.parts:
             continue
         for link in re.findall(r'\]\(([^)]+)\)', file.read_text()):
             if not link.startswith(('https://', 'http://', '#')):
                 assert (file.parent / link.split('#')[0]).exists(), (str(file), link)
-    print('PASS: syntax, shell, source manifest, pinned profiles, GPU totals and Markdown file links.')
+    print('PASS: syntax, shell, source manifest, pinned profiles, consistent context settings, GPU totals and Markdown file links.')
     print('No SSH login, resource allocation or model request was performed.')
 
 

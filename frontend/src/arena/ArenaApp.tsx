@@ -15,7 +15,13 @@ function Placeholder({
 	text: string;
 }) {
 	return (
-		<ArenaShell crumbs={crumbs}>
+		<ArenaShell
+			crumbs={crumbs}
+			back={{
+				href: arenaHref({ name: "levels" }),
+				label: "Back to the level overview",
+			}}
+		>
 			<div className="flex flex-1 items-center justify-center p-10">
 				<div className="flex max-w-md flex-col items-center gap-2 rounded-xl border bg-white p-6 text-center shadow-sm">
 					<h1 className="font-semibold">{title}</h1>

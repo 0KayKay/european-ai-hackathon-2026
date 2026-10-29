@@ -4,22 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { runExportUrl, stopRun } from "../api";
-import { ArenaShell, ErrorState, LoadingState, runCrumbs } from "../components";
-import { formatClock, STATUS_LABELS } from "../format";
+import {
+	ArenaShell,
+	difficultyLabel,
+	ErrorState,
+	ExpandableText,
+	LoadingState,
+	RUN_STATUS_TONES,
+	runCrumbs,
+} from "../components";
+import { formatClock, formatDateTime, STATUS_LABELS } from "../format";
 import { arenaHref } from "../router";
 import type { RunDetail } from "../types";
 import { RunProgress } from "./RunProgress";
 import { RunResultsView } from "./RunResults";
 import { isActiveRun, useRunPolling } from "./useRunPolling";
-
-const STATUS_TONES: Record<RunDetail["status"], string> = {
-	generating: "border-blue-200 bg-blue-50 text-blue-700",
-	running: "border-emerald-200 bg-emerald-50 text-emerald-700",
-	completed: "border-slate-200 bg-slate-50 text-slate-700",
-	stopped: "border-amber-200 bg-amber-50 text-amber-800",
-	failed: "border-red-200 bg-red-50 text-red-700",
-	interrupted: "border-amber-200 bg-amber-50 text-amber-800",
-};
 
 function StatusPill({ run }: { run: RunDetail }) {
 	const active = isActiveRun(run);
@@ -29,7 +28,7 @@ function StatusPill({ run }: { run: RunDetail }) {
 			data-status={run.status}
 			className={cn(
 				"inline-flex h-7 items-center gap-2 rounded-full border px-3 text-[13px] font-medium",
-				STATUS_TONES[run.status],
+				RUN_STATUS_TONES[run.status],
 			)}
 		>
 			{active && (
@@ -60,8 +59,8 @@ function StopButton({
 	return (
 		<>
 			{error && (
-				<span role="alert" className="max-w-56 truncate text-xs text-red-600">
-					{error}
+				<span role="alert" className="max-w-72 text-xs text-red-600">
+					<ExpandableText text={error} threshold={40} />
 				</span>
 			)}
 			<Button
@@ -92,6 +91,43 @@ function StopButton({
 				{stopping ? "Stopping…" : "Stop run"}
 			</Button>
 		</>
+	);
+}
+
+/** Start and end of the run as local date and time, and its duration. */
+function RunTimes({ run }: { run: RunDetail }) {
+	return (
+		<dl
+			aria-label="Run times"
+			className="flex shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b bg-white px-4 py-2 text-[13px] lg:px-6"
+		>
+			<div className="flex items-baseline gap-1.5">
+				<dt className="text-slate-500">Started</dt>
+				<dd className="font-medium tabular-nums">
+					<time dateTime={run.started_at}>
+						{formatDateTime(run.started_at)}
+					</time>
+				</dd>
+			</div>
+			<div className="flex items-baseline gap-1.5">
+				<dt className="text-slate-500">Ended</dt>
+				<dd className="font-medium tabular-nums">
+					{run.finished_at ? (
+						<time dateTime={run.finished_at}>
+							{formatDateTime(run.finished_at)}
+						</time>
+					) : (
+						<span className="font-normal text-slate-500">still running</span>
+					)}
+				</dd>
+			</div>
+			<div className="flex items-baseline gap-1.5">
+				<dt className="text-slate-500">Duration</dt>
+				<dd className="font-mono text-xs tabular-nums">
+					{formatClock(run.elapsed)}
+				</dd>
+			</div>
+		</dl>
 	);
 }
 
@@ -129,6 +165,21 @@ export function RunPage({ runId }: { runId: string }) {
 	return (
 		<ArenaShell
 			crumbs={runCrumbs(run, runId, true)}
+			back={
+				run
+					? {
+							href: arenaHref({
+								name: "level",
+								level: run.level,
+								difficulty: run.difficulty,
+							}),
+							label: `Back to ${run.title ?? run.level} · ${difficultyLabel(run.difficulty)}`,
+						}
+					: {
+							href: arenaHref({ name: "levels" }),
+							label: "Back to the level overview",
+						}
+			}
 			center={run && <StatusPill run={run} />}
 			actions={
 				run &&
@@ -175,6 +226,7 @@ export function RunPage({ runId }: { runId: string }) {
 					Live updates are failing ({error.message}). Retrying…
 				</p>
 			)}
+			{run && <RunTimes run={run} />}
 			{run && <RunNotices run={run} />}
 			{run &&
 				(active ? <RunProgress run={run} /> : <RunResultsView run={run} />)}

@@ -19,7 +19,7 @@ from uuid import uuid4
 import structlog
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, Tool, capture_run_messages
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.usage import RunUsage, UsageLimits
 
@@ -346,6 +346,11 @@ class CaseSession:
         except TimeoutError:
             await self._fail(
                 f"The run exceeded the time limit ({limits.timeout_seconds:g} s)."
+            )
+        except UnexpectedModelBehavior as exc:
+            logger.exception("Arena case model response failed", case_id=self.case.id)
+            await self._fail(
+                f"The run could not finish (UnexpectedModelBehavior: {exc.message[:300]})."
             )
         except Exception as exc:
             logger.exception("Arena case run failed", case_id=self.case.id)

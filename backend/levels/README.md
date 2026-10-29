@@ -331,7 +331,7 @@ for f in json.load(sys.stdin)["files"]:
 git diff
 ```
 
-Then run `uv run pytest -q tests/arena` as for any change (the parity tests fail for edits of levels 1–3).
+Then run `uv run pytest -q tests/arena` as for any change.
 
 ## Walkthrough: the example level
 
@@ -366,12 +366,11 @@ config and prompt files only (acceptance criterion AC-3):
 
 ```sh
 cd backend
-uv run pytest -q tests/arena          # loads every level; graph, engine, parity and run tests
+uv run pytest -q tests/arena          # loads every level; graph, engine and run tests
 ```
 
 `tests/arena/test_arena_loader.py` holds the validation rules, `test_arena_graph.py` the graph per level and
-difficulty, `test_arena_parity.py` / `test_arena_engine_parity.py` compare levels 1–3 with the legacy
-implementation (AC-1). The parity tests intentionally fail when you change one of the three original levels;
-create a new level (or difficulty) for experiments instead. In the UI, open **Arena** → your level → switch
+difficulty, and `test_arena_engine.py` the execution checks. Arena levels evolve independently of the legacy
+implementation. In the UI, open **Arena** → your level → switch
 difficulties and click the nodes; the config pane shows the files that were loaded (including edits saved in the
 UI).

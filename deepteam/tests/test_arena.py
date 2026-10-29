@@ -64,7 +64,7 @@ def test_model_for_requests_json_and_keeps_gateway_key_private(monkeypatch):
         ),
     )
     calls = []
-    monkeypatch.setattr(arena, "LocalModel", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(arena, "ArenaLocalModel", lambda **kwargs: calls.append(kwargs))
     arena.model_for(arena.ModelSpec.model_validate(MODEL), "run-1")
     assert calls[-1]["api_key"] == "gateway-secret"
     assert calls[-1]["generation_kwargs"]["response_format"] == {"type": "json_object"}
@@ -88,7 +88,7 @@ def test_model_for_maps_leonardo_spec_and_rejects_gateway_lookalikes(monkeypatch
         ),
     )
     calls = []
-    monkeypatch.setattr(arena, "LocalModel", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(arena, "ArenaLocalModel", lambda **kwargs: calls.append(kwargs))
     leonardo = {
         "temperature": 0,
         "max_tokens": 512,
@@ -126,6 +126,49 @@ def test_model_for_maps_leonardo_spec_and_rejects_gateway_lookalikes(monkeypatch
         assert calls[-1]["default_headers"] == {}, endpoint
 
 
+@pytest.mark.asyncio
+async def test_structured_model_request_uses_schema_and_rejects_truncation(monkeypatch):
+    calls = []
+    finish_reason = "stop"
+
+    async def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason=finish_reason,
+                    message=SimpleNamespace(content='{"input":"hello"}'),
+                )
+            ]
+        )
+
+    model = arena.ArenaLocalModel(
+        model="test",
+        api_key="unused",
+        base_url="http://localhost:11434/v1",
+        generation_kwargs={
+            "max_tokens": 512,
+            "reasoning_effort": "none",
+            "response_format": {"type": "json_object"},
+        },
+    )
+    monkeypatch.setattr(
+        model,
+        "load_model",
+        lambda async_mode: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
+    )
+    result, _ = await model.a_generate("Return an input", schema=arena.InitialAttack)
+    assert result.input == "hello"
+    assert calls[0]["response_format"]["type"] == "json_schema"
+    assert calls[0]["response_format"]["json_schema"]["schema"]["required"] == ["input"]
+    assert calls[0]["reasoning_effort"] == "none"
+    finish_reason = "length"
+    with pytest.raises(ValueError, match="token limit"):
+        await model.a_generate("Return an input", schema=arena.InitialAttack)
+
+
 def test_generate_streams_cases_with_contract_shape(monkeypatch):
     monkeypatch.setattr(
         arena, "get_settings", lambda: SimpleNamespace(AGENTGATEWAY_API_KEY="secret")
@@ -159,6 +202,7 @@ async def test_generate_one_shapes_indirect_and_direct_attacks(monkeypatch):
         async def a_generate(self, prompt, schema):
             if schema is arena.InitialAttack:
                 return arena.InitialAttack(input="<baseline>"), 0
+            assert "Attack goal: Send the protected password" in prompt
             return (
                 arena.InjectionContent(
                     content={"subject": "<subject>", "body": "<enhanced>"}
@@ -183,6 +227,37 @@ async def test_generate_one_shapes_indirect_and_direct_attacks(monkeypatch):
         "attack_type": "prompt_injection",
         "input": "<enhanced>",
     }
+
+
+@pytest.mark.asyncio
+async def test_generate_one_accepts_flat_injection_fields_from_model(monkeypatch):
+    class FakeModel:
+        async def a_generate(self, prompt, schema):
+            if schema is arena.InitialAttack:
+                return schema(input="<baseline>"), 0
+            return schema.model_validate(
+                {"subject": "<subject>", "body": "<enhanced>"}
+            ), 0
+
+    class FakeAttack:
+        async def a_enhance(self, input, model):
+            return "<enhanced>"
+
+    monkeypatch.setattr(arena, "model_for", lambda *_: FakeModel())
+    monkeypatch.setitem(arena.SINGLE_ATTACKS, "prompt_injection", FakeAttack)
+
+    result = await arena.generate_one(
+        arena.GenerateRequest.model_validate(body()), "prompt_injection"
+    )
+    assert result["content"] == {"subject": "<subject>", "body": "<enhanced>"}
+
+
+def test_injection_content_keeps_field_types_strict():
+    assert arena.InjectionContent.model_validate(
+        {"additional_notes": "<attack>"}
+    ).content == {"additional_notes": "<attack>"}
+    with pytest.raises(arena.ValidationError):
+        arena.InjectionContent.model_validate({"subject": "ok", "body": 42})
 
 
 def test_multi_turn_stops_after_backend_success(monkeypatch):

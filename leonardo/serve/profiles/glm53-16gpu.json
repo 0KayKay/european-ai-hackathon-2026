@@ -6,7 +6,7 @@
   "checkpoint": "glm53",
   "expected_shards": 62,
   "runtime": "vllm-backport-sm80-0.13.1-ppkv1",
-  "served_model": "glm-5.3-flash-16gpu-leonardo",
+  "served_model": "glm-5.3-flash-leonardo",
   "resources": {
     "nodes": 4,
     "gpus_per_node": 4,

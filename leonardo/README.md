@@ -13,7 +13,7 @@ moderation classifiers. It is a reusable template: everything below starts from 
 | `glm53` | GLM-5.3-Flash | `glm-5.3-flash-leonardo` | 2 nodes, 8 A100 | 9.1 min | GPU-validated, current CLI and router |
 | `deepseek41` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-leonardo` | 2 nodes, 8 A100 | 24.5 min | GPU-validated, current CLI and router |
 | `deepseek41-16gpu` | DeepSeek-V4.1-Flash-1017 | `deepseek-v4.1-flash-1017-16gpu-leonardo` | 4 nodes, 16 A100 | 18.3 min | GPU-validated, current CLI and router |
-| `glm53-16gpu` | GLM-5.3-Flash, 131,072-token context | `glm-5.3-flash-16gpu-leonardo` | 4 nodes, 16 A100 | | not yet GPU-validated; see [docs/glm16.md](docs/glm16.md) |
+| `glm53-16gpu` | GLM-5.3-Flash, 131,072-token context | `glm-5.3-flash-leonardo` | 4 nodes, 16 A100 | | not yet GPU-validated; see [docs/glm16.md](docs/glm16.md) |
 | `qwen06b` | Qwen3-0.6B | `qwen3-0.6b-leonardo` | 1 A100 | 1.5 min | GPU-validated, current launcher |
 | `qwen235b-stock` | Qwen3-235B-A22B-FP8 on stock vLLM | `qwen3-235b-a22b-fp8-leonardo` | 2 nodes, 8 A100 | | ran on 8 Oct, not with this launcher |
 
@@ -22,7 +22,8 @@ hours per job. The separate sixteen-GPU DeepSeek profile has 8 sequence slots an
 Engram; see [its guide and patch details](docs/deepseek16.md). The eight-GPU large-model profiles were
 revalidated through the current CLI and router on 21 October; the sixteen-GPU DeepSeek profile passed on
 20 October. The sixteen-GPU GLM profile has a 131,072-token context with 8 slots on the same patched
-runtime and is not yet GPU-validated; see [its sizing](docs/glm16.md).
+runtime and is not yet GPU-validated; see [its sizing](docs/glm16.md). It serves the same name as `glm53`
+(one API name and one gateway route for GLM on Leonardo), so run only one of the two.
 Observed times exclude queue wait and can include reused private caches; they are not cold-start benchmarks.
 Fine-tunes added with [`cli.py profiles add`](#add-a-model) need no row here: `./leonardo/cli.py profiles`
 lists every profile and its status. See [Validation status](#validation-status). `qwen235b-stock` is the configuration that first ran Qwen-235B on

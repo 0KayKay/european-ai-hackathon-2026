@@ -1,10 +1,12 @@
 # GLM on sixteen GPUs, long context
 
 `glm53-16gpu` serves GLM-5.3-Flash on four nodes with a 131,072-token context.
-It is separate from the eight-GPU `glm53` profile, which stays unchanged, and
-has its own API model name and direct-client port. **Status: configured, not yet
-GPU-validated.** The context fit below is an estimate until a first start reports
-its KV cache size.
+It is an alternative to the eight-GPU `glm53` profile, which stays unchanged: it
+serves the same API model name, `glm-5.3-flash-leonardo`, so clients and the single
+agentgateway route need no change, and it keeps its own direct-client port. Run only
+one of the two at a time; do not start `glm53-16gpu` while `glm53` is up. **Status:
+configured, not yet GPU-validated.** The context fit below is an estimate until a
+first start reports its KV cache size.
 
 | Setting | `glm53` | `glm53-16gpu` |
 | --- | --- | --- |
@@ -14,7 +16,7 @@ its KV cache size.
 | `--max-num-seqs` | 4 | 8 |
 | `--max-num-batched-tokens` | 2,048 | 8,192 (chunked prefill) |
 | Runtime | `vllm-backport-sm80-0.13.1` | `vllm-backport-sm80-0.13.1-ppkv1` |
-| API model name | `glm-5.3-flash-leonardo` | `glm-5.3-flash-16gpu-leonardo` |
+| API model name | `glm-5.3-flash-leonardo` | `glm-5.3-flash-leonardo` (same) |
 | Direct-client port | 18083 | 18089 |
 
 Everything else is copied from `glm53`: `--gpu-memory-utilization 0.90`,
@@ -77,8 +79,9 @@ Then start the server; coordinate the four-node allocation with the team:
 
 The server must pass the same seven `chat_tools` API checks before `READY`. Call
 it through the router as in the [main guide](../README.md#call-the-models), with
-model `glm-5.3-flash-16gpu-leonardo`; the router port stays 18000. The generated
-optional agentgateway route includes the new name. Stop it with
+model `glm-5.3-flash-leonardo`, exactly as for `glm53`; the router port stays
+18000, and the existing agentgateway route reaches whichever of the two profiles is
+running. Stop it with
 `./leonardo/cli.py down glm53-16gpu`.
 
 ## What to send back

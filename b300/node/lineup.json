@@ -1,0 +1,191 @@
+{
+  "node_gpus": 8,
+  "max_gpu_share": 0.95,
+  "images": {
+    "glm": "registry-1.docker.io#vllm/vllm-openai@sha256:819ec9c063412e5730d1b0e82046ba540d1bf991f3c4f661a849aae8a0c52374",
+    "vllm-0.32": "registry-1.docker.io#vllm/vllm-openai@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34"
+  },
+  "gateway": {
+    "version": "v1.6.0",
+    "url": "https://github.com/agentgateway/agentgateway/releases/download/{version}/agentgateway-linux-{arch}",
+    "sha256": {
+      "amd64": "496ed27e6a96b55a9ad7cabe5c2be7172511f44a3cb113e533d22bf93a7f079d",
+      "arm64": "b59ecac31103bb317d1377fd42b0cb25cd9a21f8c3f1d9ee14c3ff05f3f91abf"
+    }
+  },
+  "models": [
+    {
+      "id": "glm",
+      "enabled": true,
+      "name": "glm-5.3-flash",
+      "aliases": ["glm-5.3-flash-b300"],
+      "repo": "zai-org/GLM-5.3-Flash",
+      "revision": "91b69215804f2d2036a8867f6ce44848e278dcda",
+      "image": "glm",
+      "gpus": [0, 1, 2, 3],
+      "memory": 0.90,
+      "port": 8101,
+      "api": "chat",
+      "args": [
+        "--distributed-executor-backend", "mp", "--dtype", "bfloat16",
+        "--max-model-len", "131072", "--max-num-seqs", "64", "--max-num-batched-tokens", "16384",
+        "--enforce-eager", "--disable-custom-all-reduce",
+        "--limit-mm-per-prompt", "{\"image\":0,\"video\":0}",
+        "--safetensors-load-strategy", "eager",
+        "--reasoning-parser", "glm45", "--tool-call-parser", "glm47", "--enable-auto-tool-choice",
+        "--kv-cache-dtype", "auto"
+      ],
+      "notes": "Recorded TP8 GLM flags on TP4. GLM TP4/PP1 has not run on B300 yet."
+    },
+    {
+      "id": "glm-fast",
+      "enabled": false,
+      "name": "glm-5.3-flash",
+      "aliases": ["glm-5.3-flash-b300"],
+      "repo": "zai-org/GLM-5.3-Flash",
+      "revision": "91b69215804f2d2036a8867f6ce44848e278dcda",
+      "image": "glm",
+      "gpus": [0, 1, 2, 3],
+      "memory": 0.90,
+      "port": 8101,
+      "api": "chat",
+      "args": [
+        "--distributed-executor-backend", "mp", "--dtype", "bfloat16",
+        "--max-model-len", "131072", "--max-num-seqs", "64", "--max-num-batched-tokens", "8192",
+        "--limit-mm-per-prompt", "{\"image\":0,\"video\":0}",
+        "--safetensors-load-strategy", "eager",
+        "--reasoning-parser", "glm45", "--tool-call-parser", "glm47", "--enable-auto-tool-choice",
+        "--kv-cache-dtype", "fp8",
+        "--speculative-config", "{\"method\":\"mtp\",\"num_speculative_tokens\":3}"
+      ],
+      "notes": "Report tuning: CUDA graphs, FP8 KV cache, MTP speculative decoding, 8192 prefill chunks. Untested on B300; use instead of glm."
+    },
+    {
+      "id": "glm-tp8",
+      "enabled": false,
+      "name": "glm-5.3-flash",
+      "aliases": ["glm-5.3-flash-b300", "glm-5.3-flash-leonardo"],
+      "repo": "zai-org/GLM-5.3-Flash",
+      "revision": "91b69215804f2d2036a8867f6ce44848e278dcda",
+      "image": "glm",
+      "gpus": [0, 1, 2, 3, 4, 5, 6, 7],
+      "memory": 0.90,
+      "port": 8101,
+      "api": "chat",
+      "args": [
+        "--distributed-executor-backend", "mp", "--dtype", "bfloat16",
+        "--max-model-len", "65536", "--max-num-seqs", "16", "--max-num-batched-tokens", "16384",
+        "--enforce-eager", "--disable-custom-all-reduce",
+        "--limit-mm-per-prompt", "{\"image\":0,\"video\":0}",
+        "--safetensors-load-strategy", "eager",
+        "--reasoning-parser", "glm45", "--tool-call-parser", "glm47", "--enable-auto-tool-choice",
+        "--kv-cache-dtype", "auto"
+      ],
+      "notes": "The b300/serve glm53 layout (TP8/PP1, the only GLM layout run on B300) on the whole node; select it alone."
+    },
+    {
+      "id": "safety",
+      "enabled": true,
+      "name": "nemotron-content-safety-reasoning-4b",
+      "aliases": ["nemotron-content-safety-reasoning-4b-b300"],
+      "repo": "nvidia/Nemotron-Content-Safety-Reasoning-4B",
+      "revision": "29da6ec41d9c710d937afcd41f65e241ab822792",
+      "image": "glm",
+      "gpus": [4],
+      "memory": 0.12,
+      "port": 8102,
+      "api": "chat",
+      "args": ["--dtype", "bfloat16", "--max-model-len", "4096", "--max-num-seqs", "32", "--no-enable-log-requests"],
+      "notes": "Tested in the vLLM 0.22 image; here it runs in the GLM image."
+    },
+    {
+      "id": "safeguard",
+      "enabled": true,
+      "name": "gpt-oss-safeguard-20b",
+      "aliases": ["gpt-oss-safeguard-20b-b300"],
+      "repo": "openai/gpt-oss-safeguard-20b",
+      "revision": "8a11e17b25c973a24099d4016bf2e17dd7ec1574",
+      "image": "glm",
+      "gpus": [4],
+      "memory": 0.25,
+      "port": 8103,
+      "api": "chat",
+      "args": ["--dtype", "bfloat16", "--max-model-len", "8192", "--max-num-seqs", "16", "--enforce-eager",
+               "--reasoning-parser", "openai_gptoss", "--no-enable-log-requests"],
+      "notes": "Tested with one sequence slot in this image."
+    },
+    {
+      "id": "embed",
+      "enabled": true,
+      "name": "bge-m3",
+      "aliases": [],
+      "repo": "BAAI/bge-m3",
+      "revision": "main",
+      "image": "glm",
+      "gpus": [5],
+      "memory": 0.08,
+      "port": 8104,
+      "api": "embed",
+      "args": ["--runner", "pooling", "--max-model-len", "8192"]
+    },
+    {
+      "id": "rerank",
+      "enabled": true,
+      "name": "bge-reranker-v2-m3",
+      "aliases": [],
+      "repo": "BAAI/bge-reranker-v2-m3",
+      "revision": "main",
+      "image": "glm",
+      "gpus": [5],
+      "memory": 0.08,
+      "port": 8105,
+      "api": "rerank",
+      "args": ["--runner", "pooling", "--max-model-len", "8192"]
+    },
+    {
+      "id": "fast",
+      "enabled": true,
+      "name": "qwen3-30b-a3b-instruct-2507",
+      "aliases": [],
+      "repo": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "revision": "main",
+      "image": "glm",
+      "gpus": [6],
+      "memory": 0.90,
+      "port": 8106,
+      "api": "chat",
+      "args": ["--max-model-len", "131072", "--max-num-seqs", "128",
+               "--enable-auto-tool-choice", "--tool-call-parser", "hermes"]
+    },
+    {
+      "id": "whisper",
+      "enabled": true,
+      "name": "whisper-large-v3-turbo",
+      "aliases": [],
+      "repo": "openai/whisper-large-v3-turbo",
+      "revision": "main",
+      "image": "glm",
+      "gpus": [7],
+      "memory": 0.08,
+      "port": 8107,
+      "api": "transcribe",
+      "args": ["--max-num-seqs", "64"]
+    },
+    {
+      "id": "vision",
+      "enabled": true,
+      "name": "qwen3-vl-30b-a3b-instruct",
+      "aliases": [],
+      "repo": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "revision": "main",
+      "image": "glm",
+      "gpus": [7],
+      "memory": 0.82,
+      "port": 8108,
+      "api": "chat",
+      "args": ["--max-model-len", "65536", "--max-num-seqs", "64",
+               "--limit-mm-per-prompt", "{\"image\":8,\"video\":1}",
+               "--enable-auto-tool-choice", "--tool-call-parser", "hermes"]
+    }
+  ]
+}

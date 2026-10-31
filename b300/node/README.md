@@ -128,6 +128,13 @@ The safety models are called as in the [main guide](../README.md#call-the-models
 Nemotron returns `Prompt harm: harmful/unharmful`, Safeguard returns
 `{"violation": true|false}` for a policy in the system message.
 
+## Load testing
+
+[`../loadtest/`](../loadtest/README.md) simulates a company of 100 to 10,000+ employees
+(LibreChat, RAG, uploads, agents, Langflow automations, meetings) against this gateway and finds
+the largest organisation the node serves within latency targets. It attaches to the running job:
+`b300/loadtest/loadtest.sh JOBID ramp`.
+
 ## How it works
 
 1. **Plan.** `node.py plan` checks the selected lineup for unique names and
